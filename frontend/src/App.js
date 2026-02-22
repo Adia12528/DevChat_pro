@@ -88,9 +88,24 @@ export default function App() {
       console.log("📥 Loaded history:", data);
       setChat(Array.isArray(data) ? data : []);
     });
+    const removeTypingUser = (user) => {
+      const timers = typingTimersRef.current;
+      if (timers.has(user)) {
+        clearTimeout(timers.get(user));
+        timers.delete(user);
+      }
+      setTypingUsers((prev) => {
+        if (!prev.has(user)) return prev;
+        const updated = new Set(prev);
+        updated.delete(user);
+        return updated;
+      });
+    };
+
     newSocket.on("receive_message", (data) => {
       console.log("💬 Received message:", data);
       setChat((prev) => [...prev, data]);
+      removeTypingUser(data.sender);
       
       // Play notification sound if enabled and not from self (debounced)
       if (soundEnabled && data.sender !== username) {
@@ -118,6 +133,7 @@ export default function App() {
     newSocket.on("user_left", (data) => {
       console.log("👤 User left:", data.username);
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      removeTypingUser(data.username);
     });
 
     const startTypingTimer = (user) => {
