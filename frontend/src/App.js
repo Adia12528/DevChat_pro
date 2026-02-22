@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle } from 'lucide-react';
@@ -15,11 +15,14 @@ export default function App() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
+  const audioContextRef = useRef(null);
 
   useEffect(() => {
     // Initialize socket connection with fallback
@@ -68,12 +71,16 @@ export default function App() {
       console.log("💬 Received message:", data);
       setChat((prev) => [...prev, data]);
       
-      // Play notification sound if enabled and not from self
+      // Play notification sound if enabled and not from self (debounced)
       if (soundEnabled && data.sender !== username) {
         try {
-          playNotificationSound();
+          // Reuse audio context for better performance
+          if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          playNotificationSound(audioContextRef.current);
         } catch (err) {
-          console.log("Sound notification skipped (context not initialized)");
+          console.log("Sound notification skipped");
         }
       }
     });
@@ -124,17 +131,41 @@ export default function App() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
 
-  const joinRoom = () => { 
+  // Debounced search for better performance
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(searchTimeoutRef.current);
+  }, [searchQuery]);
+
+  // Memoized filtered chat to avoid re-filtering on every render
+  const filteredChat = useMemo(() => {
+    if (!debouncedSearchQuery) return chat;
+    
+    return chat.filter(msg => 
+      msg.text.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      msg.sender.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+    );
+  }, [chat, debouncedSearchQuery]);
+
+  const joinRoom = useCallback(() => { 
     if (username && room && socketRef.current) { 
       console.log(`🚪 Joining room: ${room}`);
       setChat([]);
       setOnlineUsers([]);
       setTypingUsers(new Set());
+      setSearchQuery("");
+      setDebouncedSearchQuery("");
       socketRef.current.emit("join_room", { room, username }); 
       setShowChat(true); 
     } 
-  };
-  const handleMessageChange = (e) => {
+  }, [username, room]);
+
+  const handleMessageChange = useCallback((e) => {
     setMessage(e.target.value);
     
     if (socketRef.current && connected) {
@@ -146,27 +177,21 @@ export default function App() {
         socketRef.current.emit("stop_typing", { room, username });
       }, 1000);
     }
-  };
+  }, [connected, room, username]);
 
-  const sendMessage = () => {
+  const sendMessage = useCallback(() => {
     if (message.trim() && connected && socketRef.current) {
       socketRef.current.emit("send_message", { room, sender: username, text: message });
       setMessage("");
       socketRef.current.emit("stop_typing", { room, username });
     }
-  };
+  }, [message, connected, room, username]);
 
-  const handleCopyMessage = (text, msgId) => {
+  const handleCopyMessage = useCallback((text, msgId) => {
     copyToClipboard(text);
     setCopiedMsgId(msgId);
     setTimeout(() => setCopiedMsgId(null), 2000);
-  };
-
-  // Filter chat based on search query
-  const filteredChat = chat.filter(msg => 
-    msg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    msg.sender.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  }, []);
 
   if (!showChat) return (
     <div className="login-screen">
