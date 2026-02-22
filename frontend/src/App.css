@@ -34,14 +34,13 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .chat-img { max-width: 100%; border-radius: 8px; margin-top: 5px; }
 
 /* WhatsApp-style typing indicator */
-.typing-indicator-whatsapp { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; color: #8696a0; align-self: flex-start; }
-.typing-username { font-weight: 500; color: #e9edef; }
-.typing-dots-whatsapp { display: flex; gap: 3px; align-items: center; }
-.typing-dots-whatsapp .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: whatsapp-typing 1.2s infinite; }
-.typing-dots-whatsapp .dot:nth-child(1) { animation-delay: 0s; }
-.typing-dots-whatsapp .dot:nth-child(2) { animation-delay: 0.2s; }
-.typing-dots-whatsapp .dot:nth-child(3) { animation-delay: 0.4s; }
-@keyframes whatsapp-typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.6; } 30% { transform: translateY(-8px); opacity: 1; } }
+.typing-pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,168,132,0.12); color: #d1d7db; padding: 8px 12px; border-radius: 16px; margin: 8px 0; align-self: flex-start; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+.typing-ellipsis { display: flex; gap: 4px; }
+.typing-ellipsis span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: typing-pulse 1.2s infinite; }
+.typing-ellipsis span:nth-child(2) { animation-delay: 0.2s; }
+.typing-ellipsis span:nth-child(3) { animation-delay: 0.4s; }
+.typing-label { font-size: 13px; font-weight: 500; letter-spacing: 0.2px; }
+@keyframes typing-pulse { 0%, 60%, 100% { opacity: 0.5; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-5px); } }
 
 .users-list { background: var(--header); padding: 8px 12px; border-bottom: 1px solid #313d45; display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; }
 .user-tag { background: rgba(0,168,132,0.15); border: 1px solid #313d45; color: #e9edef; padding: 6px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
@@ -175,9 +174,9 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
   .chat-footer { padding: 8px; }
   .chat-footer input { padding: 8px 12px; font-size: 14px; }
   
-  .typing-indicator-whatsapp { font-size: 12px; padding: 6px 10px; }
-  .typing-username { font-size: 12px; }
-  .typing-dots-whatsapp .dot { width: 4px; height: 4px; }
+  .typing-pill { padding: 6px 10px; gap: 6px; }
+  .typing-ellipsis span { width: 5px; height: 5px; }
+  .typing-label { font-size: 12px; }
 }
 
 @media (min-width: 900px) {

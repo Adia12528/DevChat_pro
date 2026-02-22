@@ -200,6 +200,14 @@ export default function App() {
     );
   }, [chat, debouncedSearchQuery]);
 
+  const typingDisplay = useMemo(() => {
+    const arr = Array.from(typingUsers);
+    if (arr.length === 0) return "";
+    if (arr.length === 1) return `${arr[0]} is typing`;
+    if (arr.length === 2) return `${arr[0]} and ${arr[1]} are typing`;
+    return `${arr[0]}, ${arr[1]} and ${arr.length - 2} others are typing`;
+  }, [typingUsers]);
+
   const joinRoom = useCallback(() => { 
     if (username && room && socketRef.current) { 
       console.log(`🚪 Joining room: ${room}`);
@@ -415,13 +423,18 @@ export default function App() {
 
         <AnimatePresence>
           {typingUsers.size > 0 && (
-            <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator-whatsapp">
-              <span className="typing-username">{Array.from(typingUsers).length === 1 ? Array.from(typingUsers)[0] : Array.from(typingUsers).slice(0, 2).join(", ") + (Array.from(typingUsers).length > 2 ? ` +${Array.from(typingUsers).length - 2}` : "")} typing</span>
-              <div className="typing-dots-whatsapp">
-                <span className="dot"></span>
-                <span className="dot"></span>
-                <span className="dot"></span>
+            <motion.div 
+              initial={{ opacity: 0, y: 6 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              exit={{ opacity: 0, y: -6 }} 
+              className="typing-pill"
+            >
+              <div className="typing-ellipsis">
+                <span></span>
+                <span></span>
+                <span></span>
               </div>
+              <span className="typing-label">{typingDisplay}...</span>
             </motion.div>
           )}
         </AnimatePresence>

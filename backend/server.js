@@ -53,6 +53,14 @@ const MsgSchema = new mongoose.Schema({
 });
 const Message = mongoose.model('Message', MsgSchema);
 
+// Normalize Mongoose docs to plain objects with string _id
+const serializeMessage = (msg) => {
+    if (!msg) return null;
+    const obj = msg.toObject();
+    obj._id = msg._id.toString();
+    return obj;
+};
+
 // Track users in rooms
 const roomUsers = {};
 
@@ -73,7 +81,7 @@ io.on('connection', (socket) => {
         
         // Send chat history
         const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
-        socket.emit('load_history', history);
+        socket.emit('load_history', history.map(serializeMessage));
         
         // Broadcast user joined
         io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
@@ -83,7 +91,7 @@ io.on('connection', (socket) => {
         if (!data.text?.trim()) return;
         const newMessage = new Message({ ...data, type: 'text' });
         const savedMessage = await newMessage.save();
-        io.to(data.room).emit("receive_message", savedMessage.toObject());
+        io.to(data.room).emit("receive_message", serializeMessage(savedMessage));
         io.to(data.room).emit('user_stopped_typing', data.sender);
     });
 
@@ -94,13 +102,13 @@ io.on('connection', (socket) => {
         const message = await Message.findById(messageId);
         if (!message || message.sender !== sender) return; // Only sender can edit
         
+        if (!message.originalText) message.originalText = message.text; // Store original only once
         message.text = newText;
         message.edited = true;
         message.editedAt = new Date();
-        if (!message.originalText) message.originalText = message.text; // Store original only once
         
         const updatedMessage = await message.save();
-        io.to(room).emit('message_edited', updatedMessage.toObject());
+        io.to(room).emit('message_edited', serializeMessage(updatedMessage));
     });
 
     socket.on('delete_message', async (data) => {
@@ -110,7 +118,7 @@ io.on('connection', (socket) => {
         if (!message || message.sender !== sender) return; // Only sender can delete
         
         await Message.findByIdAndDelete(messageId);
-        io.to(room).emit('message_deleted', { messageId });
+        io.to(room).emit('message_deleted', { messageId: messageId.toString() });
     });
 
     socket.on('typing', (data) => {
