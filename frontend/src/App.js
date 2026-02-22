@@ -169,12 +169,17 @@ export default function App() {
     setMessage(e.target.value);
     
     if (socketRef.current && connected) {
-      socketRef.current.emit("typing", { room, username });
+      // Only emit typing if not already typing (prevent spam)
+      if (!typingTimeoutRef.current) {
+        socketRef.current.emit("typing", { room, username });
+      }
       
+      // Clear old timeout and set new one
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       
       typingTimeoutRef.current = setTimeout(() => {
         socketRef.current.emit("stop_typing", { room, username });
+        typingTimeoutRef.current = null; // Reset flag
       }, 1000);
     }
   }, [connected, room, username]);

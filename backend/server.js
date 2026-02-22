@@ -85,10 +85,12 @@ io.on('connection', (socket) => {
     });
 
     socket.on('typing', (data) => {
+        // Only broadcast to other users in the room, NOT to the sender
         socket.to(data.room).emit('user_typing', { username: data.username });
     });
 
     socket.on('stop_typing', (data) => {
+        // Broadcast stop_typing to other users only
         socket.to(data.room).emit('user_stopped_typing', data.username);
     });
 
