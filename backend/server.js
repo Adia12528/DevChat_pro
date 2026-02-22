@@ -83,7 +83,7 @@ io.on('connection', (socket) => {
         const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
         socket.emit('load_history', history.map(serializeMessage));
         
-        // Broadcast user joined
+        // Broadcast user joined with refreshed roster
         io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
     });
 
@@ -145,8 +145,8 @@ io.on('connection', (socket) => {
             // Clear typing indicator when user disconnects
             io.to(socket.room).emit('user_stopped_typing', socket.username);
             
-            // Notify others that user left
-            io.to(socket.room).emit('user_left', { username: socket.username, count });
+            // Notify others that user left with refreshed roster
+            io.to(socket.room).emit('user_left', { username: socket.username, users: Object.values(roomUsers[socket.room]), count });
             if (count === 0) delete roomUsers[socket.room];
         }
     });

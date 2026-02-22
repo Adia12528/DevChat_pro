@@ -29,6 +29,7 @@ export default function App() {
   const typingTimersRef = useRef(new Map());
   const searchTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
+  const lastTypingEmitRef = useRef(0);
 
   // Detect mobile and handle resize
   useEffect(() => {
@@ -127,12 +128,16 @@ export default function App() {
 
     newSocket.on("user_joined", (data) => {
       console.log("👤 User joined:", data.username);
-      setOnlineUsers(data.users || []);
+      setOnlineUsers(Array.isArray(data.users) ? data.users : []);
     });
 
     newSocket.on("user_left", (data) => {
       console.log("👤 User left:", data.username);
-      setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      if (Array.isArray(data.users)) {
+        setOnlineUsers(data.users);
+      } else {
+        setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      }
       removeTypingUser(data.username);
     });
 
@@ -264,22 +269,18 @@ export default function App() {
     setMessage(newValue);
     
     if (socketRef.current && connected) {
-      // Only emit typing if not already typing (prevent spam)
-      if (!typingTimeoutRef.current) {
-        console.log("📝 User started typing");
+      const now = Date.now();
+      if (now - lastTypingEmitRef.current > 1500) {
         socketRef.current.emit("typing", { room, username });
+        lastTypingEmitRef.current = now;
       }
       
-      // Clear old timeout and set new one
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      
-      // Set longer timeout (3 seconds) for more natural typing
       typingTimeoutRef.current = setTimeout(() => {
-        console.log("⏹️ User stopped typing (timeout)");
         if (socketRef.current) {
           socketRef.current.emit("stop_typing", { room, username });
         }
-        typingTimeoutRef.current = null; // Reset flag
+        typingTimeoutRef.current = null;
       }, 3000);
     }
   }, [connected, room, username]);
