@@ -45,13 +45,30 @@ const MsgSchema = new mongoose.Schema({
     room: { type: String, index: true },
     sender: String,
     text: String,
-    type: { type: String, default: 'text' },
+    type: { type: String, default: 'text' }, // 'text', 'image', 'file', 'voice'
     time: { type: Date, default: Date.now },
     edited: { type: Boolean, default: false },
     editedAt: { type: Date, default: null },
-    originalText: { type: String, default: null }
+    originalText: { type: String, default: null },
+    reactions: { type: Map, of: [String], default: {} }, // emoji -> [usernames]
+    replyTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message', default: null },
+    mentions: [String], // usernames mentioned in message
+    readBy: [String], // usernames who have read this message
+    isPinned: { type: Boolean, default: false },
+    fileUrl: String, // For images/files
+    fileName: String,
+    fileSize: Number
 });
 const Message = mongoose.model('Message', MsgSchema);
+
+const UserSchema = new mongoose.Schema({
+    username: { type: String, unique: true, required: true },
+    avatar: String,
+    bio: String,
+    status: { type: String, default: 'online' }, // 'online', 'away', 'offline'
+    lastSeen: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', UserSchema);
 
 // Normalize Mongoose docs to plain objects with string _id
 const serializeMessage = (msg) => {
@@ -134,6 +151,95 @@ io.on('connection', (socket) => {
     socket.on('clear_chat', async (room) => {
         await Message.deleteMany({ room });
         io.to(room).emit('chat_cleared');
+    });
+
+    // Message Reactions
+    socket.on('add_reaction', async (data) => {
+        const { messageId, emoji, username, room } = data;
+        const message = await Message.findById(messageId);
+        if (!message) return;
+        
+        if (!message.reactions) message.reactions = new Map();
+        const users = message.reactions.get(emoji) || [];
+        if (!users.includes(username)) {
+            users.push(username);
+            message.reactions.set(emoji, users);
+            await message.save();
+            io.to(room).emit('reaction_added', { messageId, emoji, username, reactions: Object.fromEntries(message.reactions) });
+        }
+    });
+
+    socket.on('remove_reaction', async (data) => {
+        const { messageId, emoji, username, room } = data;
+        const message = await Message.findById(messageId);
+        if (!message || !message.reactions) return;
+        
+        const users = message.reactions.get(emoji) || [];
+        const filtered = users.filter(u => u !== username);
+        if (filtered.length === 0) {
+            message.reactions.delete(emoji);
+        } else {
+            message.reactions.set(emoji, filtered);
+        }
+        await message.save();
+        io.to(room).emit('reaction_removed', { messageId, emoji, username, reactions: Object.fromEntries(message.reactions) });
+    });
+
+    // Pin/Unpin Messages
+    socket.on('pin_message', async (data) => {
+        const { messageId, room } = data;
+        const message = await Message.findById(messageId);
+        if (!message) return;
+        message.isPinned = true;
+        await message.save();
+        io.to(room).emit('message_pinned', serializeMessage(message));
+    });
+
+    socket.on('unpin_message', async (data) => {
+        const { messageId, room } = data;
+        const message = await Message.findById(messageId);
+        if (!message) return;
+        message.isPinned = false;
+        await message.save();
+        io.to(room).emit('message_unpinned', { messageId });
+    });
+
+    // Read Receipts
+    socket.on('mark_read', async (data) => {
+        const { messageIds, username, room } = data;
+        await Message.updateMany(
+            { _id: { $in: messageIds }, readBy: { $ne: username } },
+            { $addToSet: { readBy: username } }
+        );
+        io.to(room).emit('messages_read', { messageIds, username });
+    });
+
+    // User Status
+    socket.on('update_status', async (data) => {
+        const { username, status } = data;
+        await User.findOneAndUpdate(
+            { username },
+            { status, lastSeen: new Date() },
+            { upsert: true }
+        );
+        io.emit('user_status_changed', { username, status });
+    });
+
+    // User Profile
+    socket.on('update_profile', async (data) => {
+        const { username, avatar, bio } = data;
+        const user = await User.findOneAndUpdate(
+            { username },
+            { avatar, bio, lastSeen: new Date() },
+            { upsert: true, new: true }
+        );
+        io.emit('profile_updated', { username, avatar, bio });
+    });
+
+    socket.on('get_profile', async (data, callback) => {
+        const { username } = data;
+        const user = await User.findOne({ username });
+        if (callback) callback(user);
     });
 
     socket.on('disconnect', () => {

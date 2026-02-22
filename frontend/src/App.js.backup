@@ -1,19 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff } from 'lucide-react';
-import EmojiPicker from 'emoji-picker-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle } from 'lucide-react';
 import './App.css';
-import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
-
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👏'];
+import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle } from './utils';
 
 export default function App() {
-  // Existing state
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -31,81 +23,35 @@ export default function App() {
   const [editingText, setEditingText] = useState("");
   const [deletingMsgId, setDeletingMsgId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // New feature states
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const [userProfiles, setUserProfiles] = useState({});
-  const [showProfileModal, setShowProfileModal] = useState(null);
-  const [userStatus, setUserStatus] = useState({});
-  const [pinnedMessages, setPinnedMessages] = useState([]);
-  const [showMarkdown, setShowMarkdown] = useState(true);
-  
-  // Refs
-  const chatEndRef = useRef(null);
-  const chatBodyRef = useRef(null);
-  const socketRef = useRef(null);
+  const chatEndRef      = useRef(null);
+  const socketRef       = useRef(null);
   const typingTimeoutRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const searchTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
-  const fileInputRef = useRef(null);
-  const usernameRef = useRef("");
-  const roomRef = useRef("");
+  // Refs for always-fresh values inside socket handlers (avoid stale closures)
+  const usernameRef     = useRef("");
+  const roomRef         = useRef("");
   const soundEnabledRef = useRef(true);
 
+  // Keep refs in sync with state
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
-  // Theme effect
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  // Mobile detection
+  // Detect mobile and handle resize
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 600);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Scroll detection for unread badge
   useEffect(() => {
-    const chatBody = chatBodyRef.current;
-    if (!chatBody) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = chatBody;
-      const atBottom = scrollHeight - scrollTop - clientHeight < 50;
-      setIsAtBottom(atBottom);
-      if (atBottom) {
-        setUnreadCount(0);
-        // Mark messages as read
-        const unreadIds = chat.filter(m => m.sender !== username && !m.readBy?.includes(username)).map(m => m._id);
-        if (unreadIds.length > 0 && socketRef.current) {
-          socketRef.current.emit('mark_read', { messageIds: unreadIds, username: usernameRef.current, room: roomRef.current });
-        }
-      }
-    };
-
-    chatBody.addEventListener('scroll', handleScroll);
-    return () => chatBody.removeEventListener('scroll', handleScroll);
-  }, [chat, username]);
-
-  // Socket setup
-  useEffect(() => {
+    // Initialize socket connection with fallback
     const isProduction = window.location.hostname !== 'localhost';
     const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
     
-    if (isProduction) fetch(BACKEND_URL + "/ping").catch(() => {});
-
     const newSocket = io(BACKEND_URL, {
         transports: ['websocket', 'polling'],
         reconnection: true,
@@ -117,37 +63,34 @@ export default function App() {
     });
     socketRef.current = newSocket;
 
+    // Wake up Render free-tier backend as early as possible
+    if (isProduction) fetch(BACKEND_URL + "/ping").catch(() => {});
+
     newSocket.on("connect", () => {
       console.log("✅ Connected to server, id:", newSocket.id);
       setConnected(true);
+      // Re-join room on reconnect (Render free-tier wipes in-memory roomUsers)
       if (roomRef.current && usernameRef.current) {
         console.log("🔄 Re-joining room after reconnect:", roomRef.current);
         newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current });
-        newSocket.emit("update_status", { username: usernameRef.current, status: 'online' });
       }
     });
-
     newSocket.on("disconnect", () => {
       console.log("❌ Disconnected from server");
       setConnected(false);
     });
-
     newSocket.on("connect_error", (error) => {
       console.error("⚠️ Connection error:", error.message);
       setConnected(false);
     });
-
+    // reconnect_attempt is a Manager event in Socket.IO v4
     newSocket.io.on("reconnect_attempt", (attempt) => {
       console.log("🔄 Reconnect attempt #" + attempt);
     });
-
     newSocket.on("load_history", (data) => {
       console.log("📥 Loaded history:", data);
-      const messages = Array.isArray(data) ? data : [];
-      setChat(messages);
-      setPinnedMessages(messages.filter(m => m.isPinned));
+      setChat(Array.isArray(data) ? data : []);
     });
-
     const removeTypingUser = (user) => {
       const timers = typingTimersRef.current;
       if (timers.has(user)) {
@@ -167,10 +110,7 @@ export default function App() {
       setChat((prev) => [...prev, data]);
       removeTypingUser(data.sender);
       
-      if (!isAtBottom && data.sender !== usernameRef.current) {
-        setUnreadCount(c => c + 1);
-      }
-      
+      // Use refs so we always read current soundEnabled / username
       if (soundEnabledRef.current && data.sender !== usernameRef.current) {
         try {
           if (!audioContextRef.current)
@@ -179,11 +119,9 @@ export default function App() {
         } catch (_) {}
       }
     });
-
     newSocket.on("chat_cleared", () => {
       console.log("🗑️ Chat cleared");
       setChat([]);
-      setPinnedMessages([]);
     });
 
     newSocket.on("user_joined", (data) => {
@@ -248,66 +186,31 @@ export default function App() {
       setChat((prev) => prev.filter(m => m._id !== data.messageId));
     });
 
-    // New event handlers
-    newSocket.on("reaction_added", (data) => {
-      setChat(prev => prev.map(m => m._id === data.messageId ? { ...m, reactions: data.reactions } : m));
-    });
-
-    newSocket.on("reaction_removed", (data) => {
-      setChat(prev => prev.map(m => m._id === data.messageId ? { ...m, reactions: data.reactions } : m));
-    });
-
-    newSocket.on("message_pinned", (message) => {
-      setChat(prev => prev.map(m => m._id === message._id ? message : m));
-      setPinnedMessages(prev => [...prev, message]);
-    });
-
-    newSocket.on("message_unpinned", (data) => {
-      setChat(prev => prev.map(m => m._id === data.messageId ? { ...m, isPinned: false } : m));
-      setPinnedMessages(prev => prev.filter(m => m._id !== data.messageId));
-    });
-
-    newSocket.on("messages_read", (data) => {
-      setChat(prev => prev.map(m => {
-        if (data.messageIds.includes(m._id)) {
-          return { ...m, readBy: [...(m.readBy || []), data.username] };
-        }
-        return m;
-      }));
-    });
-
-    newSocket.on("user_status_changed", (data) => {
-      setUserStatus(prev => ({ ...prev, [data.username]: data.status }));
-    });
-
-    newSocket.on("profile_updated", (data) => {
-      setUserProfiles(prev => ({ ...prev, [data.username]: { avatar: data.avatar, bio: data.bio } }));
-    });
-
     return () => {
       newSocket.disconnect();
       typingTimersRef.current.forEach(id => clearTimeout(id));
       typingTimersRef.current.clear();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, []);
+  }, []); // socket created once — handlers use refs for always-fresh values
 
-  useEffect(() => { 
-    if (isAtBottom) {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-    }
-  }, [chat, typingUsers, isAtBottom]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
 
+  // Debounced search for better performance
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, 300);
+
     return () => clearTimeout(searchTimeoutRef.current);
   }, [searchQuery]);
 
+  // Memoized filtered chat to avoid re-filtering on every render
   const filteredChat = useMemo(() => {
     if (!debouncedSearchQuery) return chat;
+    
     return chat.filter(msg => 
       msg.text.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       msg.sender.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
@@ -331,7 +234,6 @@ export default function App() {
       setSearchQuery("");
       setDebouncedSearchQuery("");
       socketRef.current.emit("join_room", { room, username }); 
-      socketRef.current.emit("update_status", { username, status: 'online' });
       setShowChat(true); 
     } 
   }, [username, room]);
@@ -355,93 +257,11 @@ export default function App() {
   const sendMessage = useCallback(() => {
     const text = message.trim();
     if (!text || !connected || !socketRef.current) return;
-    
-    const mentions = extractMentions(text);
-    const messageData = { 
-      room: roomRef.current, 
-      sender: usernameRef.current, 
-      text,
-      mentions,
-      replyTo: replyingTo?._id || null
-    };
-    
-    socketRef.current.emit("send_message", messageData);
+    socketRef.current.emit("send_message", { room: roomRef.current, sender: usernameRef.current, text });
     setMessage("");
-    setReplyingTo(null);
-    if (typingTimeoutRef.current) { 
-      clearTimeout(typingTimeoutRef.current); 
-      typingTimeoutRef.current = null; 
-    }
+    if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null; }
     socketRef.current.emit("stop_typing", { room: roomRef.current, username: usernameRef.current });
-  }, [message, connected, replyingTo]);
-
-  const handleFileUpload = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploadingFile(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', 'devchat_uploads'); // You'll need to configure Cloudinary
-    
-    try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/auto/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      
-      socketRef.current.emit("send_message", { 
-        room: roomRef.current, 
-        sender: usernameRef.current, 
-        text: file.name,
-        type: file.type.startsWith('image/') ? 'image' : 'file',
-        fileUrl: data.secure_url,
-        fileName: file.name,
-        fileSize: file.size
-      });
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('File upload failed. Please try again.');
-    } finally {
-      setUploadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  }, []);
-
-  const handleEmojiClick = useCallback((emojiData) => {
-    setMessage(prev => prev + emojiData.emoji);
-    setShowEmojiPicker(false);
-  }, []);
-
-  const handleReaction = useCallback((messageId, emoji) => {
-    if (!socketRef.current) return;
-    const msg = chat.find(m => m._id === messageId);
-    const reactions = msg?.reactions || {};
-    const userReacted = reactions[emoji]?.includes(username);
-    
-    if (userReacted) {
-      socketRef.current.emit('remove_reaction', { messageId, emoji, username: usernameRef.current, room: roomRef.current });
-    } else {
-      socketRef.current.emit('add_reaction', { messageId, emoji, username: usernameRef.current, room: roomRef.current });
-    }
-  }, [chat, username]);
-
-  const togglePin = useCallback((messageId, isPinned) => {
-    if (!socketRef.current) return;
-    socketRef.current.emit(isPinned ? 'unpin_message' : 'pin_message', { messageId, room: roomRef.current });
-  }, []);
-
-  const exportChat = useCallback(() => {
-    const data = JSON.stringify(chat, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat-${room}-${new Date().toISOString()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [chat, room]);
+  }, [message, connected]);
 
   const handleCopyMessage = useCallback((text, msgId) => {
     copyToClipboard(text);
@@ -482,55 +302,11 @@ export default function App() {
     setDeletingMsgId(null);
   }, [deletingMsgId]);
 
-  const renderMessageText = (msg) => {
-    if (!showMarkdown) return <p>{msg.text}</p>;
-    
-    const links = detectLinks(msg.text);
-    let content = msg.text;
-    
-    // Highlight mentions
-    if (msg.mentions?.length > 0) {
-      msg.mentions.forEach(mention => {
-        content = content.replace(new RegExp(`@${mention}\\b`, 'g'), `**@${mention}**`);
-      });
-    }
-    
-    return (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({node, inline, className, children, ...props}) {
-            const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
-              <SyntaxHighlighter
-                style={vscDarkPlus}
-                language={match[1]}
-                PreTag="div"
-                {...props}
-              >
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
-            ) : (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            );
-          },
-          a({node, children, ...props}) {
-            return <a {...props} target="_blank" rel="noopener noreferrer" className="message-link">{children}</a>;
-          }
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    );
-  };
-
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
         <Zap color="#00a884" size={48} fill="#00a884" />
-        <h2 className="brand">DevChat <span>Pro+</span></h2>
+        <h2 className="brand">DevChat <span>Pro</span></h2>
         <div className="input-group"><User size={18}/><input placeholder="Name" onChange={e => setUsername(e.target.value)} /></div>
         <div className="input-group"><Hash size={18}/><input placeholder="Room ID" onChange={e => setRoom(e.target.value)} /></div>
         <button className="join-btn" onClick={joinRoom}>Enter Chat</button>
@@ -552,21 +328,13 @@ export default function App() {
           <span className="users-count">{onlineUsers.length}</span>
         </div>
         <button 
-          className="theme-toggle"
-          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-          title="Toggle theme"
-        >
-          {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
-        </button>
-        <button 
           className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`}
           onClick={() => setSoundEnabled(!soundEnabled)}
           title={soundEnabled ? "Sound on" : "Sound off"}
         >
           🔔
         </button>
-        <button className="export-btn" onClick={exportChat} title="Export chat"><Download size={18}/></button>
-        <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", roomRef.current)}><Trash2 size={18}/></button>
+        <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", roomRef.current)}><Trash2 size={20}/></button>
       </div>
 
       <div className="search-bar">
@@ -578,113 +346,43 @@ export default function App() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="search-input"
         />
-        <button 
-          className="markdown-toggle"
-          onClick={() => setShowMarkdown(!showMarkdown)}
-          title={showMarkdown ? "Disable markdown" : "Enable markdown"}
-        >
-          {showMarkdown ? <Eye size={18}/> : <EyeOff size={18}/>}
-        </button>
       </div>
-
-      {pinnedMessages.length > 0 && (
-        <div className="pinned-messages-bar">
-          <Pin size={14} />
-          <span>{pinnedMessages.length} pinned message{pinnedMessages.length > 1 ? 's' : ''}</span>
-        </div>
-      )}
 
       {onlineUsers.length > 0 && (
         <div className="users-list">
           {onlineUsers.map((user, i) => (
-            <motion.div 
-              key={i} 
-              className="user-tag" 
-              initial={{ opacity: 0, x: -10 }} 
-              animate={{ opacity: 1, x: 0 }}
-              onClick={() => setShowProfileModal(user)}
-            >
+            <motion.div key={i} className="user-tag" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
               <div style={getAvatarStyle(user)}>
                 {getInitials(user)}
               </div>
               <span className="user-tag-name">{user}</span>
               {typingUsers.has(user) && <span className="user-typing-dot"></span>}
-              <span className={`user-status-dot status-${userStatus[user] || 'online'}`}></span>
             </motion.div>
           ))}
         </div>
       )}
 
-      <div className="chat-body" ref={chatBodyRef}>
+      <div className="chat-body">
         <AnimatePresence>
           {filteredChat.map((m, i) => {
             const msgId = `${i}-${m.time}`;
             const isOwn = m.sender === username;
-            const reactions = m.reactions || {};
-            
             return (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} 
                 animate={{ opacity: 1, y: 0 }} 
                 exit={{ opacity: 0, y: -10 }}
                 key={i} 
-                className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""}`}
+                className={`msg-bubble ${isOwn ? "me" : "other"}`}
               >
-                {m.isPinned && <Pin size={12} className="pin-icon" />}
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
-                
-                {m.replyTo && (
-                  <div className="reply-preview">
-                    <Reply size={12} />
-                    <span>Replying to message</span>
-                  </div>
-                )}
-                
-                {m.type === 'image' ? (
-                  <img src={m.fileUrl || m.text} className="chat-img" alt="shared" />
-                ) : m.type === 'file' ? (
-                  <a href={m.fileUrl} download={m.fileName} className="file-link">
-                    📎 {m.fileName} ({(m.fileSize / 1024).toFixed(1)} KB)
-                  </a>
-                ) : renderMessageText(m)}
-                
+                {m.type === 'image' ? <img src={m.text} className="chat-img" alt="shared"/> : <p>{m.text}</p>}
                 {m.edited && <span className="msg-edited">(edited)</span>}
-                
-                {Object.keys(reactions).length > 0 && (
-                  <div className="message-reactions">
-                    {Object.entries(reactions).map(([emoji, users]) => (
-                      <button
-                        key={emoji}
-                        className={`reaction-item ${users.includes(username) ? 'reacted' : ''}`}
-                        onClick={() => handleReaction(m._id, emoji)}
-                      >
-                        {emoji} {users.length}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
                 <div className="msg-footer">
                   <span className="timestamp" title={new Date(m.time).toLocaleString()}>
                     {formatRelativeTime(m.time)}
                   </span>
-                  {m.readBy && m.readBy.length > 0 && (
-                    <span className="read-receipt" title={`Read by: ${m.readBy.join(', ')}`}>
-                      <CheckCircle size={10} /> {m.readBy.length}
-                    </span>
-                  )}
                   <div className="msg-actions">
-                    <div className="quick-reactions">
-                      {QUICK_REACTIONS.map(emoji => (
-                        <button
-                          key={emoji}
-                          className="quick-reaction-btn"
-                          onClick={() => handleReaction(m._id, emoji)}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
                     <button 
                       className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''} ${isMobile ? 'mobile-visible' : ''}`}
                       onClick={() => handleCopyMessage(m.text, msgId)}
@@ -692,22 +390,6 @@ export default function App() {
                       type="button"
                     >
                       {copiedMsgId === msgId ? <CheckCircle size={isMobile ? 16 : 14}/> : <Copy size={isMobile ? 16 : 14}/>}
-                    </button>
-                    <button
-                      className="reply-btn"
-                      onClick={() => setReplyingTo(m)}
-                      title="Reply"
-                      type="button"
-                    >
-                      <Reply size={14}/>
-                    </button>
-                    <button
-                      className="pin-btn"
-                      onClick={() => togglePin(m._id, m.isPinned)}
-                      title={m.isPinned ? "Unpin" : "Pin"}
-                      type="button"
-                    >
-                      <Pin size={14}/>
                     </button>
                     {isOwn && (
                       <>
@@ -756,51 +438,7 @@ export default function App() {
 
         <div ref={chatEndRef} />
       </div>
-
-      {unreadCount > 0 && !isAtBottom && (
-        <motion.button
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="unread-badge"
-          onClick={() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" })}
-        >
-          {unreadCount} new message{unreadCount > 1 ? 's' : ''}
-        </motion.button>
-      )}
-
-      {replyingTo && (
-        <div className="replying-bar">
-          <Reply size={16} />
-          <div>
-            <strong>Replying to {replyingTo.sender}</strong>
-            <p>{replyingTo.text.substring(0, 50)}...</p>
-          </div>
-          <button onClick={() => setReplyingTo(null)}><X size={16} /></button>
-        </div>
-      )}
-
       <div className="chat-footer">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          style={{ display: 'none' }}
-          accept="image/*,application/pdf,.doc,.docx"
-        />
-        <button
-          className="file-upload-btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={!connected || uploadingFile}
-        >
-          <ImageIcon size={20} />
-        </button>
-        <button
-          className="emoji-btn"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          disabled={!connected}
-        >
-          <Smile size={20} />
-        </button>
         <input 
           disabled={!connected}
           value={message} 
@@ -810,12 +448,6 @@ export default function App() {
         />
         <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
       </div>
-
-      {showEmojiPicker && (
-        <div className="emoji-picker-container">
-          <EmojiPicker onEmojiClick={handleEmojiClick} theme={theme} />
-        </div>
-      )}
 
       {/* Edit Modal */}
       <AnimatePresence>
