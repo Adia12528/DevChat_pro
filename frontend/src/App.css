@@ -39,3 +39,7 @@ body { margin: 0; background: var(--bg); font-family: sans-serif; color: var(--t
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.status-on { color: #00a884; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.status-off { color: #f44336; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.chat-img { max-width: 100%; border-radius: 8px; margin-top: 5px; border: 1px solid #313d45; }
+input:disabled { opacity: 0.5; cursor: not-allowed; }
