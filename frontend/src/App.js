@@ -45,6 +45,21 @@ export default function App() {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [showMarkdown, setShowMarkdown] = useState(true);
   
+  // Voice message states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  
+  // Private chat/DM states
+  const [showRoomSidebar, setShowRoomSidebar] = useState(false);
+  const [rooms, setRooms] = useState([{ id: room, name: room, type: 'group' }]);
+  const [activeRoom, setActiveRoom] = useState(null);
+  
+  // Profile editing
+  const [editingOwnProfile, setEditingOwnProfile] = useState(false);
+  const [profileBio, setProfileBio] = useState('');
+  const [profileAvatar, setProfileAvatar] = useState('');
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -55,6 +70,10 @@ export default function App() {
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
   const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingIntervalRef = useRef(null);
+  const audioRef = useRef(null);
   const usernameRef = useRef("");
   const roomRef = useRef("");
   const soundEnabledRef = useRef(true);
@@ -526,6 +545,118 @@ export default function App() {
     );
   };
 
+  // Voice message functions
+  const startVoiceRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        
+        // Upload to Cloudinary
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'voice-message.webm');
+        formData.append('upload_preset', 'devchat_uploads');
+        
+        try {
+          const res = await fetch('https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/auto/upload', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          
+          socketRef.current.emit("send_message", {
+            room: roomRef.current,
+            sender: usernameRef.current,
+            text: 'Voice message',
+            type: 'voice',
+            fileUrl: data.secure_url,
+            duration: recordingTime
+          });
+        } catch (error) {
+          console.error('Voice upload failed:', error);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(t => t + 1);
+      }, 1000);
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      alert('Microphone access denied');
+    }
+  }, [recordingTime]);
+
+  const stopVoiceRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+    }
+  }, [isRecording]);
+
+  const playVoiceMessage = useCallback((audioUrl, msgId) => {
+    if (playingVoiceId === msgId) {
+      audioRef.current?.pause();
+      setPlayingVoiceId(null);
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.play();
+      setPlayingVoiceId(msgId);
+      audio.onended = () => setPlayingVoiceId(null);
+    }
+  }, [playingVoiceId]);
+
+  // DM functions
+  const createDM = useCallback((targetUser) => {
+    const dmRoom = [username, targetUser].sort().join('_dm_');
+    const existingRoom = rooms.find(r => r.id === dmRoom);
+    if (!existingRoom) {
+      setRooms(prev => [...prev, { id: dmRoom, name: targetUser, type: 'dm', with: targetUser }]);
+    }
+    setActiveRoom(dmRoom);
+    socketRef.current.emit("join_room", { room: dmRoom, username: usernameRef.current });
+    setRoom(dmRoom);
+    setShowProfileModal(null);
+  }, [username, rooms]);
+
+  const switchRoom = useCallback((roomId) => {
+    setActiveRoom(roomId);
+    setRoom(roomId);
+    socketRef.current.emit("join_room", { room: roomId, username: usernameRef.current });
+    setChat([]);
+    setShowRoomSidebar(false);
+  }, []);
+
+  const saveProfile = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.emit('update_profile', {
+        username: usernameRef.current,
+        avatar: profileAvatar,
+        bio: profileBio
+      });
+      setEditingOwnProfile(false);
+    }
+  }, [profileAvatar, profileBio]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -541,6 +672,13 @@ export default function App() {
   return (
     <div className="chat-container">
       <div className="chat-header">
+        <button 
+          className="sidebar-toggle"
+          onClick={() => setShowRoomSidebar(true)}
+          title="Show conversations"
+        >
+          ☰
+        </button>
         <div className="meta">
           <h3>{room}</h3>
           <span className={connected ? "status-on" : "status-off"}>
@@ -646,6 +784,18 @@ export default function App() {
                   <a href={m.fileUrl} download={m.fileName} className="file-link">
                     📎 {m.fileName} ({(m.fileSize / 1024).toFixed(1)} KB)
                   </a>
+                ) : m.type === 'voice' ? (
+                  <div className="voice-message">
+                    <button 
+                      className="voice-play-btn"
+                      onClick={() => playVoiceMessage(m.fileUrl, m._id)}
+                    >
+                      {playingVoiceId === m._id ? '⏸️' : '▶️'}
+                    </button>
+                    <div className="voice-waveform">
+                      <span className="voice-duration">{m.duration || 0}s</span>
+                    </div>
+                  </div>
                 ) : renderMessageText(m)}
                 
                 {m.edited && <span className="msg-edited">(edited)</span>}
@@ -795,6 +945,14 @@ export default function App() {
           <ImageIcon size={20} />
         </button>
         <button
+          className={`voice-record-btn ${isRecording ? 'recording' : ''}`}
+          onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+          disabled={!connected}
+          title={isRecording ? `Recording: ${recordingTime}s` : 'Record voice message'}
+        >
+          {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
+        </button>
+        <button
           className="emoji-btn"
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
           disabled={!connected}
@@ -910,6 +1068,110 @@ export default function App() {
                 >
                   Delete
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && (
+          <motion.div 
+            className="profile-modal-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setShowProfileModal(null)}
+          >
+            <motion.div 
+              className="profile-modal"
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="profile-header">
+                <div className="profile-avatar-large" style={getAvatarStyle(showProfileModal)}>
+                  {getInitials(showProfileModal)}
+                </div>
+                <h2>{showProfileModal}</h2>
+                <span className={`profile-status status-${userStatus[showProfileModal] || 'online'}`}>
+                  {userStatus[showProfileModal] || 'online'}
+                </span>
+              </div>
+              <div className="profile-body">
+                {userProfiles[showProfileModal]?.bio && (
+                  <div className="profile-bio">
+                    <strong>Bio</strong>
+                    <p>{userProfiles[showProfileModal].bio}</p>
+                  </div>
+                )}
+                <div className="profile-actions">
+                  <button 
+                    className="btn-dm"
+                    onClick={() => createDM(showProfileModal)}
+                  >
+                    <AtSign size={16} /> Send Message
+                  </button>
+                  <button 
+                    className="btn-mention"
+                    onClick={() => {
+                      setMessage(prev => prev + `@${showProfileModal} `);
+                      setShowProfileModal(null);
+                    }}
+                  >
+                    Mention
+                  </button>
+                </div>
+              </div>
+              <button 
+                className="modal-close-btn"
+                onClick={() => setShowProfileModal(null)}
+              >
+                <X size={20} />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Room Sidebar for DMs */}
+      <AnimatePresence>
+        {showRoomSidebar && (
+          <motion.div 
+            className="room-sidebar-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setShowRoomSidebar(false)}
+          >
+            <motion.div 
+              className="room-sidebar"
+              initial={{ x: -300 }} 
+              animate={{ x: 0 }} 
+              exit={{ x: -300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sidebar-header">
+                <h3>Conversations</h3>
+                <button onClick={() => setShowRoomSidebar(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="sidebar-rooms">
+                {rooms.map(r => (
+                  <button
+                    key={r.id}
+                    className={`room-item ${activeRoom === r.id ? 'active' : ''}`}
+                    onClick={() => switchRoom(r.id)}
+                  >
+                    <div className="room-icon">
+                      {r.type === 'dm' ? '💬' : '#'}
+                    </div>
+                    <span>{r.name}</span>
+                  </button>
+                ))}
               </div>
             </motion.div>
           </motion.div>
