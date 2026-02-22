@@ -18,11 +18,19 @@ export default function App() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
+
+  // Detect mobile and handle resize
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 600);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     // Initialize socket connection with fallback
@@ -271,11 +279,12 @@ export default function App() {
                     {formatRelativeTime(m.time)}
                   </span>
                   <button 
-                    className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''}`}
+                    className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''} ${isMobile ? 'mobile-visible' : ''}`}
                     onClick={() => handleCopyMessage(m.text, msgId)}
                     title="Copy message"
+                    type="button"
                   >
-                    {copiedMsgId === msgId ? <CheckCircle size={14}/> : <Copy size={14}/>}
+                    {copiedMsgId === msgId ? <CheckCircle size={isMobile ? 16 : 14}/> : <Copy size={isMobile ? 16 : 14}/>}
                   </button>
                 </div>
               </motion.div>
