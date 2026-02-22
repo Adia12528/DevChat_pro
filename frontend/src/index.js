@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 // We create the root once and render our App component.
 // StrictMode is kept to help you find potential bugs during development,
@@ -12,3 +13,15 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+// Register service worker for PWA support and offline functionality
+serviceWorkerRegistration.register({
+  onSuccess: () => console.log('✅ App is ready for offline use'),
+  onUpdate: (registration) => {
+    console.log('🔄 New version available. Please refresh.');
+    if (window.confirm('New version available! Reload to update?')) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      window.location.reload();
+    }
+  }
+});

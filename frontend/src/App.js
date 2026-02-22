@@ -60,6 +60,10 @@ export default function App() {
   const [profileBio, setProfileBio] = useState('');
   const [profileAvatar, setProfileAvatar] = useState('');
   
+  // PWA Install prompt
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -93,6 +97,26 @@ export default function App() {
     const handleResize = () => setIsMobile(window.innerWidth < 600);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // PWA Install prompt handler
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setShowInstallPrompt(false);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   // Scroll detection for unread badge
@@ -657,6 +681,20 @@ export default function App() {
     }
   }, [profileAvatar, profileBio]);
 
+  const handleInstallClick = useCallback(async () => {
+    if (!deferredPrompt) return;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      console.log('✅ App installed');
+    }
+    
+    setDeferredPrompt(null);
+    setShowInstallPrompt(false);
+  }, [deferredPrompt]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -671,6 +709,31 @@ export default function App() {
 
   return (
     <div className="chat-container">
+      {/* PWA Install Banner */}
+      <AnimatePresence>
+        {showInstallPrompt && !showChat && (
+          <motion.div 
+            className="install-banner"
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+          >
+            <div className="install-content">
+              <Zap size={20} color="#00a884" fill="#00a884" />
+              <span>Install DevChat Pro for the best experience!</span>
+            </div>
+            <div className="install-actions">
+              <button className="install-btn" onClick={handleInstallClick}>
+                Install
+              </button>
+              <button className="dismiss-btn" onClick={() => setShowInstallPrompt(false)}>
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="chat-header">
         <button 
           className="sidebar-toggle"
