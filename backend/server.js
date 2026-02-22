@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const app = express();
 
-// 🛠️ HACK: Keep-Alive Route (use cron-job.org to hit this every 10 mins)
+// 🛠️ Render Keep-Alive Hack
 app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 app.use(cors());
@@ -15,30 +15,30 @@ app.use(express.json());
 
 const server = http.createServer(app);
 
-// 🔌 Production-Ready Socket.io Configuration
+// 🔌 Production Socket Configuration
 const io = new Server(server, { 
     cors: { 
-        // 🚀 HARD-CODED YOUR VERCEL URL FOR RELIABILITY
         origin: [
-            "https://dev-chat-pro-adia12528s-projects.vercel.app/",
-            "http://localhost:3000"
+            "https://dev-chat-pro.vercel.app",
+            "https://dev-chat-pro-adia12528s-projects.vercel.app",
+            "http://localhost:3000",
+            "http://localhost:5000"
         ],
         methods: ["GET", "POST"],
         credentials: true
     },
-    transports: ['websocket'], // 🚀 Force WebSocket to prevent polling errors on Vercel
-    pingTimeout: 60000,
-    pingInterval: 25000
+    transports: ['websocket', 'polling'],
+    pingInterval: 25000,
+    pingTimeout: 60000
 });
 
 const PORT = process.env.PORT || 5000;
+// Using your provided MongoDB URI as the fallback
 const dbURI = process.env.MONGO_URI || 'mongodb+srv://adia12528_db_user:Adi12528%40as@cluster0.da3qkei.mongodb.net/devchat?retryWrites=true&w=majority';
 
-
-// 💎 Database Connection with pooling for scalability
 mongoose.connect(dbURI)
-    .then(() => console.log("💎 DB Connected: Ready for production"))
-    .catch(err => console.error("❌ DB Connection Error:", err.message));
+    .then(() => console.log("💎 MongoDB Connected: dev-chat-pro-db"))
+    .catch(err => console.error("❌ DB Error:", err.message));
 
 const MsgSchema = new mongoose.Schema({
     room: { type: String, index: true },
@@ -50,51 +50,28 @@ const MsgSchema = new mongoose.Schema({
 const Message = mongoose.model('Message', MsgSchema);
 
 io.on('connection', (socket) => {
-    console.log(`✅ Socket connected: ${socket.id}`);
+    console.log(`✅ Connected: ${socket.id}`);
 
     socket.on('join_room', async (room) => {
         socket.join(room);
-        console.log(`User joined room: ${room}`);
-        try {
-            const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
-            socket.emit('load_history', history);
-        } catch (error) {
-            console.error("Error loading history:", error);
-        }
+        const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
+        socket.emit('load_history', history);
     });
 
     socket.on('send_message', async (data) => {
-        if (!data.text || !data.text.trim()) return;
-
+        if (!data.text?.trim()) return;
         const isImage = /\.(jpg|jpeg|png|webp|gif)$/.test(data.text.toLowerCase());
-        
-        try {
-            const newMessage = new Message({ 
-                ...data, 
-                type: isImage ? 'image' : 'text',
-                time: new Date()
-            });
-            await newMessage.save();
-            io.to(data.room).emit("receive_message", newMessage);
-        } catch (error) {
-            console.error("Error saving message:", error);
-        }
+        const newMessage = new Message({ ...data, type: isImage ? 'image' : 'text' });
+        const savedMessage = await newMessage.save();
+        io.to(data.room).emit("receive_message", savedMessage.toObject());
     });
 
     socket.on('clear_chat', async (room) => {
-        try {
-            await Message.deleteMany({ room });
-            io.to(room).emit('chat_cleared');
-        } catch (error) {
-            console.error("Error clearing chat:", error);
-        }
+        await Message.deleteMany({ room });
+        io.to(room).emit('chat_cleared');
     });
 
-    socket.on('disconnect', (reason) => {
-        console.log(`❌ Disconnected (${socket.id}): ${reason}`);
-    });
+    socket.on('disconnect', () => console.log("❌ Disconnected"));
 });
 
-server.listen(PORT, () => {
-    console.log(`🚀 Core Engine Live on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`🚀 Production Server on ${PORT}`));
