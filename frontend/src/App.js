@@ -69,30 +69,77 @@ export default function App() {
       setChat([]);
     });
 
+    newSocket.on("user_joined", (data) => {
+      console.log("👤 User joined:", data.username);
+      setOnlineUsers(data.users || []);
+    });
+
+    newSocket.on("user_left", (data) => {
+      console.log("👤 User left:", data.username);
+      setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+    });
+
+    newSocket.on("user_typing", (data) => {
+      setTypingUsers((prev) => new Set([...prev, data.username]));
+    });
+
+    newSocket.on("user_stopped_typing", (username) => {
+      setTypingUsers((prev) => {
+        const updated = new Set(prev);
+        updated.delete(username);
+        return updated;
+      });
+    });
+
     return () => {
       newSocket.off("connect");
       newSocket.off("disconnect");
+      newSocket.off("connect_error");
+      newSocket.off("error");
+      newSocket.off("reconnect_attempt");
+      newSocket.off("reconnect");
       newSocket.off("load_history");
       newSocket.off("receive_message");
       newSocket.off("chat_cleared");
+      newSocket.off("user_joined");
+      newSocket.off("user_left");
+      newSocket.off("user_typing");
+      newSocket.off("user_stopped_typing");
       newSocket.disconnect();
     };
   }, []);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
 
   const joinRoom = () => { 
     if (username && room && socketRef.current) { 
       console.log(`🚪 Joining room: ${room}`);
-      setChat([]); // Clear previous messages
-      socketRef.current.emit("join_room", room); 
+      setChat([]);
+      setOnlineUsers([]);
+      setTypingUsers(new Set());
+      socketRef.current.emit("join_room", { room, username }); 
       setShowChat(true); 
     } 
   };
+  const handleMessageChange = (e) => {
+    setMessage(e.target.value);
+    
+    if (socketRef.current && connected) {
+      socketRef.current.emit("typing", { room, username });
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        socketRef.current.emit("stop_typing", { room, username });
+      }, 1000);
+    }
+  };
+
   const sendMessage = () => {
     if (message.trim() && connected && socketRef.current) {
       socketRef.current.emit("send_message", { room, sender: username, text: message });
       setMessage("");
+      socketRef.current.emit("stop_typing", { room, username });
     }
   };
 
@@ -117,8 +164,22 @@ export default function App() {
             {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
           </span>
         </div>
+        <div className="users-info">
+          <Users size={16}/> {onlineUsers.length}
+        </div>
         <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", room)}><Trash2 size={20}/></button>
       </div>
+
+      {onlineUsers.length > 0 && (
+        <div className="users-list">
+          {onlineUsers.map((user, i) => (
+            <motion.span key={i} className="user-tag" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+              {user}
+            </motion.span>
+          ))}
+        </div>
+      )}
+
       <div className="chat-body">
         <AnimatePresence>
           {chat.map((m, i) => (
@@ -129,6 +190,20 @@ export default function App() {
             </motion.div>
           ))}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {typingUsers.size > 0 && (
+            <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator">
+              <span className="typing-text">{Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing</span>
+              <div className="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div ref={chatEndRef} />
       </div>
       <div className="chat-footer">
@@ -136,7 +211,7 @@ export default function App() {
           disabled={!connected}
           value={message} 
           placeholder={connected ? "Type a message..." : "Connecting to server..."} 
-          onChange={e => setMessage(e.target.value)} 
+          onChange={handleMessageChange} 
           onKeyPress={e => e.key === 'Enter' && sendMessage()} 
         />
         <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
