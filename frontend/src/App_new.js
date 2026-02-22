@@ -1,9 +1,8 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users } from 'lucide-react';
 import './App.css';
-import { formatRelativeTime, playNotificationSound, copyToClipboard } from './utils';
 
 export default function App() {
   const [username, setUsername] = useState("");
@@ -14,15 +13,12 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [copiedMsgId, setCopiedMsgId] = useState(null);
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    // Initialize socket connection with fallback
+    // Initialize socket connection
     const isProduction = window.location.hostname !== 'localhost';
     const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
     
@@ -41,47 +37,47 @@ export default function App() {
       console.log("✅ Connected to server");
       setConnected(true);
     });
+    
     newSocket.on("disconnect", () => {
       console.log("❌ Disconnected from server");
       setConnected(false);
     });
+    
     newSocket.on("connect_error", (error) => {
       console.error("⚠️ Connection error:", error);
       setConnected(false);
     });
+    
     newSocket.on("error", (error) => {
       console.error("⚠️ Socket error:", error);
       setConnected(false);
     });
+    
     newSocket.on("reconnect_attempt", () => {
       console.log("🔄 Attempting to reconnect...");
     });
+    
     newSocket.on("reconnect", () => {
       console.log("✅ Reconnected successfully");
       setConnected(true);
     });
+    
     newSocket.on("load_history", (data) => {
       console.log("📥 Loaded history:", data);
       setChat(Array.isArray(data) ? data : []);
     });
+    
     newSocket.on("receive_message", (data) => {
       console.log("💬 Received message:", data);
       setChat((prev) => [...prev, data]);
-      
-      // Play notification sound if enabled and not from self
-      if (soundEnabled && data.sender !== username) {
-        try {
-          playNotificationSound();
-        } catch (err) {
-          console.log("Sound notification skipped (context not initialized)");
-        }
-      }
     });
+    
     newSocket.on("chat_cleared", () => {
       console.log("🗑️ Chat cleared");
       setChat([]);
     });
 
+    // New events for typing and users
     newSocket.on("user_joined", (data) => {
       console.log("👤 User joined:", data.username);
       setOnlineUsers(data.users || []);
@@ -122,7 +118,9 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
+  useEffect(() => { 
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
+  }, [chat, typingUsers]);
 
   const joinRoom = () => { 
     if (username && room && socketRef.current) { 
@@ -134,14 +132,18 @@ export default function App() {
       setShowChat(true); 
     } 
   };
+
   const handleMessageChange = (e) => {
     setMessage(e.target.value);
     
+    // Send typing event
     if (socketRef.current && connected) {
       socketRef.current.emit("typing", { room, username });
       
+      // Clear previous timeout
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       
+      // Set new timeout to stop typing after 1 second of inactivity
       typingTimeoutRef.current = setTimeout(() => {
         socketRef.current.emit("stop_typing", { room, username });
       }, 1000);
@@ -155,18 +157,6 @@ export default function App() {
       socketRef.current.emit("stop_typing", { room, username });
     }
   };
-
-  const handleCopyMessage = (text, msgId) => {
-    copyToClipboard(text);
-    setCopiedMsgId(msgId);
-    setTimeout(() => setCopiedMsgId(null), 2000);
-  };
-
-  // Filter chat based on search query
-  const filteredChat = chat.filter(msg => 
-    msg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    msg.sender.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   if (!showChat) return (
     <div className="login-screen">
@@ -192,25 +182,7 @@ export default function App() {
         <div className="users-info">
           <Users size={16}/> {onlineUsers.length}
         </div>
-        <button 
-          className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`}
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          title={soundEnabled ? "Sound on" : "Sound off"}
-        >
-          🔔
-        </button>
         <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", room)}><Trash2 size={20}/></button>
-      </div>
-
-      <div className="search-bar">
-        <Search size={18}/>
-        <input 
-          type="text" 
-          placeholder="Search messages..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="search-input"
-        />
       </div>
 
       {onlineUsers.length > 0 && (
@@ -225,34 +197,16 @@ export default function App() {
 
       <div className="chat-body">
         <AnimatePresence>
-          {filteredChat.map((m, i) => {
-            const msgId = `${i}-${m.time}`;
-            return (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                key={i} 
-                className={`msg-bubble ${m.sender === username ? "me" : "other"}`}
-              >
-                {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
-                {m.type === 'image' ? <img src={m.text} className="chat-img" alt="shared"/> : <p>{m.text}</p>}
-                <div className="msg-footer">
-                  <span className="timestamp" title={new Date(m.time).toLocaleString()}>
-                    {formatRelativeTime(m.time)}
-                  </span>
-                  <button 
-                    className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''}`}
-                    onClick={() => handleCopyMessage(m.text, msgId)}
-                    title="Copy message"
-                  >
-                    {copiedMsgId === msgId ? <CheckCircle size={14}/> : <Copy size={14}/>}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
+          {chat.map((m, i) => (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={i} className={`msg-bubble ${m.sender === username ? "me" : "other"}`}>
+              {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
+              <p>{m.text}</p>
+              <span className="timestamp">{new Date(m.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </motion.div>
+          ))}
         </AnimatePresence>
 
+        {/* Typing indicator */}
         <AnimatePresence>
           {typingUsers.size > 0 && (
             <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator">
@@ -268,12 +222,13 @@ export default function App() {
 
         <div ref={chatEndRef} />
       </div>
+
       <div className="chat-footer">
         <input 
           disabled={!connected}
           value={message} 
           placeholder={connected ? "Type a message..." : "Connecting to server..."} 
-          onChange={handleMessageChange} 
+          onChange={handleMessageChange}
           onKeyPress={e => e.key === 'Enter' && sendMessage()} 
         />
         <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
