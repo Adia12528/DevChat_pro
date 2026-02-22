@@ -26,6 +26,7 @@ export default function App() {
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const typingTimersRef = useRef(new Map());
   const searchTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
 
@@ -36,17 +37,13 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Auto-clear typing users who haven't been active for 5 seconds (safety mechanism)
+  // Clear all typing timers on unmount
   useEffect(() => {
-    if (typingUsers.size === 0) return;
-    
-    const timer = setTimeout(() => {
-      console.log("🧹 Auto-clearing stuck typing users");
-      setTypingUsers(new Set());
-    }, 5000);
-    
-    return () => clearTimeout(timer);
-  }, [typingUsers]);
+    return () => {
+      typingTimersRef.current.forEach((id) => clearTimeout(id));
+      typingTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     // Initialize socket connection with fallback
@@ -123,15 +120,38 @@ export default function App() {
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
     });
 
+    const startTypingTimer = (user) => {
+      const timers = typingTimersRef.current;
+      if (timers.has(user)) clearTimeout(timers.get(user));
+      const id = setTimeout(() => {
+        setTypingUsers((prev) => {
+          const updated = new Set(prev);
+          updated.delete(user);
+          return updated;
+        });
+        timers.delete(user);
+      }, 5000);
+      timers.set(user, id);
+    };
+
+    const clearTypingTimer = (user) => {
+      const timers = typingTimersRef.current;
+      if (!timers.has(user)) return;
+      clearTimeout(timers.get(user));
+      timers.delete(user);
+    };
+
     newSocket.on("user_typing", (data) => {
       if (data.username === username) return; // don't show self typing
       console.log("🎹 User typing:", data.username);
       setTypingUsers((prev) => new Set([...prev, data.username]));
+      startTypingTimer(data.username);
     });
 
     newSocket.on("user_stopped_typing", (stoppedUser) => {
       if (stoppedUser === username) return; // ignore self cleanup
       console.log("⏹️ User stopped typing:", stoppedUser);
+      clearTypingTimer(stoppedUser);
       setTypingUsers((prev) => {
         const updated = new Set(prev);
         updated.delete(stoppedUser);
