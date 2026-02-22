@@ -50,46 +50,21 @@ const MsgSchema = new mongoose.Schema({
 });
 const Message = mongoose.model('Message', MsgSchema);
 
-// Track users in rooms
-const roomUsers = {};
-
 io.on('connection', (socket) => {
     console.log(`✅ Connected: ${socket.id}`);
 
-    socket.on('join_room', async (data) => {
-        const room = typeof data === 'string' ? data : data.room;
-        const username = typeof data === 'object' ? data.username : '';
-        
+    socket.on('join_room', async (room) => {
         socket.join(room);
-        socket.username = username;
-        socket.room = room;
-        
-        // Initialize room if doesn't exist
-        if (!roomUsers[room]) roomUsers[room] = {};
-        roomUsers[room][socket.id] = username;
-        
-        // Send chat history
         const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
         socket.emit('load_history', history);
-        
-        // Broadcast user joined
-        io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
     });
 
     socket.on('send_message', async (data) => {
         if (!data.text?.trim()) return;
-        const newMessage = new Message({ ...data, type: 'text' });
+        const isImage = /\.(jpg|jpeg|png|webp|gif)$/.test(data.text.toLowerCase());
+        const newMessage = new Message({ ...data, type: isImage ? 'image' : 'text' });
         const savedMessage = await newMessage.save();
         io.to(data.room).emit("receive_message", savedMessage.toObject());
-        io.to(data.room).emit('user_stopped_typing', data.sender);
-    });
-
-    socket.on('typing', (data) => {
-        socket.to(data.room).emit('user_typing', { username: data.username });
-    });
-
-    socket.on('stop_typing', (data) => {
-        socket.to(data.room).emit('user_stopped_typing', data.username);
     });
 
     socket.on('clear_chat', async (room) => {
@@ -97,15 +72,7 @@ io.on('connection', (socket) => {
         io.to(room).emit('chat_cleared');
     });
 
-    socket.on('disconnect', () => {
-        console.log("❌ Disconnected:", socket.id);
-        if (socket.room && roomUsers[socket.room]) {
-            delete roomUsers[socket.room][socket.id];
-            const count = Object.keys(roomUsers[socket.room]).length;
-            io.to(socket.room).emit('user_left', { username: socket.username, count });
-            if (count === 0) delete roomUsers[socket.room];
-        }
-    });
+    socket.on('disconnect', () => console.log("❌ Disconnected"));
 });
 
 server.listen(PORT, () => console.log(`🚀 Production Server on ${PORT}`));
