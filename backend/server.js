@@ -35,6 +35,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 5000;
 // Using your provided MongoDB URI as the fallback
 const dbURI = process.env.MONGO_URI || 'mongodb+srv://adia12528_db_user:Adi12528%40as@cluster0.da3qkei.mongodb.net/devchat?retryWrites=true&w=majority';
+console.log("📍 Using DB URI:", dbURI.replace(/:.+@/, ':****@'));
 
 mongoose.connect(dbURI)
     .then(() => console.log("💎 MongoDB Connected: dev-chat-pro-db"))
