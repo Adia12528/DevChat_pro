@@ -23,27 +23,28 @@ export default function App() {
   const [editingText, setEditingText] = useState("");
   const [deletingMsgId, setDeletingMsgId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const chatEndRef = useRef(null);
-  const socketRef = useRef(null);
+  const chatEndRef      = useRef(null);
+  const socketRef       = useRef(null);
   const typingTimeoutRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const searchTimeoutRef = useRef(null);
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
+  // Refs for always-fresh values inside socket handlers (avoid stale closures)
+  const usernameRef     = useRef("");
+  const roomRef         = useRef("");
+  const soundEnabledRef = useRef(true);
+
+  // Keep refs in sync with state
+  useEffect(() => { usernameRef.current = username; }, [username]);
+  useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
   // Detect mobile and handle resize
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 600);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Clear all typing timers on unmount
-  useEffect(() => {
-    return () => {
-      typingTimersRef.current.forEach((id) => clearTimeout(id));
-      typingTimersRef.current.clear();
-    };
   }, []);
 
   useEffect(() => {
@@ -82,8 +83,11 @@ export default function App() {
       console.log("🔄 Attempting to reconnect...");
     });
     newSocket.on("reconnect", () => {
-      console.log("✅ Reconnected successfully");
       setConnected(true);
+      // Re-join room after server restart (handles Render free-tier wipes roomUsers)
+      if (roomRef.current && usernameRef.current) {
+        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current });
+      }
     });
     newSocket.on("load_history", (data) => {
       console.log("📥 Loaded history:", data);
@@ -108,17 +112,13 @@ export default function App() {
       setChat((prev) => [...prev, data]);
       removeTypingUser(data.sender);
       
-      // Play notification sound if enabled and not from self (debounced)
-      if (soundEnabled && data.sender !== username) {
+      // Use refs so we always read current soundEnabled / username
+      if (soundEnabledRef.current && data.sender !== usernameRef.current) {
         try {
-          // Reuse audio context for better performance
-          if (!audioContextRef.current) {
+          if (!audioContextRef.current)
             audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-          }
           playNotificationSound(audioContextRef.current);
-        } catch (err) {
-          console.log("Sound notification skipped");
-        }
+        } catch (_) {}
       }
     });
     newSocket.on("chat_cleared", () => {
@@ -163,15 +163,13 @@ export default function App() {
     };
 
     newSocket.on("user_typing", (data) => {
-      if (data.username === username) return; // don't show self typing
-      console.log("🎹 User typing:", data.username);
+      if (data.username === usernameRef.current) return;
       setTypingUsers((prev) => new Set([...prev, data.username]));
       startTypingTimer(data.username);
     });
 
     newSocket.on("user_stopped_typing", (stoppedUser) => {
-      if (stoppedUser === username) return; // ignore self cleanup
-      console.log("⏹️ User stopped typing:", stoppedUser);
+      if (stoppedUser === usernameRef.current) return;
       clearTypingTimer(stoppedUser);
       setTypingUsers((prev) => {
         const updated = new Set(prev);
@@ -191,34 +189,12 @@ export default function App() {
     });
 
     return () => {
-      newSocket.off("connect");
-      newSocket.off("disconnect");
-      newSocket.off("connect_error");
-      newSocket.off("error");
-      newSocket.off("reconnect_attempt");
-      newSocket.off("reconnect");
-      newSocket.off("load_history");
-      newSocket.off("receive_message");
-      newSocket.off("chat_cleared");
-      newSocket.off("user_joined");
-      newSocket.off("user_left");
-      newSocket.off("user_typing");
-      newSocket.off("user_stopped_typing");
-      newSocket.off("message_edited");
-      newSocket.off("message_deleted");
-      
-      // Clean up typing timeout
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-      }
-      
-      // Emit stop typing before disconnecting
-      newSocket.emit("stop_typing", { room: socketRef.current?.room, username });
-      
       newSocket.disconnect();
+      typingTimersRef.current.forEach(id => clearTimeout(id));
+      typingTimersRef.current.clear();
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [username]);
+  }, []); // socket created once — handlers use refs for always-fresh values
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
 
@@ -265,42 +241,29 @@ export default function App() {
   }, [username, room]);
 
   const handleMessageChange = useCallback((e) => {
-    const newValue = e.target.value;
-    setMessage(newValue);
-    
-    if (socketRef.current && connected) {
-      const now = Date.now();
-      if (now - lastTypingEmitRef.current > 1500) {
-        socketRef.current.emit("typing", { room, username });
-        lastTypingEmitRef.current = now;
-      }
-      
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        if (socketRef.current) {
-          socketRef.current.emit("stop_typing", { room, username });
-        }
-        typingTimeoutRef.current = null;
-      }, 3000);
+    setMessage(e.target.value);
+    const socket = socketRef.current;
+    if (!socket || !connected) return;
+    const now = Date.now();
+    if (now - lastTypingEmitRef.current > 1500) {
+      socket.emit("typing", { room: roomRef.current, username: usernameRef.current });
+      lastTypingEmitRef.current = now;
     }
-  }, [connected, room, username]);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("stop_typing", { room: roomRef.current, username: usernameRef.current });
+      typingTimeoutRef.current = null;
+    }, 3000);
+  }, [connected]);
 
   const sendMessage = useCallback(() => {
-    if (message.trim() && connected && socketRef.current) {
-      console.log("💬 Sending message, clearing typing...");
-      socketRef.current.emit("send_message", { room, sender: username, text: message });
-      setMessage("");
-      
-      // Clear typing timeout immediately
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-      }
-      
-      // Emit stop typing
-      socketRef.current.emit("stop_typing", { room, username });
-    }
-  }, [message, connected, room, username]);
+    const text = message.trim();
+    if (!text || !connected || !socketRef.current) return;
+    socketRef.current.emit("send_message", { room: roomRef.current, sender: usernameRef.current, text });
+    setMessage("");
+    if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null; }
+    socketRef.current.emit("stop_typing", { room: roomRef.current, username: usernameRef.current });
+  }, [message, connected]);
 
   const handleCopyMessage = useCallback((text, msgId) => {
     copyToClipboard(text);
@@ -314,17 +277,16 @@ export default function App() {
   }, []);
 
   const saveEditMessage = useCallback(() => {
-    if (editingText.trim() && socketRef.current && editingMsgId) {
-      socketRef.current.emit("edit_message", { 
-        messageId: editingMsgId, 
-        newText: editingText,
-        room,
-        sender: username
-      });
-      setEditingMsgId(null);
-      setEditingText("");
-    }
-  }, [editingMsgId, editingText, room, username]);
+    if (!editingText.trim() || !socketRef.current || !editingMsgId) return;
+    socketRef.current.emit("edit_message", {
+      messageId: editingMsgId,
+      newText: editingText,
+      room: roomRef.current,
+      sender: usernameRef.current,
+    });
+    setEditingMsgId(null);
+    setEditingText("");
+  }, [editingMsgId, editingText]);
 
   const deleteMessage = useCallback((msgId) => {
     setDeletingMsgId(msgId);
@@ -332,17 +294,15 @@ export default function App() {
   }, []);
 
   const confirmDelete = useCallback(() => {
-    if (socketRef.current && deletingMsgId) {
-      console.log("🗑️ Deleting message:", deletingMsgId);
-      socketRef.current.emit("delete_message", { 
+    if (socketRef.current && deletingMsgId)
+      socketRef.current.emit("delete_message", {
         messageId: deletingMsgId,
-        room,
-        sender: username
+        room: roomRef.current,
+        sender: usernameRef.current,
       });
-    }
     setShowDeleteConfirm(false);
     setDeletingMsgId(null);
-  }, [deletingMsgId, room, username]);
+  }, [deletingMsgId]);
 
   if (!showChat) return (
     <div className="login-screen">
@@ -376,7 +336,7 @@ export default function App() {
         >
           🔔
         </button>
-        <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", room)}><Trash2 size={20}/></button>
+        <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", roomRef.current)}><Trash2 size={20}/></button>
       </div>
 
       <div className="search-bar">
