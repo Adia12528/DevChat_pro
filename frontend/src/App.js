@@ -63,31 +63,29 @@ export default function App() {
     });
     socketRef.current = newSocket;
 
+    // Wake up Render free-tier backend as early as possible
+    if (isProduction) fetch(BACKEND_URL + "/ping").catch(() => {});
+
     newSocket.on("connect", () => {
-      console.log("✅ Connected to server");
+      console.log("✅ Connected to server, id:", newSocket.id);
       setConnected(true);
+      // Re-join room on reconnect (Render free-tier wipes in-memory roomUsers)
+      if (roomRef.current && usernameRef.current) {
+        console.log("🔄 Re-joining room after reconnect:", roomRef.current);
+        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current });
+      }
     });
     newSocket.on("disconnect", () => {
       console.log("❌ Disconnected from server");
       setConnected(false);
     });
     newSocket.on("connect_error", (error) => {
-      console.error("⚠️ Connection error:", error);
+      console.error("⚠️ Connection error:", error.message);
       setConnected(false);
     });
-    newSocket.on("error", (error) => {
-      console.error("⚠️ Socket error:", error);
-      setConnected(false);
-    });
-    newSocket.on("reconnect_attempt", () => {
-      console.log("🔄 Attempting to reconnect...");
-    });
-    newSocket.on("reconnect", () => {
-      setConnected(true);
-      // Re-join room after server restart (handles Render free-tier wipes roomUsers)
-      if (roomRef.current && usernameRef.current) {
-        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current });
-      }
+    // reconnect_attempt is a Manager event in Socket.IO v4
+    newSocket.io.on("reconnect_attempt", (attempt) => {
+      console.log("🔄 Reconnect attempt #" + attempt);
     });
     newSocket.on("load_history", (data) => {
       console.log("📥 Loaded history:", data);

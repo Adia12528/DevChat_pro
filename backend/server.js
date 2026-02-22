@@ -69,7 +69,7 @@ io.on('connection', (socket) => {
 
     socket.on('join_room', async (data) => {
         const room = typeof data === 'string' ? data : data.room;
-        const username = typeof data === 'object' ? data.username : '';
+        const username = (typeof data === 'object' ? data.username : '') || 'Anonymous';
         
         socket.join(room);
         socket.username = username;

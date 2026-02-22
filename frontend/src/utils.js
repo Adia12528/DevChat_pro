@@ -57,9 +57,9 @@ export const getAvatarStyle = (username) => ({
   flexShrink: 0
 });
 
-// Play notification sound
-export const playNotificationSound = () => {
-  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+// Play notification sound (reuse AudioContext to avoid browser limits)
+export const playNotificationSound = (audioContext) => {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
 
