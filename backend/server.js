@@ -133,6 +133,11 @@ io.on('connection', (socket) => {
         if (socket.room && roomUsers[socket.room]) {
             delete roomUsers[socket.room][socket.id];
             const count = Object.keys(roomUsers[socket.room]).length;
+            
+            // Clear typing indicator when user disconnects
+            io.to(socket.room).emit('user_stopped_typing', socket.username);
+            
+            // Notify others that user left
             io.to(socket.room).emit('user_left', { username: socket.username, count });
             if (count === 0) delete roomUsers[socket.room];
         }

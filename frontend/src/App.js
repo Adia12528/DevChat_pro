@@ -34,6 +34,18 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Auto-clear typing users who haven't been active for 5 seconds (safety mechanism)
+  useEffect(() => {
+    if (typingUsers.size === 0) return;
+    
+    const timer = setTimeout(() => {
+      console.log("🧹 Auto-clearing stuck typing users");
+      setTypingUsers(new Set());
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [typingUsers]);
+
   useEffect(() => {
     // Initialize socket connection with fallback
     const isProduction = window.location.hostname !== 'localhost';
@@ -110,10 +122,12 @@ export default function App() {
     });
 
     newSocket.on("user_typing", (data) => {
+      console.log("🎹 User typing:", data.username);
       setTypingUsers((prev) => new Set([...prev, data.username]));
     });
 
     newSocket.on("user_stopped_typing", (username) => {
+      console.log("⏹️ User stopped typing:", username);
       setTypingUsers((prev) => {
         const updated = new Set(prev);
         updated.delete(username);
@@ -145,9 +159,21 @@ export default function App() {
       newSocket.off("user_left");
       newSocket.off("user_typing");
       newSocket.off("user_stopped_typing");
+      newSocket.off("message_edited");
+      newSocket.off("message_deleted");
+      
+      // Clean up typing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      
+      // Emit stop typing before disconnecting
+      newSocket.emit("stop_typing", { room: socketRef.current?.room, username });
+      
       newSocket.disconnect();
     };
-  }, []);
+  }, [username]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chat, typingUsers]);
 
@@ -186,28 +212,43 @@ export default function App() {
   }, [username, room]);
 
   const handleMessageChange = useCallback((e) => {
-    setMessage(e.target.value);
+    const newValue = e.target.value;
+    setMessage(newValue);
     
     if (socketRef.current && connected) {
       // Only emit typing if not already typing (prevent spam)
       if (!typingTimeoutRef.current) {
+        console.log("📝 User started typing");
         socketRef.current.emit("typing", { room, username });
       }
       
       // Clear old timeout and set new one
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       
+      // Set longer timeout (3 seconds) for more natural typing
       typingTimeoutRef.current = setTimeout(() => {
-        socketRef.current.emit("stop_typing", { room, username });
+        console.log("⏹️ User stopped typing (timeout)");
+        if (socketRef.current) {
+          socketRef.current.emit("stop_typing", { room, username });
+        }
         typingTimeoutRef.current = null; // Reset flag
-      }, 1000);
+      }, 3000);
     }
   }, [connected, room, username]);
 
   const sendMessage = useCallback(() => {
     if (message.trim() && connected && socketRef.current) {
+      console.log("💬 Sending message, clearing typing...");
       socketRef.current.emit("send_message", { room, sender: username, text: message });
       setMessage("");
+      
+      // Clear typing timeout immediately
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      
+      // Emit stop typing
       socketRef.current.emit("stop_typing", { room, username });
     }
   }, [message, connected, room, username]);
