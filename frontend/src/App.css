@@ -23,7 +23,7 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .users-info { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8696a0; white-space: nowrap; }
 .clear-btn { background: transparent; border: none; color: #8696a0; cursor: pointer; padding: 8px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .clear-btn:active { transform: scale(0.95); color: var(--green); }
-.chat-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 12px; background: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-blend-mode: overlay; background-color: #0b141a; display: flex; flex-direction: column; }
+.chat-body { flex: 1; overflow-y: auto; padding: 16px 12px; background: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-blend-mode: overlay; background-color: #0b141a; display: flex; flex-direction: column; }
 .msg-bubble { padding: 10px 12px; margin-bottom: 8px; border-radius: 8px; max-width: 85%; word-wrap: break-word; position: relative; display: flex; flex-direction: column; }
 .msg-bubble p { margin: 0; word-break: break-word; }
 .me { align-self: flex-end; background: var(--me); border-top-right-radius: 2px; }
@@ -33,6 +33,8 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .chat-img { max-width: 100%; border-radius: 8px; margin-top: 5px; }
 
 .typing-indicator { display: flex; align-items: center; gap: 6px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; color: #8696a0; align-self: flex-start; }
+.typing-avatars { display: flex; gap: 4px; }
+.typing-avatar { width: 28px; height: 28px; min-width: 28px; font-size: 10px; }
 .typing-text { font-style: italic; }
 .typing-dots { display: flex; gap: 3px; }
 .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: typing 1.4s infinite; }
@@ -40,8 +42,10 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes typing { 0%, 60%, 100% { opacity: 0.5; } 30% { opacity: 1; } }
 
-.users-list { background: var(--header); padding: 8px 12px; border-bottom: 1px solid #313d45; display: flex; flex-wrap: wrap; gap: 8px; min-height: 36px; }
-.user-tag { background: rgba(0,168,132,0.2); color: #00a884; padding: 6px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap; }
+.users-list { background: var(--header); padding: 8px 12px; border-bottom: 1px solid #313d45; display: flex; flex-wrap: wrap; gap: 8px; min-height: 44px; }
+.user-tag { background: rgba(0,168,132,0.15); border: 1px solid #313d45; color: #e9edef; padding: 6px 10px; border-radius: 12px; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+.user-tag-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-typing-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; animation: typing 1.4s infinite; flex-shrink: 0; }
 
 .chat-footer { background: var(--header); padding: 12px; display: flex; gap: 8px; min-height: 56px; border-top: 1px solid #313d45; }
 .chat-footer input { flex: 1; background: #2a3942; border: none; padding: 10px 16px; border-radius: 25px; color: white; outline: none; font-size: 16px; min-height: 44px; }
@@ -94,6 +98,18 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .btn-save:active:not(:disabled) { transform: scale(0.95); }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* DELETE CONFIRMATION MODAL */
+.delete-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.delete-modal { background: var(--header); border: 1px solid #313d45; border-radius: 15px; max-width: 400px; width: 100%; padding: 32px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; }
+.delete-modal-icon { margin-bottom: 8px; }
+.delete-modal h3 { margin: 0; font-size: 18px; color: var(--txt); font-weight: 600; }
+.delete-modal p { margin: 0; font-size: 13px; color: #8696a0; }
+.delete-modal-footer { display: flex; gap: 12px; width: 100%; margin-top: 8px; }
+.btn-delete { background: #f44336; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; min-height: 40px; flex: 1; }
+.btn-delete:hover { background: #e53935; }
+.btn-delete:active { transform: scale(0.95); }
+.delete-modal-footer .btn-cancel { flex: 1; }
+
 /* MOBILE ADJUSTMENTS */
 @media (max-width: 600px) {
   .edit-modal { max-width: 100%; margin: 0 16px; }
@@ -116,9 +132,16 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
   .timestamp { font-size: 9px; }
   
   .typing-indicator { font-size: 11px; gap: 4px; padding: 8px 10px; }
+  .typing-avatar { width: 24px; height: 24px; font-size: 9px; }
   
-  .users-list { padding: 6px 10px; gap: 6px; }
+  .users-list { padding: 6px 10px; gap: 6px; min-height: 40px; }
   .user-tag { padding: 4px 8px; font-size: 11px; }
+  .user-tag-name { max-width: 80px; }
+  
+  .delete-modal { max-width: 320px; padding: 24px 16px; }
+  .delete-modal h3 { font-size: 16px; }
+  .delete-modal p { font-size: 12px; }
+  .btn-delete, .delete-modal-footer .btn-cancel { padding: 8px 12px; font-size: 13px; min-height: 36px; }
   
   .chat-footer { padding: 10px; gap: 6px; min-height: 50px; }
   .chat-footer input { padding: 8px 12px; font-size: 14px; min-height: 40px; }

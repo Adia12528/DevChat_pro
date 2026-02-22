@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle } from 'lucide-react';
 import './App.css';
-import { formatRelativeTime, playNotificationSound, copyToClipboard } from './utils';
+import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle } from './utils';
 
 export default function App() {
   const [username, setUsername] = useState("");
@@ -21,6 +21,8 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editingText, setEditingText] = useState("");
+  const [deletingMsgId, setDeletingMsgId] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -278,14 +280,22 @@ export default function App() {
   }, [editingMsgId, editingText, room, username]);
 
   const deleteMessage = useCallback((msgId) => {
-    if (socketRef.current) {
+    setDeletingMsgId(msgId);
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (socketRef.current && deletingMsgId) {
+      console.log("🗑️ Deleting message:", deletingMsgId);
       socketRef.current.emit("delete_message", { 
-        messageId: msgId,
+        messageId: deletingMsgId,
         room,
         sender: username
       });
     }
-  }, [room, username]);
+    setShowDeleteConfirm(false);
+    setDeletingMsgId(null);
+  }, [deletingMsgId, room, username]);
 
   if (!showChat) return (
     <div className="login-screen">
@@ -335,9 +345,13 @@ export default function App() {
       {onlineUsers.length > 0 && (
         <div className="users-list">
           {onlineUsers.map((user, i) => (
-            <motion.span key={i} className="user-tag" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
-              {user}
-            </motion.span>
+            <motion.div key={i} className="user-tag" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+              <div style={getAvatarStyle(user)}>
+                {getInitials(user)}
+              </div>
+              <span className="user-tag-name">{user}</span>
+              {typingUsers.has(user) && <span className="user-typing-dot"></span>}
+            </motion.div>
           ))}
         </div>
       )}
@@ -383,11 +397,7 @@ export default function App() {
                         </button>
                         <button 
                           className="delete-btn"
-                          onClick={() => {
-                            if (window.confirm("Delete this message?")) {
-                              deleteMessage(m._id);
-                            }
-                          }}
+                          onClick={() => deleteMessage(m._id)}
                           title="Delete message"
                           type="button"
                         >
@@ -405,6 +415,19 @@ export default function App() {
         <AnimatePresence>
           {typingUsers.size > 0 && (
             <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator">
+              <div className="typing-avatars">
+                {Array.from(typingUsers).map((user) => (
+                  <motion.div 
+                    key={user} 
+                    className="typing-avatar"
+                    style={getAvatarStyle(user)}
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{ duration: 1.4, repeat: Infinity }}
+                  >
+                    {getInitials(user)}
+                  </motion.div>
+                ))}
+              </div>
               <span className="typing-text">{Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing</span>
               <div className="typing-dots">
                 <span></span>
@@ -477,6 +500,49 @@ export default function App() {
                   type="button"
                 >
                   Save
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div 
+            className="delete-modal-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div 
+              className="delete-modal"
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="delete-modal-icon">
+                <AlertCircle size={48} color="#f44336" />
+              </div>
+              <h3>Delete Message?</h3>
+              <p>This action cannot be undone.</p>
+              <div className="delete-modal-footer">
+                <button 
+                  className="btn-cancel"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  type="button"
+                >
+                  Keep
+                </button>
+                <button 
+                  className="btn-delete"
+                  onClick={confirmDelete}
+                  type="button"
+                >
+                  Delete
                 </button>
               </div>
             </motion.div>
