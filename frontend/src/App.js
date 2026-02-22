@@ -124,15 +124,17 @@ export default function App() {
     });
 
     newSocket.on("user_typing", (data) => {
+      if (data.username === username) return; // don't show self typing
       console.log("🎹 User typing:", data.username);
       setTypingUsers((prev) => new Set([...prev, data.username]));
     });
 
-    newSocket.on("user_stopped_typing", (username) => {
-      console.log("⏹️ User stopped typing:", username);
+    newSocket.on("user_stopped_typing", (stoppedUser) => {
+      if (stoppedUser === username) return; // ignore self cleanup
+      console.log("⏹️ User stopped typing:", stoppedUser);
       setTypingUsers((prev) => {
         const updated = new Set(prev);
-        updated.delete(username);
+        updated.delete(stoppedUser);
         return updated;
       });
     });
