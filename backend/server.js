@@ -46,7 +46,10 @@ const MsgSchema = new mongoose.Schema({
     sender: String,
     text: String,
     type: { type: String, default: 'text' },
-    time: { type: Date, default: Date.now }
+    time: { type: Date, default: Date.now },
+    edited: { type: Boolean, default: false },
+    editedAt: { type: Date, default: null },
+    originalText: { type: String, default: null }
 });
 const Message = mongoose.model('Message', MsgSchema);
 
@@ -82,6 +85,32 @@ io.on('connection', (socket) => {
         const savedMessage = await newMessage.save();
         io.to(data.room).emit("receive_message", savedMessage.toObject());
         io.to(data.room).emit('user_stopped_typing', data.sender);
+    });
+
+    socket.on('edit_message', async (data) => {
+        const { messageId, newText, room, sender } = data;
+        if (!newText?.trim()) return;
+        
+        const message = await Message.findById(messageId);
+        if (!message || message.sender !== sender) return; // Only sender can edit
+        
+        message.text = newText;
+        message.edited = true;
+        message.editedAt = new Date();
+        if (!message.originalText) message.originalText = message.text; // Store original only once
+        
+        const updatedMessage = await message.save();
+        io.to(room).emit('message_edited', updatedMessage.toObject());
+    });
+
+    socket.on('delete_message', async (data) => {
+        const { messageId, room, sender } = data;
+        
+        const message = await Message.findById(messageId);
+        if (!message || message.sender !== sender) return; // Only sender can delete
+        
+        await Message.findByIdAndDelete(messageId);
+        io.to(room).emit('message_deleted', { messageId });
     });
 
     socket.on('typing', (data) => {

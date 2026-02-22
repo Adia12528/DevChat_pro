@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X } from 'lucide-react';
 import './App.css';
 import { formatRelativeTime, playNotificationSound, copyToClipboard } from './utils';
 
@@ -19,6 +19,8 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [copiedMsgId, setCopiedMsgId] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [editingText, setEditingText] = useState("");
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -119,6 +121,16 @@ export default function App() {
       });
     });
 
+    newSocket.on("message_edited", (updatedMessage) => {
+      console.log("✏️ Message edited:", updatedMessage);
+      setChat((prev) => prev.map(m => m._id === updatedMessage._id ? updatedMessage : m));
+    });
+
+    newSocket.on("message_deleted", (data) => {
+      console.log("🗑️ Message deleted:", data.messageId);
+      setChat((prev) => prev.filter(m => m._id !== data.messageId));
+    });
+
     return () => {
       newSocket.off("connect");
       newSocket.off("disconnect");
@@ -206,6 +218,34 @@ export default function App() {
     setTimeout(() => setCopiedMsgId(null), 2000);
   }, []);
 
+  const startEditMessage = useCallback((msgId, currentText) => {
+    setEditingMsgId(msgId);
+    setEditingText(currentText);
+  }, []);
+
+  const saveEditMessage = useCallback(() => {
+    if (editingText.trim() && socketRef.current && editingMsgId) {
+      socketRef.current.emit("edit_message", { 
+        messageId: editingMsgId, 
+        newText: editingText,
+        room,
+        sender: username
+      });
+      setEditingMsgId(null);
+      setEditingText("");
+    }
+  }, [editingMsgId, editingText, room, username]);
+
+  const deleteMessage = useCallback((msgId) => {
+    if (socketRef.current) {
+      socketRef.current.emit("delete_message", { 
+        messageId: msgId,
+        room,
+        sender: username
+      });
+    }
+  }, [room, username]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -265,27 +305,56 @@ export default function App() {
         <AnimatePresence>
           {filteredChat.map((m, i) => {
             const msgId = `${i}-${m.time}`;
+            const isOwn = m.sender === username;
             return (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} 
                 animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -10 }}
                 key={i} 
-                className={`msg-bubble ${m.sender === username ? "me" : "other"}`}
+                className={`msg-bubble ${isOwn ? "me" : "other"}`}
               >
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
                 {m.type === 'image' ? <img src={m.text} className="chat-img" alt="shared"/> : <p>{m.text}</p>}
+                {m.edited && <span className="msg-edited">(edited)</span>}
                 <div className="msg-footer">
                   <span className="timestamp" title={new Date(m.time).toLocaleString()}>
                     {formatRelativeTime(m.time)}
                   </span>
-                  <button 
-                    className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''} ${isMobile ? 'mobile-visible' : ''}`}
-                    onClick={() => handleCopyMessage(m.text, msgId)}
-                    title="Copy message"
-                    type="button"
-                  >
-                    {copiedMsgId === msgId ? <CheckCircle size={isMobile ? 16 : 14}/> : <Copy size={isMobile ? 16 : 14}/>}
-                  </button>
+                  <div className="msg-actions">
+                    <button 
+                      className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''} ${isMobile ? 'mobile-visible' : ''}`}
+                      onClick={() => handleCopyMessage(m.text, msgId)}
+                      title="Copy message"
+                      type="button"
+                    >
+                      {copiedMsgId === msgId ? <CheckCircle size={isMobile ? 16 : 14}/> : <Copy size={isMobile ? 16 : 14}/>}
+                    </button>
+                    {isOwn && (
+                      <>
+                        <button 
+                          className="edit-btn"
+                          onClick={() => startEditMessage(m._id, m.text)}
+                          title="Edit message"
+                          type="button"
+                        >
+                          <Edit2 size={14}/>
+                        </button>
+                        <button 
+                          className="delete-btn"
+                          onClick={() => {
+                            if (window.confirm("Delete this message?")) {
+                              deleteMessage(m._id);
+                            }
+                          }}
+                          title="Delete message"
+                          type="button"
+                        >
+                          <X size={14}/>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             );
@@ -317,6 +386,62 @@ export default function App() {
         />
         <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
       </div>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {editingMsgId && (
+          <motion.div 
+            className="edit-modal-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setEditingMsgId(null)}
+          >
+            <motion.div 
+              className="edit-modal"
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="edit-modal-header">
+                <h3>Edit Message</h3>
+                <button 
+                  className="modal-close-btn"
+                  onClick={() => setEditingMsgId(null)}
+                  type="button"
+                >
+                  <X size={20}/>
+                </button>
+              </div>
+              <textarea 
+                className="edit-textarea"
+                value={editingText}
+                onChange={(e) => setEditingText(e.target.value)}
+                autoFocus
+                rows={4}
+              />
+              <div className="edit-modal-footer">
+                <button 
+                  className="btn-cancel"
+                  onClick={() => setEditingMsgId(null)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn-save"
+                  onClick={saveEditMessage}
+                  disabled={!editingText.trim()}
+                  type="button"
+                >
+                  Save
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
