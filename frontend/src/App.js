@@ -319,7 +319,8 @@ export default function App() {
           </span>
         </div>
         <div className="users-info">
-          <Users size={16}/> {onlineUsers.length}
+          <Users size={16}/>
+          <span className="users-count">{onlineUsers.length}</span>
         </div>
         <button 
           className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`}
@@ -414,25 +415,12 @@ export default function App() {
 
         <AnimatePresence>
           {typingUsers.size > 0 && (
-            <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator">
-              <div className="typing-avatars">
-                {Array.from(typingUsers).map((user) => (
-                  <motion.div 
-                    key={user} 
-                    className="typing-avatar"
-                    style={getAvatarStyle(user)}
-                    animate={{ y: [0, -5, 0] }}
-                    transition={{ duration: 1.4, repeat: Infinity }}
-                  >
-                    {getInitials(user)}
-                  </motion.div>
-                ))}
-              </div>
-              <span className="typing-text">{Array.from(typingUsers).join(", ")} {typingUsers.size === 1 ? "is" : "are"} typing</span>
-              <div className="typing-dots">
-                <span></span>
-                <span></span>
-                <span></span>
+            <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="typing-indicator-whatsapp">
+              <span className="typing-username">{Array.from(typingUsers).length === 1 ? Array.from(typingUsers)[0] : Array.from(typingUsers).slice(0, 2).join(", ") + (Array.from(typingUsers).length > 2 ? ` +${Array.from(typingUsers).length - 2}` : "")} typing</span>
+              <div className="typing-dots-whatsapp">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
               </div>
             </motion.div>
           )}
