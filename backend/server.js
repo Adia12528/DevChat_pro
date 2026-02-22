@@ -13,7 +13,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 5000;
-const dbURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/devchat_pro';
+const dbURI = process.env.MONGO_URI || 'mongodb+srv://adia12528_db_user:Adi12528@as@cluster0.da3qkei.mongodb.net/devchat?retryWrites=true&w=majority';
 
 mongoose.connect(dbURI).then(() => console.log("💎 DB Synced")).catch(err => console.log(err));
 
