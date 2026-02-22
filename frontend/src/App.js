@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users } from 'lucide-react';
 import './App.css';
 
 export default function App() {
@@ -11,6 +11,9 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [chat, setChat] = useState([]);
   const [connected, setConnected] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [typingUsers, setTypingUsers] = useState({});
+  const typingTimeoutRef = useRef(null);
   const chatEndRef = useRef(null);
   const socketRef = useRef(null);
 
@@ -65,6 +68,25 @@ export default function App() {
       console.log("🗑️ Chat cleared");
       setChat([]);
     });
+    
+    // New feature: Users list
+    newSocket.on("users_updated", (usersList) => {
+      console.log("👥 Users updated:", usersList);
+      setUsers(usersList);
+    });
+    
+    // New feature: Typing indicator
+    newSocket.on("user_typing", (data) => {
+      setTypingUsers(prev => {
+        const updated = { ...prev };
+        if (data.isTyping) {
+          updated[data.username] = true;
+        } else {
+          delete updated[data.username];
+        }
+        return updated;
+      });
+    });
 
     return () => {
       newSocket.off("connect");
@@ -72,6 +94,8 @@ export default function App() {
       newSocket.off("load_history");
       newSocket.off("receive_message");
       newSocket.off("chat_cleared");
+      newSocket.off("users_updated");
+      newSocket.off("user_typing");
       newSocket.disconnect();
     };
   }, []);
@@ -80,16 +104,52 @@ export default function App() {
 
   const joinRoom = () => { 
     if (username && room && socketRef.current) { 
-      console.log(`🚪 Joining room: ${room}`);
+      console.log(`🚪 Joining room: ${room} as ${username}`);
       setChat([]); // Clear previous messages
-      socketRef.current.emit("join_room", room); 
+      setUsers([]); // Clear users list
+      setTypingUsers({}); // Clear typing indicators
+      socketRef.current.emit("join_room", { room, username }); 
       setShowChat(true); 
     } 
   };
+
+  const handleMessageInput = (e) => {
+    setMessage(e.target.value);
+    
+    // Send typing indicator
+    if (socketRef.current && room) {
+      socketRef.current.emit("typing", {
+        room,
+        sender: username,
+        isTyping: true
+      });
+      
+      // Clear previous timeout
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      // Stop typing after 1 second of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        socketRef.current.emit("typing", {
+          room,
+          sender: username,
+          isTyping: false
+        });
+      }, 1000);
+    }
+  };
+
   const sendMessage = () => {
     if (message.trim() && connected && socketRef.current) {
       socketRef.current.emit("send_message", { room, sender: username, text: message });
       setMessage("");
+      
+      // Clear typing indicator
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      socketRef.current.emit("typing", {
+        room,
+        sender: username,
+        isTyping: false
+      });
     }
   };
 
@@ -114,8 +174,22 @@ export default function App() {
             {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
           </span>
         </div>
+        <div className="users-badge">
+          <Users size={14}/> {users.length}
+        </div>
         <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", room)}><Trash2 size={20}/></button>
       </div>
+      
+      <div className="users-list">
+        <AnimatePresence>
+          {users.map((u, i) => (
+            <motion.span key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="user-badge">
+              {u}
+            </motion.span>
+          ))}
+        </AnimatePresence>
+      </div>
+      
       <div className="chat-body">
         <AnimatePresence>
           {chat.map((m, i) => (
@@ -126,6 +200,18 @@ export default function App() {
             </motion.div>
           ))}
         </AnimatePresence>
+        
+        <AnimatePresence>
+          {Object.keys(typingUsers).length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="typing-indicator">
+              <span className="dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+              {Object.keys(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} typing
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
         <div ref={chatEndRef} />
       </div>
       <div className="chat-footer">
@@ -133,7 +219,7 @@ export default function App() {
           disabled={!connected}
           value={message} 
           placeholder={connected ? "Type a message..." : "Connecting to server..."} 
-          onChange={e => setMessage(e.target.value)} 
+          onChange={handleMessageInput} 
           onKeyPress={e => e.key === 'Enter' && sendMessage()} 
         />
         <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
