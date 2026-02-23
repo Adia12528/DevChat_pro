@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -123,6 +123,35 @@ function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Session management - restore from sessionStorage on mount
+  useEffect(() => {
+    const savedUsername = sessionStorage.getItem('chatUsername');
+    const savedRoom = sessionStorage.getItem('chatRoom');
+    
+    if (savedUsername && savedRoom) {
+      console.log('🔄 Restoring session from sessionStorage');
+      setUsername(savedUsername);
+      setRoom(savedRoom);
+      // Note: Socket connection happens in the socket useEffect
+    }
+    
+    // Clear session on browser/tab close (sessionStorage handles this automatically)
+    const handleBeforeUnload = (e) => {
+      if (socketRef.current && showChat) {
+        socketRef.current.emit('update_status', { 
+          username: usernameRef.current, 
+          status: 'offline' 
+        });
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [showChat]);
 
   // PWA Install prompt handler
   useEffect(() => {
@@ -471,6 +500,11 @@ function App() {
   const joinRoom = useCallback(() => { 
     if (username && room && socketRef.current) { 
       console.log(`🚪 Joining room: ${room}`);
+      
+      // Store session in sessionStorage (clears on browser close)
+      sessionStorage.setItem('chatUsername', username);
+      sessionStorage.setItem('chatRoom', room);
+      
       setChat([]);
       setOnlineUsers([]);
       setTypingUsers(new Set());
@@ -1053,6 +1087,38 @@ function App() {
     setShowInstallPrompt(false);
   }, [deferredPrompt]);
 
+  const handleLogout = useCallback(() => {
+    // Confirm logout
+    if (window.confirm('Are you sure you want to logout?')) {
+      console.log('🚪 Logging out...');
+      
+      // Disconnect socket
+      if (socketRef.current) {
+        socketRef.current.emit('update_status', { username: usernameRef.current, status: 'offline' });
+        socketRef.current.emit('leave_room', { room: roomRef.current, username: usernameRef.current });
+        socketRef.current.disconnect();
+      }
+      
+      // Clear session data (sessionStorage clears automatically on browser close)
+      sessionStorage.removeItem('chatUsername');
+      sessionStorage.removeItem('chatRoom');
+      
+      // Reset state
+      setUsername('');
+      setRoom('');
+      setShowChat(false);
+      setChat([]);
+      setOnlineUsers([]);
+      setTypingUsers(new Set());
+      setConnected(false);
+      setMessage('');
+      setSearchQuery('');
+      setShowMenuDropdown(false);
+      
+      console.log('✅ Logged out successfully');
+    }
+  }, []);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -1158,7 +1224,18 @@ function App() {
                     <span>Conversations</span>
                   </button>
                   
-                  <div className="menu-footer">More features coming soon...</div>
+                  <div className="menu-divider"></div>
+                  
+                  <button 
+                    className="menu-item menu-item-danger"
+                    onClick={handleLogout}
+                    title="Logout and end session"
+                  >
+                    <LogOut size={18}/>
+                    <span>Logout</span>
+                  </button>
+                  
+                  <div className="menu-footer">Session ends when browser closes</div>
                 </motion.div>
               </>
             )}
