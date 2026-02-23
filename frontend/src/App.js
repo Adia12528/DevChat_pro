@@ -11,6 +11,7 @@ import './App.css';
 import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👏'];
+const APP_VERSION = 'v2.5.0-context-menu'; // Version identifier for deployment verification
 
 export default function App() {
   // Existing state
@@ -1093,7 +1094,7 @@ export default function App() {
           ☰
         </button>
         <div className="meta">
-          <h3>{room}</h3>
+          <h3>{room} <span style={{ fontSize: '11px', opacity: 0.4, fontWeight: 'normal' }}>{APP_VERSION}</span></h3>
           <div className="room-info">
             <span className={connected ? "status-on" : "status-off"}>
               {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
