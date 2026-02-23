@@ -38,6 +38,8 @@ export default function App() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [unreadCount, setUnreadCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -83,10 +85,13 @@ export default function App() {
   const usernameRef = useRef("");
   const roomRef = useRef("");
   const soundEnabledRef = useRef(true);
+  const isAtBottomRef = useRef(true);
+  const lastMessageIdRef = useRef(null);
 
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+  useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
 
   // Theme effect
   useEffect(() => {
@@ -209,10 +214,19 @@ export default function App() {
 
     newSocket.on("receive_message", (data) => {
       console.log("💬 Received message:", data);
-      setChat((prev) => [...prev, data]);
+      
+      // Prevent duplicate messages
+      if (lastMessageIdRef.current === data._id) return;
+      lastMessageIdRef.current = data._id;
+      
+      setChat((prev) => {
+        // Double-check for duplicates in array
+        if (prev.some(m => m._id === data._id)) return prev;
+        return [...prev, data];
+      });
       removeTypingUser(data.sender);
       
-      if (!isAtBottom && data.sender !== usernameRef.current) {
+      if (!isAtBottomRef.current && data.sender !== usernameRef.current) {
         setUnreadCount(c => c + 1);
       }
       
@@ -221,7 +235,9 @@ export default function App() {
           if (!audioContextRef.current)
             audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
           playNotificationSound(audioContextRef.current);
-        } catch (_) {}
+        } catch (e) {
+          console.log('Sound playback failed:', e);
+        }
       }
     });
 
@@ -334,6 +350,22 @@ export default function App() {
       typingTimersRef.current.forEach(id => clearTimeout(id));
       typingTimersRef.current.clear();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+          const stream = mediaRecorderRef.current.stream;
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        } catch (e) {
+          console.log('Cleanup error:', e);
+        }
+      }
     };
   }, []);
 
@@ -424,37 +456,74 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     
+    // Validate file size (10MB max)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setErrorMessage('File too large! Maximum size is 10MB.');
+      setTimeout(() => setErrorMessage(''), 4000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 
+                          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!allowedTypes.includes(file.type)) {
+      setErrorMessage('File type not supported. Use images, PDFs, or Word documents.');
+      setTimeout(() => setErrorMessage(''), 4000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    
     setUploadingFile(true);
     setUploadProgress('Preparing...');
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', 'devchat_uploads');
 
-    try {
-      setUploadProgress('Uploading...');
-      const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      
-      socketRef.current.emit("send_message", { 
-        room: roomRef.current, 
-        sender: usernameRef.current, 
-        text: file.name,
-        type: file.type.startsWith('image/') ? 'image' : 'file',
-        fileUrl: data.secure_url,
-        fileName: file.name,
-        fileSize: file.size
-      });
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert('File upload failed. Please try again.');
-    } finally {
-      setUploadingFile(false);
-      setUploadProgress('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        setUploadProgress(`Uploading... (${4 - retries}/3)`);
+        const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!res.ok) throw new Error('Upload failed with status ' + res.status);
+        
+        const data = await res.json();
+        
+        if (data.error) throw new Error(data.error.message);
+        
+        socketRef.current?.emit("send_message", { 
+          room: roomRef.current, 
+          sender: usernameRef.current, 
+          text: file.name,
+          type: file.type.startsWith('image/') ? 'image' : 'file',
+          fileUrl: data.secure_url,
+          fileName: file.name,
+          fileSize: file.size
+        });
+        
+        setSuccessMessage('File uploaded successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+        break; // Success, exit loop
+      } catch (error) {
+        console.error('Upload attempt failed:', error);
+        retries--;
+        if (retries === 0) {
+          setErrorMessage('Upload failed after 3 attempts. Check your connection.');
+          setTimeout(() => setErrorMessage(''), 5000);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+        }
+      }
     }
+    
+    setUploadingFile(false);
+    setUploadProgress('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
   const handleEmojiClick = useCallback((emojiData) => {
@@ -576,6 +645,12 @@ export default function App() {
 
   // Voice message functions
   const startVoiceRecording = useCallback(async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErrorMessage('Voice recording not supported in this browser.');
+      setTimeout(() => setErrorMessage(''), 4000);
+      return;
+    }
+    
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -583,36 +658,78 @@ export default function App() {
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         
-        // Upload to Cloudinary
+        // Check size (5MB max for voice)
+        if (audioBlob.size > 5 * 1024 * 1024) {
+          setErrorMessage('Voice message too long. Maximum 5MB.');
+          setTimeout(() => setErrorMessage(''), 4000);
+          return;
+        }
+        
+        setUploadingFile(true);
+        setUploadProgress('Uploading voice message...');
+        
+        // Upload to Cloudinary with retry
         const formData = new FormData();
         formData.append('file', audioBlob, 'voice-message.webm');
         formData.append('upload_preset', 'devchat_uploads');
         
-        try {
-          const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
-            method: 'POST',
-            body: formData
-          });
-          const data = await res.json();
-          
-          socketRef.current.emit("send_message", {
-            room: roomRef.current,
-            sender: usernameRef.current,
-            text: 'Voice message',
-            type: 'voice',
-            fileUrl: data.secure_url,
-            duration: recordingTime
-          });
-        } catch (error) {
-          console.error('Voice upload failed:', error);
+        let retries = 3;
+        while (retries > 0) {
+          try {
+            const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!res.ok) throw new Error('Upload failed');
+            
+            const data = await res.json();
+            
+            if (data.error) throw new Error(data.error.message);
+            
+            socketRef.current?.emit("send_message", {
+              room: roomRef.current,
+              sender: usernameRef.current,
+              text: 'Voice message',
+              type: 'voice',
+              fileUrl: data.secure_url,
+              duration: recordingTime
+            });
+            
+            setSuccessMessage('Voice message sent!');
+            setTimeout(() => setSuccessMessage(''), 2000);
+            break;
+          } catch (error) {
+            console.error('Voice upload attempt failed:', error);
+            retries--;
+            if (retries === 0) {
+              setErrorMessage('Failed to send voice message. Try again.');
+              setTimeout(() => setErrorMessage(''), 4000);
+            } else {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
         }
+        
+        setUploadingFile(false);
+        setUploadProgress('');
+      };
+      
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event);
+        setErrorMessage('Recording failed. Please try again.');
+        setTimeout(() => setErrorMessage(''), 4000);
+        setIsRecording(false);
+        stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
@@ -620,11 +737,27 @@ export default function App() {
       setRecordingTime(0);
       
       recordingIntervalRef.current = setInterval(() => {
-        setRecordingTime(t => t + 1);
+        setRecordingTime(t => {
+          // Auto-stop at 2 minutes
+          if (t >= 120) {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+              mediaRecorderRef.current.stop();
+            }
+            return 120;
+          }
+          return t + 1;
+        });
       }, 1000);
     } catch (error) {
       console.error('Failed to start recording:', error);
-      alert('Microphone access denied');
+      if (error.name === 'NotAllowedError') {
+        setErrorMessage('Microphone access denied. Please allow microphone access.');
+      } else if (error.name === 'NotFoundError') {
+        setErrorMessage('No microphone found. Please connect a microphone.');
+      } else {
+        setErrorMessage('Failed to start recording: ' + error.message);
+      }
+      setTimeout(() => setErrorMessage(''), 5000);
     }
   }, [recordingTime]);
 
@@ -1251,6 +1384,39 @@ export default function App() {
                 ))}
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error Toast */}
+      <AnimatePresence>
+        {errorMessage && (
+          <motion.div 
+            className="toast toast-error"
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 20, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+          >
+            <AlertCircle size={20} />
+            <span>{errorMessage}</span>
+            <button onClick={() => setErrorMessage('')}>
+              <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Success Toast */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div 
+            className="toast toast-success"
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 20, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+          >
+            <CheckCircle size={20} />
+            <span>{successMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
