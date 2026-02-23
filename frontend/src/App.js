@@ -1620,6 +1620,17 @@ function App() {
             const isOwn = m.sender === username;
             const reactions = m.reactions || {};
             
+            // Debug log for media messages
+            if (m.type === 'image' || m.type === 'voice') {
+              console.log(`📋 Rendering ${m.type} message:`, {
+                sender: m.sender,
+                isOwn,
+                hasFileUrl: !!m.fileUrl,
+                fileUrl: m.fileUrl?.substring(0, 50) + '...',
+                duration: m.duration
+              });
+            }
+            
             return (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} 
@@ -1646,48 +1657,65 @@ function App() {
                 
                 {m.type === 'image' ? (
                   <div className="image-message-wrapper">
-                    <div 
-                      className="image-container" 
-                      onClick={() => openImageViewer({
-                        url: m.fileUrl || m.text,
-                        fileName: `image-${new Date(m.time).getTime()}.jpg`,
-                        sender: m.sender,
-                        time: m.time
-                      })}
-                      onContextMenu={(e) => {
-                        // Allow native right-click on images
-                        e.stopPropagation();
-                      }}
-                    >
-                      <img 
-                        src={m.fileUrl || m.text} 
-                        className="chat-img" 
-                        alt="shared"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                      <div className="image-error" style={{display: 'none'}}>
-                        <ImageIcon size={32} />
-                        <span>Image failed to load</span>
+                    {(m.fileUrl || m.text) ? (
+                      <>
+                        <div 
+                          className="image-container" 
+                          onClick={() => {
+                            const imageUrl = m.fileUrl || m.text;
+                            console.log('🖼️ Opening image viewer:', imageUrl);
+                            openImageViewer({
+                              url: imageUrl,
+                              fileName: `image-${new Date(m.time).getTime()}.jpg`,
+                              sender: m.sender,
+                              time: m.time
+                            });
+                          }}
+                          onContextMenu={(e) => {
+                            // Allow native right-click on images
+                            e.stopPropagation();
+                          }}
+                        >
+                          <img 
+                            src={m.fileUrl || m.text} 
+                            className="chat-img" 
+                            alt="shared image"
+                            onLoad={() => {
+                              console.log('✅ Image loaded:', m.fileUrl || m.text);
+                            }}
+                            onError={(e) => {
+                              console.error('❌ Image failed to load:', m.fileUrl || m.text);
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                          <div className="image-error" style={{display: 'none'}}>
+                            <ImageIcon size={32} />
+                            <span>Image failed to load</span>
+                          </div>
+                          <div className="image-overlay">
+                            <Eye size={20} />
+                            <span>Click to View</span>
+                          </div>
+                        </div>
+                        <button 
+                          className="media-download-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadMedia(m.fileUrl || m.text, `image-${new Date(m.time).getTime()}.jpg`);
+                          }}
+                          title="Download image"
+                        >
+                          <Download size={16} />
+                          <span>Download</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="media-error">
+                        <ImageIcon size={24} />
+                        <span>📷 Image not available (no URL)</span>
                       </div>
-                      <div className="image-overlay">
-                        <Eye size={20} />
-                        <span>Click to View</span>
-                      </div>
-                    </div>
-                    <button 
-                      className="media-download-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadMedia(m.fileUrl || m.text, `image-${new Date(m.time).getTime()}.jpg`);
-                      }}
-                      title="Download image"
-                    >
-                      <Download size={16} />
-                      <span>Download</span>
-                    </button>
+                    )}
                   </div>
                 ) : m.type === 'file' ? (
                   <a href={m.fileUrl} download={m.fileName} className="file-link">
@@ -1695,46 +1723,58 @@ function App() {
                   </a>
                 ) : m.type === 'voice' ? (
                   <div className="voice-message-wrapper">
-                    <div 
-                      className="voice-message" 
-                      onClick={() => openVoicePlayer({
-                        url: m.fileUrl,
-                        fileName: `voice-${new Date(m.time).getTime()}.webm`,
-                        sender: m.sender,
-                        time: m.time,
-                        duration: m.duration || 0
-                      })}
-                    >
-                      <button 
-                        className="voice-play-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!m.fileUrl) {
-                            console.error('❌ No fileUrl for voice message');
-                            return;
-                          }
-                          playVoiceMessage(m.fileUrl, m._id);
-                        }}
-                        title={playingVoiceId === m._id ? 'Pause' : 'Play'}
-                      >
-                        {playingVoiceId === m._id ? '⏸️' : '▶️'}
-                      </button>
-                      <div className="voice-waveform">
-                        <span className="voice-duration">{m.duration || 0}s</span>
+                    {m.fileUrl ? (
+                      <>
+                        <div 
+                          className="voice-message" 
+                          onClick={() => {
+                            console.log('🎤 Opening voice player:', m.fileUrl);
+                            openVoicePlayer({
+                              url: m.fileUrl,
+                              fileName: `voice-${new Date(m.time).getTime()}.webm`,
+                              sender: m.sender,
+                              time: m.time,
+                              duration: m.duration || 0
+                            });
+                          }}
+                        >
+                          <button 
+                            className="voice-play-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!m.fileUrl) {
+                                console.error('❌ No fileUrl for voice message');
+                                return;
+                              }
+                              console.log('🔊 Playing voice from chat:', m.fileUrl);
+                              playVoiceMessage(m.fileUrl, m._id);
+                            }}
+                            title={playingVoiceId === m._id ? 'Pause' : 'Play'}
+                          >
+                            {playingVoiceId === m._id ? '⏸️' : '▶️'}
+                          </button>
+                          <div className="voice-waveform">
+                            <span className="voice-duration">{m.duration || 0}s</span>
+                          </div>
+                          <Eye size={16} className="voice-view-icon" title="Open player" />
+                        </div>
+                        <button 
+                          className="media-download-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadMedia(m.fileUrl, `voice-${new Date(m.time).getTime()}.webm`);
+                          }}
+                          title="Download voice message"
+                        >
+                          <Download size={16} />
+                          <span>Download</span>
+                        </button>
+                      </>
+                    ) : (
+                      <div className="media-error">
+                        🎤 Voice message not available (no URL)
                       </div>
-                      <Eye size={16} className="voice-view-icon" title="Open player" />
-                    </div>
-                    <button 
-                      className="media-download-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        downloadMedia(m.fileUrl, `voice-${new Date(m.time).getTime()}.webm`);
-                      }}
-                      title="Download voice message"
-                    >
-                      <Download size={16} />
-                      <span>Download</span>
-                    </button>
+                    )}
                   </div>
                 ) : renderMessageText(m)}
                 
