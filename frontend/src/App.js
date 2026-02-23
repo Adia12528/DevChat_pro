@@ -109,6 +109,7 @@ function App() {
   // Enhanced user list
   const [userSearchFilter, setUserSearchFilter] = useState("");
   const [userListSortBy, setUserListSortBy] = useState("activity"); // activity, name, last-seen
+  const [showUsersDropdown, setShowUsersDropdown] = useState(false);
   const [showUsersModal, setShowUsersModal] = useState(false);
   
   // PWA Install prompt
@@ -1939,8 +1940,15 @@ function App() {
           </div>
         </div>
         <div className="users-info">
-          <Users size={16}/>
-          <span className="users-count">{onlineUsers.length}</span>
+          <button 
+            className={`users-dropdown-btn ${showUsersDropdown ? 'active' : ''}`}
+            onClick={() => setShowUsersDropdown(!showUsersDropdown)}
+            title={`${onlineUsers.length} member${onlineUsers.length !== 1 ? 's' : ''} online`}
+          >
+            <Users size={16}/>
+            <span className="users-count">{onlineUsers.length}</span>
+            <ChevronDown size={14} style={{transform: showUsersDropdown ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}/>
+          </button>
         </div>
         <button 
           className="theme-toggle"
@@ -2015,98 +2023,98 @@ function App() {
         )}
       </AnimatePresence>
 
-      {onlineUsers.length > 0 && (
-        <div className="users-section">
-          <div className="users-header">
-            <div className="users-title">
-              <Users size={16}/>
-              <span>{sortedUsers.length} member{sortedUsers.length !== 1 ? 's' : ''}</span>
+      {/* Users Dropdown */}
+      <AnimatePresence>
+        {onlineUsers.length > 0 && showUsersDropdown && (
+          <motion.div
+            className="users-dropdown"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="users-dropdown-header">
+              <div className="users-dropdown-controls">
+                <input 
+                  type="text"
+                  placeholder="Search users..."
+                  className="user-search-input-dropdown"
+                  value={userSearchFilter}
+                  onChange={(e) => setUserSearchFilter(e.target.value)}
+                />
+                <select 
+                  className="user-sort-select-dropdown"
+                  value={userListSortBy}
+                  onChange={(e) => setUserListSortBy(e.target.value)}
+                >
+                  <option value="activity">Activity</option>
+                  <option value="name">Name</option>
+                  <option value="last-seen">Last Seen</option>
+                </select>
+                <button 
+                  className="view-all-users-btn-dropdown"
+                  onClick={() => setShowUsersModal(true)}
+                  title="View detailed members list"
+                >
+                  👁️
+                </button>
+              </div>
             </div>
-            <div className="users-controls">
-              <input 
-                type="text"
-                placeholder="Search users..."
-                className="user-search-input"
-                value={userSearchFilter}
-                onChange={(e) => setUserSearchFilter(e.target.value)}
-              />
-              <select 
-                className="user-sort-select"
-                value={userListSortBy}
-                onChange={(e) => setUserListSortBy(e.target.value)}
-              >
-                <option value="activity">Activity</option>
-                <option value="name">Name</option>
-                <option value="last-seen">Last Seen</option>
-              </select>
-              <button 
-                className="view-all-users-btn"
-                onClick={() => setShowUsersModal(true)}
-                title="View all members"
-              >
-                <Users size={16}/>
-              </button>
+            <div className="users-dropdown-list">
+              {sortedUsers.length > 0 ? (
+                sortedUsers.map((user) => {
+                  const profile = userProfiles[user] || {};
+                  const lastSeenTime = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'never';
+                  return (
+                    <motion.div 
+                      key={user} 
+                      className="user-dropdown-item" 
+                      initial={{ opacity: 0, x: -10 }} 
+                      animate={{ opacity: 1, x: 0 }}
+                      whileHover={{ x: 3 }}
+                    >
+                      <div 
+                        className="user-dropdown-avatar"
+                        onClick={() => setShowUsersModal(true)}
+                        title={`View ${user}'s profile`}
+                      >
+                        <div style={getAvatarStyle(user)}>
+                          {getInitials(user)}
+                        </div>
+                        <span className={`user-dropdown-status status-${userStatus[user] || 'online'}`}></span>
+                      </div>
+                      <div className="user-dropdown-info">
+                        <div className="user-dropdown-name">
+                          <span>{user}</span>
+                          <span className={`user-dropdown-badge role-${profile.role || 'member'}`}>
+                            {profile.isBot ? '🤖' : profile.role === 'you' ? 'You' : ''}
+                          </span>
+                        </div>
+                        <div className="user-dropdown-meta">
+                          <span>{profile.messageCount || 0} msg</span>
+                          {typingUsers.has(user) && <span className="typing-indicator">Typing...</span>}
+                        </div>
+                      </div>
+                      <button 
+                        className="user-dropdown-mention"
+                        onClick={() => {
+                          setMessageText(messageText + `@${user} `);
+                          textareaRef.current?.focus();
+                        }}
+                        title="Mention this user"
+                      >
+                        @
+                      </button>
+                    </motion.div>
+                  );
+                })
+              ) : (
+                <div className="no-users-found-dropdown">No users found</div>
+              )}
             </div>
-          </div>
-          <div className="users-list">
-            {sortedUsers.length > 0 ? (
-              sortedUsers.map((user) => {
-                const profile = userProfiles[user] || {};
-                const lastSeenTime = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'never';
-                return (
-                  <motion.div 
-                    key={user} 
-                    className="user-tag-enhanced" 
-                    initial={{ opacity: 0, x: -10 }} 
-                    animate={{ opacity: 1, x: 0 }}
-                    whileHover={{ x: 5 }}
-                  >
-                    <div 
-                      className="user-avatar-wrapper"
-                      onClick={() => setShowUsersModal(true)}
-                      title={`View ${user}'s profile`}
-                    >
-                      <div style={getAvatarStyle(user)} className="user-avatar">
-                        {getInitials(user)}
-                      </div>
-                      <span className={`user-status-dot status-${userStatus[user] || 'online'}`}></span>
-                    </div>
-                    <div className="user-info">
-                      <div className="user-name-wrapper">
-                        <span className="user-tag-name">{user}</span>
-                        <span className={`user-role-badge role-${profile.role || 'member'}`}>
-                          {profile.isBot ? '🤖' : profile.role === 'you' ? 'You' : 'Member'}
-                        </span>
-                      </div>
-                      <div className="user-meta">
-                        <span className="user-message-count" title="Messages sent">
-                          {profile.messageCount || 0} msg{(profile.messageCount || 0) !== 1 ? 's' : ''}
-                        </span>
-                        <span className="user-last-seen" title="Last active">
-                          {lastSeenTime}
-                        </span>
-                      </div>
-                    </div>
-                    {typingUsers.has(user) && <span className="user-typing-dot" title="Typing..."></span>}
-                    <button 
-                      className="user-mention-btn"
-                      onClick={() => {
-                        setMessageText(messageText + `@${user} `);
-                        textareaRef.current?.focus();
-                      }}
-                      title="Mention this user"
-                    >
-                      @
-                    </button>
-                  </motion.div>
-                );
-              })
-            ) : (
-              <div className="no-users-found">No users found</div>
-            )}
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Users Modal */}
       <AnimatePresence>

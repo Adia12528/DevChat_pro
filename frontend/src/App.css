@@ -5352,193 +5352,229 @@ textarea.whatsapp-input {
 }
 
 /* ============================================
-   USER LIST ENHANCEMENTS - v2.14
+   USER LIST ENHANCEMENTS - v2.14 DROPDOWN
    ============================================ */
 
-.users-section {
+/* Users dropdown button in header */
+.users-info {
+  display: flex;
+  align-items: center;
+}
+
+.users-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.users-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.users-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--txt);
-}
-
-.users-controls {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.user-search-input {
-  flex: 1;
-  padding: 6px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--txt);
-  font-size: 12px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.user-search-input:focus {
-  border-color: var(--primary);
-}
-
-.user-search-input::placeholder {
-  color: var(--txt-muted);
-}
-
-.user-sort-select {
-  padding: 6px 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--txt);
-  font-size: 12px;
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.user-sort-select:focus {
-  border-color: var(--primary);
-}
-
-.user-sort-select option {
-  background: var(--bg-secondary);
-  color: var(--txt);
-}
-
-.view-all-users-btn {
-  padding: 6px 8px;
-  background: var(--primary-muted);
-  border: 1px solid var(--primary);
-  border-radius: 6px;
-  color: var(--primary);
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.view-all-users-btn:hover {
-  background: var(--primary);
-  color: #000;
-}
-
-.users-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-  max-height: 220px;
-}
-
-.user-tag-enhanced {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
   border-radius: 8px;
+  color: var(--txt);
+  cursor: pointer;
   transition: all 0.2s;
+  font-size: 13px;
+  font-weight: 500;
   position: relative;
 }
 
-.user-tag-enhanced:hover {
+.users-dropdown-btn:hover {
   border-color: var(--primary);
   background: var(--surface-hover);
 }
 
-.user-avatar-wrapper {
-  position: relative;
-  cursor: pointer;
+.users-dropdown-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-muted);
+  color: var(--primary);
+}
+
+.users-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  background: var(--primary);
+  color: #000;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.users-dropdown-btn.active .users-count {
+  background: var(--primary);
+  color: #000;
+}
+
+/* Dropdown container */
+.users-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  box-shadow: var(--shadow-md);
+}
+
+.users-dropdown-header {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.user-avatar {
-  width: 32px;
-  height: 32px;
+.users-dropdown-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.user-search-input-dropdown {
+  flex: 1;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txt);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+  min-width: 0;
+}
+
+.user-search-input-dropdown:focus {
+  border-color: var(--primary);
+}
+
+.user-search-input-dropdown::placeholder {
+  color: var(--txt-muted);
+}
+
+.user-sort-select-dropdown {
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txt);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.user-sort-select-dropdown:focus {
+  border-color: var(--primary);
+}
+
+.user-sort-select-dropdown option {
+  background: var(--bg-secondary);
+  color: var(--txt);
+}
+
+.view-all-users-btn-dropdown {
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--txt-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.view-all-users-btn-dropdown:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-muted);
+}
+
+/* Dropdown list */
+.users-dropdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 0 8px 8px 8px;
+  max-height: 220px;
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.user-dropdown-item:hover {
+  border-color: var(--primary);
+  background: var(--surface-hover);
+}
+
+.user-dropdown-avatar {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.user-dropdown-avatar div {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #fff;
   transition: all 0.2s;
 }
 
-.user-avatar-wrapper:hover .user-avatar {
-  transform: scale(1.1);
-  box-shadow: 0 0 12px rgba(0, 212, 170, 0.3);
+.user-dropdown-avatar:hover div {
+  transform: scale(1.05);
 }
 
-.user-status-dot {
+.user-dropdown-status {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
+  bottom: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 2px solid var(--surface);
+  border: 2px solid var(--bg);
   background: #10b981;
-  transition: all 0.3s;
 }
 
-.user-status-dot.status-online {
+.user-dropdown-status.status-online {
   background: #10b981;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
 }
 
-.user-status-dot.status-away {
+.user-dropdown-status.status-away {
   background: #f59e0b;
 }
 
-.user-status-dot.status-offline {
+.user-dropdown-status.status-offline {
   background: #6b7280;
 }
 
-.user-info {
+.user-dropdown-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
-.user-name-wrapper {
+.user-dropdown-name {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-
-.user-tag-name {
+  gap: 4px;
   font-size: 13px;
   font-weight: 500;
   color: var(--txt);
@@ -5547,50 +5583,39 @@ textarea.whatsapp-input {
   white-space: nowrap;
 }
 
-.user-role-badge {
+.user-dropdown-badge {
   font-size: 9px;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 3px;
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.user-role-badge.role-you {
+.user-dropdown-badge.role-you {
   background: rgba(0, 212, 170, 0.2);
   color: var(--primary);
 }
 
-.user-role-badge.role-member {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+.user-dropdown-badge.role-member {
+  color: transparent;
+  font-size: 0;
 }
 
-.user-meta {
+.user-dropdown-meta {
   display: flex;
   gap: 8px;
   font-size: 11px;
   color: var(--txt-muted);
 }
 
-.user-message-count,
-.user-last-seen {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-typing-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--primary);
+.typing-indicator {
+  color: var(--primary);
+  font-style: italic;
   animation: pulse 1.4s infinite;
-  margin: 0 4px;
-  flex-shrink: 0;
 }
 
-.user-mention-btn {
+.user-dropdown-mention {
   padding: 4px 6px;
   background: var(--primary-muted);
   border: 1px solid var(--primary);
@@ -5603,14 +5628,15 @@ textarea.whatsapp-input {
   flex-shrink: 0;
 }
 
-.user-mention-btn:hover {
+.user-dropdown-mention:hover {
   background: var(--primary);
   color: #000;
+  transform: scale(1.05);
 }
 
-.no-users-found {
+.no-users-found-dropdown {
   text-align: center;
-  padding: 16px;
+  padding: 12px;
   color: var(--txt-muted);
   font-size: 12px;
 }
@@ -5825,23 +5851,23 @@ textarea.whatsapp-input {
 }
 
 /* SCROLLBAR STYLING */
-.users-list::-webkit-scrollbar,
+.users-dropdown-list::-webkit-scrollbar,
 .users-modal-content::-webkit-scrollbar {
   width: 6px;
 }
 
-.users-list::-webkit-scrollbar-track,
+.users-dropdown-list::-webkit-scrollbar-track,
 .users-modal-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.users-list::-webkit-scrollbar-thumb,
+.users-dropdown-list::-webkit-scrollbar-thumb,
 .users-modal-content::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }
 
-.users-list::-webkit-scrollbar-thumb:hover,
+.users-dropdown-list::-webkit-scrollbar-thumb:hover,
 .users-modal-content::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
@@ -5868,48 +5894,53 @@ textarea.whatsapp-input {
     align-items: flex-start;
   }
   
-  .users-controls {
-    flex-direction: column;
+  .users-dropdown-controls {
+    flex-wrap: wrap;
   }
   
-  .user-search-input,
-  .user-sort-select {
-    width: 100%;
+  .user-search-input-dropdown,
+  .user-sort-select-dropdown {
+    flex: 1;
+    min-width: 120px;
   }
 }
 
 @media (max-width: 600px) {
-  .users-section {
-    max-height: 280px;
-  }
-  
-  .users-list {
-    max-height: 180px;
-  }
-  
-  .user-tag-enhanced {
-    gap: 6px;
-    padding: 6px;
-  }
-  
-  .user-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
-  }
-  
-  .user-tag-name {
+  .users-dropdown-btn {
+    padding: 6px 8px;
     font-size: 12px;
   }
   
-  .user-meta {
-    font-size: 10px;
+  .users-dropdown-controls {
     gap: 4px;
   }
   
-  .user-mention-btn {
-    padding: 3px 5px;
+  .user-search-input-dropdown {
+    flex: 0 1 100%;
+  }
+  
+  .user-sort-select-dropdown {
+    flex: 0 1 calc(100% - 30px);
+  }
+  
+  .user-dropdown-item {
+    padding: 5px 6px;
+    gap: 6px;
+  }
+  
+  .user-dropdown-avatar div {
+    width: 24px;
+    height: 24px;
     font-size: 10px;
+  }
+  
+  .user-dropdown-name {
+    font-size: 12px;
+  }
+  
+  .user-dropdown-meta {
+    font-size: 10px;
+    gap: 4px;
   }
   
   .users-modal {
@@ -5956,3 +5987,4 @@ textarea.whatsapp-input {
     margin-top: 3px;
   }
 }
+
