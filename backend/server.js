@@ -250,6 +250,105 @@ io.on('connection', (socket) => {
         socket.to(socket.room).emit('profile_updated', { username, avatar, bio });
     });
 
+    // ==========================
+    // WebRTC Video/Voice Calling Signaling
+    // ==========================
+
+    // Forward call offer to target user
+    socket.on('call:offer', (data) => {
+        console.log(`📞 Call offer from ${data.from} to ${data.to} (${data.callType})`);
+        
+        // Find target user's socket
+        if (socket.room && roomUsers[socket.room]) {
+            const targetSocket = Object.keys(roomUsers[socket.room]).find(
+                sid => roomUsers[socket.room][sid].username === data.to
+            );
+            
+            if (targetSocket) {
+                io.to(targetSocket).emit('call:incoming', {
+                    from: data.from,
+                    callType: data.callType,
+                    offer: data.offer
+                });
+                console.log(`✅ Call offer forwarded to ${data.to}`);
+            } else {
+                socket.emit('call:rejected', { reason: 'User not found or offline' });
+                console.log(`❌ Target user ${data.to} not found`);
+            }
+        }
+    });
+
+    // Forward call answer to caller
+    socket.on('call:answer', (data) => {
+        console.log(`✅ Call answered: ${data.from} → ${data.to}`);
+        
+        if (socket.room && roomUsers[socket.room]) {
+            const targetSocket = Object.keys(roomUsers[socket.room]).find(
+                sid => roomUsers[socket.room][sid].username === data.to
+            );
+            
+            if (targetSocket) {
+                io.to(targetSocket).emit('call:answered', {
+                    from: data.from,
+                    answer: data.answer
+                });
+                console.log(`✅ Call answer forwarded to ${data.to}`);
+            }
+        }
+    });
+
+    // Forward ICE candidate to peer
+    socket.on('call:ice-candidate', (data) => {
+        console.log(`🧊 ICE candidate: ${socket.username} → ${data.to}`);
+        
+        if (socket.room && roomUsers[socket.room]) {
+            const targetSocket = Object.keys(roomUsers[socket.room]).find(
+                sid => roomUsers[socket.room][sid].username === data.to
+            );
+            
+            if (targetSocket) {
+                io.to(targetSocket).emit('call:ice-candidate', {
+                    from: socket.username,
+                    candidate: data.candidate
+                });
+            }
+        }
+    });
+
+    // Handle call rejection
+    socket.on('call:reject', (data) => {
+        console.log(`❌ Call rejected: ${data.from} declined call from ${data.to}`);
+        
+        if (socket.room && roomUsers[socket.room]) {
+            const targetSocket = Object.keys(roomUsers[socket.room]).find(
+                sid => roomUsers[socket.room][sid].username === data.to
+            );
+            
+            if (targetSocket) {
+                io.to(targetSocket).emit('call:rejected', {
+                    from: data.from
+                });
+            }
+        }
+    });
+
+    // Handle call end
+    socket.on('call:end', (data) => {
+        console.log(`📴 Call ended: ${data.from} → ${data.to}`);
+        
+        if (socket.room && roomUsers[socket.room]) {
+            const targetSocket = Object.keys(roomUsers[socket.room]).find(
+                sid => roomUsers[socket.room][sid].username === data.to
+            );
+            
+            if (targetSocket) {
+                io.to(targetSocket).emit('call:ended', {
+                    from: data.from
+                });
+            }
+        }
+    });
+
     socket.on('user_leaving', (data) => {
         console.log("👋 User explicitly leaving:", data.username);
         if (socket.room && roomUsers[socket.room]) {

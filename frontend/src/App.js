@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -139,6 +139,20 @@ function App() {
   const [imageViewer, setImageViewer] = useState(null); // { url, fileName, sender, time }
   const [voicePlayer, setVoicePlayer] = useState(null); // { url, fileName, sender, time, duration }
   
+  // WebRTC Video/Voice Call States
+  const [callState, setCallState] = useState(null); // 'idle' | 'calling' | 'ringing' | 'active' | 'ended'
+  const [callType, setCallType] = useState(null); // 'voice' | 'video'
+  const [callPeer, setCallPeer] = useState(null); // { username, userId }
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
+  const [callError, setCallError] = useState(null);
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -154,6 +168,13 @@ function App() {
   const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  
+  // WebRTC Refs
+  const peerConnectionRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const callTimerRef = useRef(null);
+  const ringtoneRef = useRef(null);
   const recordingIntervalRef = useRef(null);
   const recordingTimeRef = useRef(0);
   const audioRef = useRef(null);
@@ -616,6 +637,56 @@ function App() {
 
     newSocket.on("profile_updated", (data) => {
       setUserProfiles(prev => ({ ...prev, [data.username]: { avatar: data.avatar, bio: data.bio } }));
+    });
+
+    // WebRTC Signaling Events
+    newSocket.on("call:incoming", async (data) => {
+      console.log("📞 Incoming call from:", data.from, "Type:", data.callType);
+      setIncomingCall({ from: data.from, callType: data.callType, offer: data.offer });
+      playRingtone();
+    });
+
+    newSocket.on("call:answered", async (data) => {
+      console.log("✅ Call answered by:", data.from);
+      try {
+        if (peerConnectionRef.current && data.answer) {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          setCallState('active');
+          startCallTimer();
+        }
+      } catch (err) {
+        console.error("Error setting remote description:", err);
+        setCallError("Failed to establish connection");
+      }
+    });
+
+    newSocket.on("call:rejected", (data) => {
+      console.log("❌ Call rejected by:", data.from);
+      stopRingtone();
+      setCallError("Call was rejected");
+      endCall();
+    });
+
+    newSocket.on("call:ended", (data) => {
+      console.log("📴 Call ended by:", data.from);
+      endCall();
+    });
+
+    newSocket.on("call:ice-candidate", async (data) => {
+      console.log("🧊 ICE candidate received");
+      try {
+        if (peerConnectionRef.current && data.candidate) {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      } catch (err) {
+        console.error("Error adding ICE candidate:", err);
+      }
+    });
+
+    newSocket.on("call:peer-disconnected", () => {
+      console.log("⚠️ Peer disconnected");
+      setCallError("Connection lost");
+      endCall();
     });
 
     // Handle proper disconnect when user closes tab/browser
@@ -1811,6 +1882,341 @@ function App() {
     setShowMenuDropdown(false);
   }, []);
 
+  // ==========================
+  // WebRTC Video/Voice Calling Functions
+  // ==========================
+
+  // ICE servers configuration (FREE STUN servers)
+  const iceServers = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.services.mozilla.com' }
+    ]
+  };
+
+  // Play ringtone
+  const playRingtone = useCallback(() => {
+    if (!ringtoneRef.current) {
+      ringtoneRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCp+zPLTgjMGHmS9++++bChAQJfZ7K1pHAU+ldb4z34rBSt9y/jYhzYJG2S56+OiUhELUrTn8bRpHgU5j9Xy0IAtBihzy/LagTAFIW29+e+vaxwFPZXV+M5+KwUrfcz52IU1BythvfztpleUhBNk');
+      ringtoneRef.current.loop = true;
+    }
+    ringtoneRef.current.play().catch(e => console.log('Ringtone play failed:', e));
+  }, []);
+
+  // Stop ringtone  
+  const stopRingtone = useCallback(() => {
+    if (ringtoneRef.current) {
+      ringtoneRef.current.pause();
+      ringtoneRef.current.currentTime = 0;
+    }
+  }, []);
+
+  // Start call timer
+  const startCallTimer = useCallback(() => {
+    setCallDuration(0);
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+    callTimerRef.current = setInterval(() => {
+      setCallDuration(d => d + 1);
+    }, 1000);
+  }, []);
+
+  // Stop call timer
+  const stopCallTimer = useCallback(() => {
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+  }, []);
+
+  // Format call duration
+  const formatCallDuration = useCallback((seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  // Initialize peer connection
+  const createPeerConnection = useCallback(() => {
+    const pc = new RTCPeerConnection(iceServers);
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socketRef.current && callPeer) {
+        console.log('🧊 Sending ICE candidate');
+        socketRef.current.emit('call:ice-candidate', {
+          to: callPeer.username,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    // Handle remote stream
+    pc.ontrack = (event) => {
+      console.log('🎥 Remote track received:', event.streams[0]);
+      setRemoteStream(event.streams[0]);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = event.streams[0];
+      }
+    };
+
+    // Handle connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log('Connection state:', pc.connectionState);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        setCallError('Connection lost');
+        endCall();
+      }
+    };
+
+    peerConnectionRef.current = pc;
+    return pc;
+  }, [callPeer]);
+
+  // Start a call (voice or video)
+  const startCall = useCallback(async (type, targetUser) => {
+    if (!targetUser ||!socketRef.current) return;
+
+    try {
+      setCallType(type);
+      setCallPeer({ username: targetUser, userId: targetUser });
+      setCallState('calling');
+      setCallError(null);
+
+      // Get media stream
+      const constraints = type === 'video' 
+        ? { audio: true, video: { width: 1280, height: 720 } }
+        : { audio: true, video: false };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setLocalStream(stream);
+
+      if (localVideoRef.current && type === 'video') {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      // Create peer connection
+      const pc = createPeerConnection();
+
+      // Add local stream tracks
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+
+      //Create offer
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Send call offer via socket
+      console.log('📞 Initiating call to:', targetUser);
+      socketRef.current.emit('call:offer', {
+        to: targetUser,
+        from: username,
+        callType: type,
+        offer: offer
+      });
+
+      playRingtone();
+
+    } catch (err) {
+      console.error('Error starting call:', err);
+      setCallError(err.message === 'Permission denied' 
+        ? 'Camera/microphone access denied' 
+        : 'Failed to start call');
+      setCallState('idle');
+      stopRingtone();
+    }
+  }, [username, createPeerConnection, playRingtone, stopRingtone]);
+
+  // Answer incoming call
+  const answerCall = useCallback(async () => {
+    if (!incomingCall || !socketRef.current) return;
+
+    try {
+      setCallType(incomingCall.callType);
+      setCallPeer({ username: incomingCall.from, userId: incomingCall.from });
+      setCallState('active');
+      stopRingtone();
+
+      // Get media stream
+      const constraints = incomingCall.callType === 'video'
+        ? { audio: true, video: { width: 1280, height: 720 } }
+        : { audio: true, video: false };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setLocalStream(stream);
+
+      if (localVideoRef.current && incomingCall.callType === 'video') {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      // Create peer connection
+      const pc = createPeerConnection();
+
+      // Add local stream tracks
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+
+      // Set remote description from offer
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+
+      // Create answer
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      // Send answer
+      console.log('✅ Answering call from:', incomingCall.from);
+      socketRef.current.emit('call:answer', {
+        to: incomingCall.from,
+        from: username,
+        answer: answer
+      });
+
+      setIncomingCall(null);
+      startCallTimer();
+
+    } catch (err) {
+      console.error('Error answering call:', err);
+      setCallError('Failed to answer call');
+      rejectCall();
+    }
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone]);
+
+  // Reject incoming call
+  const rejectCall = useCallback(() => {
+    if (!incomingCall || !socketRef.current) return;
+
+    console.log('❌ Rejecting call from:', incomingCall.from);
+    socketRef.current.emit('call:reject', {
+      to: incomingCall.from,
+      from: username
+    });
+
+    stopRingtone();
+    setIncomingCall(null);
+  }, [incomingCall, username, stopRingtone]);
+
+  // End call
+  const endCall = useCallback(() => {
+    console.log('📴 Ending call');
+
+    // Notify peer
+    if (socketRef.current && callPeer) {
+      socketRef.current.emit('call:end', {
+        to: callPeer.username,
+        from: username
+      });
+    }
+
+    // Stop all tracks
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+    }
+
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    // Reset state
+    setCallState('idle');
+    setCallType(null);
+    setCallPeer(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+    setIsScreenSharing(false);
+    setIsCallMinimized(false);
+    setCallDuration(0);
+    setCallError(null);
+    stopCallTimer();
+    stopRingtone();
+  }, [localStream, remoteStream, callPeer, username, stopCallTimer, stopRingtone]);
+
+  // Toggle mute
+  const toggleMute = useCallback(() => {
+    if (localStream) {
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        setIsMuted(!audioTrack.enabled);
+      }
+    }
+  }, [localStream]);
+
+  // Toggle video
+  const toggleVideo = useCallback(() => {
+    if (localStream && callType === 'video') {
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        setIsVideoOff(!videoTrack.enabled);
+      }
+    }
+  }, [localStream, callType]);
+
+  // Toggle screen share
+  const toggleScreenShare = useCallback(async () => {
+    if (!peerConnectionRef.current) return;
+
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing, switch back to camera
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: true 
+        });
+        
+        const videoTrack = stream.getVideoTracks()[0];
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+        
+        if (sender) {
+          sender.replaceTrack(videoTrack);
+        }
+        
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        setIsScreenSharing(false);
+      } else {
+        // Start screen sharing
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+          video: true 
+        });
+        
+        const screenTrack = screenStream.getVideoTracks()[0];
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+        
+        if (sender) {
+          sender.replaceTrack(screenTrack);
+        }
+        
+        // Stop screen share when user stops it from browser
+        screenTrack.onended = () => {
+          toggleScreenShare();
+        };
+        
+        setIsScreenSharing(true);
+      }
+    } catch (err) {
+      console.error('Screen share error:', err);
+      setCallError('Screen sharing failed');
+    }
+  }, [isScreenSharing]);
+
+  // Toggle call minimize
+  const toggleCallMinimize = useCallback(() => {
+    setIsCallMinimized(prev => !prev);
+  }, []);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -2014,6 +2420,29 @@ function App() {
             )}
           </div>
         </div>
+        
+        {/* Call Buttons - Only show when a user is selected in DM */}
+        {selectedUser && onlineUsers.find(u => u.username === selectedUser) && callState !== 'active' && (
+          <div className="call-buttons">
+            <button 
+              className="call-btn voice-call-btn"
+              onClick={() => startCall('voice', selectedUser)}
+              title={`Voice call ${selectedUser}`}
+              disabled={callState === 'calling' || callState === 'ringing'}
+            >
+              <Phone size={18}/>
+            </button>
+            <button 
+              className="call-btn video-call-btn"
+              onClick={() => startCall('video', selectedUser)}
+              title={`Video call ${selectedUser}`}
+              disabled={callState === 'calling' || callState === 'ringing'}
+            >
+              <Video size={18}/>
+            </button>
+          </div>
+        )}
+        
         <div className="users-info">
           <button 
             className={`users-dropdown-btn ${showUsersDropdown ? 'active' : ''}`}
@@ -3435,6 +3864,425 @@ function App() {
                 )}
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Incoming Call Modal */}
+      <AnimatePresence>
+        {incomingCall && (
+          <motion.div
+            className="call-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="incoming-call-modal"
+              initial={{ scale: 0.8, opacity: 0, y: 50 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 50 }}
+            >
+              <div className="incoming-call-avatar">
+                {incomingCall.callType === 'video' ? <Video size={48}/> : <Phone size={48}/>}
+              </div>
+              <h3>Incoming {incomingCall.callType} call</h3>
+              <p className="incoming-call-name">{incomingCall.from}</p>
+              <div className="incoming-call-actions">
+                <button 
+                  className="incoming-call-btn reject-btn"
+                  onClick={rejectCall}
+                  title="Reject call"
+                >
+                  <PhoneOff size={24}/>
+                  <span>Decline</span>
+                </button>
+                <button 
+                  className="incoming-call-btn accept-btn"
+                  onClick={answerCall}
+                  title="Answer call"
+                >
+                  {incomingCall.callType === 'video' ? <Video size={24}/> : <Phone size={24}/>}
+                  <span>Answer</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Call Interface */}
+      <AnimatePresence>
+        {callState === 'active' && (
+          <motion.div
+            className={`call-interface ${isCallMinimized ? 'minimized' : 'fullscreen'}`}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+          >
+            {!isCallMinimized ? (
+              <>
+                {/* Full-screen call interface */}
+                <div className="call-video-container">
+                  {/* Remote video (main) */}
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="remote-video"
+                  />
+                  
+                  {/* Local video (picture-in-picture) */}
+                  {callType === 'video' && !isScreenSharing && (
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="local-video"
+                    />
+                  )}
+                  
+                  {/* Call info overlay */}
+                  <div className="call-info-overlay">
+                    <div className="call-peer-name">{callPeer?.username}</div>
+                    <div className="call-duration">{formatCallDuration(callDuration)}</div>
+                    {isScreenSharing && <div className="call-status-badge">Screen Sharing</div>}
+                  </div>
+                  
+                  {/* Call controls */}
+                  <div className="call-controls">
+                    <button 
+                      className={`call-control-btn ${isMuted ? 'active' : ''}`}
+                      onClick={toggleMute}
+                      title={isMuted ? "Unmute" : "Mute"}
+                    >
+                      <Mic size={24} style={{ opacity: isMuted ? 0.5 : 1 }}/>
+                    </button>
+                    
+                    {callType === 'video' && (
+                      <button 
+                        className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
+                        onClick={toggleVideo}
+                        title={isVideoOff ? "Turn on camera" : "Turn off camera"}
+                      >
+                        {isVideoOff ? <VideoOff size={24}/> : <Video size={24}/>}
+                      </button>
+                    )}
+                    
+                    {callType === 'video' && (
+                      <button 
+                        className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
+                        onClick={toggleScreenShare}
+                        title={isScreenSharing ? "Stop sharing" : "Share screen"}
+                      >
+                        <Monitor size={24}/>
+                      </button>
+                    )}
+                    
+                    <button 
+                      className="call-control-btn minimize-btn"
+                      onClick={toggleCallMinimize}
+                      title="Minimize call"
+                    >
+                      <Minimize2 size={24}/>
+                    </button>
+                    
+                    <button 
+                      className="call-control-btn end-call-btn"
+                      onClick={endCall}
+                      title="End call"
+                    >
+                      <PhoneOff size={24}/>
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              /* Minimized call panel */
+              <div className="call-minimized-panel">
+                <div className="call-minimized-info">
+                  <Phone size={16}/>
+                  <span>{callPeer?.username}</span>
+                  <span className="call-minimized-duration">{formatCallDuration(callDuration)}</span>
+                </div>
+                <div className="call-minimized-controls">
+                  <button 
+                    className="call-minimized-btn"
+                    onClick={toggleMute}
+                    title={isMuted ? "Unmute" : "Mute"}
+                  >
+                    <Mic size={18} style={{ opacity: isMuted ? 0.5 : 1 }}/>
+                  </button>
+                  <button 
+                    className="call-minimized-btn"
+                    onClick={toggleCallMinimize}
+                    title="Maximize call"
+                  >
+                    <Maximize2 size={18}/>
+                  </button>
+                  <button 
+                    className="call-minimized-btn end-btn"
+                    onClick={endCall}
+                    title="End call"
+                  >
+                    <PhoneOff size={18}/>
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Calling/Ringing State Overlay */}
+      <AnimatePresence>
+        {(callState === 'calling' || callState === 'ringing') && (
+          <motion.div
+            className="call-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="calling-modal"
+              initial={{ scale: 0.8, opacity: 0, y: 50 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.8, opacity: 0, y: 50 }}
+            >
+              <div className="calling-avatar">
+                {callType === 'video' ? <Video size={48}/> : <Phone size={48}/>}
+              </div>
+              <h3>{callState === 'calling' ? 'Calling...' : 'Ringing...'}</h3>
+              <p className="calling-name">{callPeer?.username}</p>
+              <button 
+                className="calling-cancel-btn"
+                onClick={endCall}
+                title="Cancel call"
+              >
+                <PhoneOff size={24}/>
+                <span>Cancel</span>
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Incoming Call Modal */}
+      <AnimatePresence>
+        {incomingCall && (
+          <motion.div
+            className="call-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="incoming-call-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+            >
+              <div className="incoming-call-avatar">
+                <User size={40} />
+              </div>
+              <h3>
+                {incomingCall.callType === 'video' ? (
+                  <>
+                    <Video size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
+                    Video Call
+                  </>
+                ) : (
+                  <>
+                    <Phone size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
+                    Voice Call
+                  </>
+                )}
+              </h3>
+              <div className="incoming-call-name">
+                {incomingCall.from}
+              </div>
+              <div className="incoming-call-actions">
+                <button className="incoming-call-btn reject-btn" onClick={rejectCall}>
+                  <PhoneOff size={24} />
+                  <span>Decline</span>
+                </button>
+                <button className="incoming-call-btn accept-btn" onClick={answerCall}>
+                  <Phone size={24} />
+                  <span>Accept</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Calling/Ringing Modal */}
+      <AnimatePresence>
+        {callState === 'calling' && callPeer && (
+          <motion.div
+            className="call-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="calling-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+            >
+              <div className="calling-avatar">
+                <User size={40} />
+              </div>
+              <h3>
+                {callType === 'video' ? 'Video Calling...' : 'Calling...'}
+              </h3>
+              <div className="calling-name">
+                {callPeer.username}
+              </div>
+              <button className="calling-cancel-btn" onClick={endCall}>
+                <PhoneOff size={24} />
+                <span>Cancel</span>
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Call Interface */}
+      <AnimatePresence>
+        {callState === 'active' && callPeer && (
+          <motion.div
+            className={`call-interface ${isCallMinimized ? 'minimized' : 'fullscreen'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {isCallMinimized ? (
+              <div className="call-minimized-panel">
+                <div className="call-minimized-info">
+                  {callType === 'video' ? <Video size={18} /> : <Phone size={18} />}
+                  <span>{callPeer.username}</span>
+                  <span className="call-minimized-duration">{formatCallDuration(callDuration)}</span>
+                </div>
+                <div className="call-minimized-controls">
+                  <button 
+                    className="call-minimized-btn"
+                    onClick={toggleCallMinimize}
+                    title="Maximize"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
+                  <button 
+                    className="call-minimized-btn end-btn"
+                    onClick={endCall}
+                    title="End call"
+                  >
+                    <PhoneOff size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="call-video-container">
+                {/* Remote Video */}
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="remote-video"
+                />
+
+                {/* Local Video (only for video calls) */}
+                {callType === 'video' && (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="local-video"
+                  />
+                )}
+
+                {/* Call Info Overlay */}
+                <div className="call-info-overlay">
+                  <div className="call-peer-name">{callPeer.username}</div>
+                  <div className="call-duration">{formatCallDuration(callDuration)}</div>
+                  <div className="call-status-badge">Connected</div>
+                </div>
+
+                {/* Call Controls */}
+                <div className="call-controls">
+                  {/* Mute Button */}
+                  <button
+                    className={`call-control-btn ${isMuted ? 'active' : ''}`}
+                    onClick={toggleMute}
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                  </button>
+
+                  {/* Video Toggle (only for video calls) */}
+                  {callType === 'video' && (
+                    <button
+                      className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
+                      onClick={toggleVideo}
+                      title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+                    >
+                      {isVideoOff ? <VideoOff size={24} /> : <Camera size={24} />}
+                    </button>
+                  )}
+
+                  {/* Screen Share (only for video calls) */}
+                  {callType === 'video' && (
+                    <button
+                      className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
+                      onClick={toggleScreenShare}
+                      title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                    >
+                      <Monitor size={24} />
+                    </button>
+                  )}
+
+                  {/* End Call Button */}
+                  <button
+                    className="call-control-btn end-call-btn"
+                    onClick={endCall}
+                    title="End call"
+                  >
+                    <PhoneOff size={24} />
+                  </button>
+
+                  {/* Minimize Button */}
+                  <button
+                    className="call-control-btn minimize-btn"
+                    onClick={toggleCallMinimize}
+                    title="Minimize"
+                  >
+                    <Minimize2 size={24} />
+                  </button>
+                </div>
+
+                {/* Error Display */}
+                {callError && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: 'rgba(244, 67, 54, 0.9)',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    zIndex: 30,
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    {callError}
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
