@@ -310,7 +310,6 @@ body {
   display: block;
   object-fit: contain;
   background: rgba(0,0,0,0.05);
-  cursor: pointer;
 }
 
 /* Image Container */
@@ -320,6 +319,16 @@ body {
   margin: 8px 0;
   border-radius: 8px;
   overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.image-container:hover {
+  transform: scale(1.02);
+}
+
+.image-container:active {
+  transform: scale(0.98);
 }
 
 .image-error {
@@ -728,6 +737,17 @@ body {
   border-radius: 20px;
   min-width: 220px;
   margin: 4px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.voice-message:hover {
+  background: rgba(255,255,255,0.08);
+  transform: scale(1.02);
+}
+
+.voice-message:active {
+  transform: scale(0.98);
 }
 
 .voice-play-btn { 
@@ -770,32 +790,6 @@ body {
   font-size: 12px; 
   font-weight: 500;
   color: rgba(255,255,255,0.8);
-}
-
-.voice-download-btn {
-  background: rgba(255,255,255,0.1);
-  color: var(--txt);
-  border: none;
-  padding: 8px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  min-width: 32px;
-  min-height: 32px;
-  flex-shrink: 0;
-  text-decoration: none;
-}
-
-.voice-download-btn:hover {
-  background: rgba(255,255,255,0.2);
-  transform: scale(1.1);
-}
-
-.voice-download-btn:active {
-  transform: scale(0.95);
 }
 
 .voice-record-btn { 
@@ -1325,4 +1319,279 @@ body {
 
 [data-theme="light"] .msg-bubble.other {
   color: #111b21;
+}
+
+/* MEDIA VIEWER OVERLAY */
+.media-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.95);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.media-viewer-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  z-index: 2001;
+}
+
+.media-viewer-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  font-size: 14px;
+}
+
+.media-viewer-time {
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+}
+
+.media-viewer-close {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.media-viewer-close:hover {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.1);
+}
+
+.media-viewer-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+  z-index: 2001;
+}
+
+.media-action-btn {
+  background: var(--green);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.media-action-btn:hover {
+  background: #06cf87;
+  transform: translateY(-2px);
+}
+
+.media-action-btn:active {
+  transform: translateY(0);
+}
+
+/* IMAGE VIEWER */
+.image-viewer-content {
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-viewer-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: pointer;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.image-container:hover .image-overlay {
+  opacity: 1;
+}
+
+/* VOICE PLAYER MODAL */
+.voice-player-modal {
+  background: var(--header);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.voice-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.voice-player-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.voice-player-waveform {
+  height: 100px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.voice-wave-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 60px;
+}
+
+.wave-bar {
+  width: 4px;
+  height: 20%;
+  background: var(--green);
+  border-radius: 2px;
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+@keyframes wave {
+  0%, 100% {
+    height: 20%;
+  }
+  50% {
+    height: 80%;
+  }
+}
+
+.voice-player-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.voice-player-play-btn {
+  background: var(--green);
+  border: none;
+  color: white;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.voice-player-play-btn:hover {
+  background: #06cf87;
+  transform: scale(1.05);
+}
+
+.voice-player-play-btn:active {
+  transform: scale(0.95);
+}
+
+.voice-player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-player-duration {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--txt);
+}
+
+.voice-player-label {
+  font-size: 13px;
+  color: var(--gray);
+}
+
+.voice-view-icon {
+  color: var(--gray);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.voice-view-icon:hover {
+  color: var(--green);
+  transform: scale(1.1);
+}
+
+/* Mobile optimizations */
+@media (max-width: 600px) {
+  .voice-player-modal {
+    min-width: 90vw;
+    max-width: 90vw;
+  }
+  
+  .media-viewer-header,
+  .media-viewer-actions {
+    padding: 16px;
+  }
+  
+  .image-viewer-content img {
+    max-height: 70vh;
+  }
 }

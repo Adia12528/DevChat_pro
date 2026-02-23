@@ -73,6 +73,10 @@ export default function App() {
   const [contextMenuMessage, setContextMenuMessage] = useState(null);
   const [longPressTimer, setLongPressTimer] = useState(null);
   
+  // Media viewer states
+  const [imageViewer, setImageViewer] = useState(null); // { url, fileName, sender, time }
+  const [voicePlayer, setVoicePlayer] = useState(null); // { url, fileName, sender, time, duration }
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -931,6 +935,41 @@ export default function App() {
     }
   }, [playingVoiceId]);
 
+  // Open image viewer
+  const openImageViewer = useCallback((imageData) => {
+    setImageViewer(imageData);
+  }, []);
+
+  // Close image viewer
+  const closeImageViewer = useCallback(() => {
+    setImageViewer(null);
+  }, []);
+
+  // Download media file
+  const downloadMedia = useCallback((url, fileName) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showSuccessToast('Download started');
+  }, []);
+
+  // Open voice player modal
+  const openVoicePlayer = useCallback((voiceData) => {
+    setVoicePlayer(voiceData);
+  }, []);
+
+  // Close voice player modal
+  const closeVoicePlayer = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    setVoicePlayer(null);
+    setPlayingVoiceId(null);
+  }, []);
+
   // DM functions
   const createDM = useCallback((targetUser) => {
     const dmRoom = [username, targetUser].sort().join('_dm_');
@@ -1140,7 +1179,12 @@ export default function App() {
                 )}
                 
                 {m.type === 'image' ? (
-                  <div className="image-container">
+                  <div className="image-container" onClick={() => openImageViewer({
+                    url: m.fileUrl || m.text,
+                    fileName: `image-${new Date(m.time).getTime()}.jpg`,
+                    sender: m.sender,
+                    time: m.time
+                  })}>
                     <img 
                       src={m.fileUrl || m.text} 
                       className="chat-img" 
@@ -1154,15 +1198,9 @@ export default function App() {
                       <ImageIcon size={32} />
                       <span>Image failed to load</span>
                     </div>
-                    <div className="image-actions">
-                      <a 
-                        href={m.fileUrl || m.text} 
-                        download={`image-${new Date(m.time).getTime()}.jpg`}
-                        className="download-btn"
-                        title="Download image"
-                      >
-                        <Download size={16} />
-                      </a>
+                    <div className="image-overlay">
+                      <Eye size={20} />
+                      <span>View Image</span>
                     </div>
                   </div>
                 ) : m.type === 'file' ? (
@@ -1170,10 +1208,19 @@ export default function App() {
                     📎 {m.fileName} ({(m.fileSize / 1024).toFixed(1)} KB)
                   </a>
                 ) : m.type === 'voice' ? (
-                  <div className="voice-message">
+                  <div className="voice-message" onClick={() => openVoicePlayer({
+                    url: m.fileUrl,
+                    fileName: `voice-${new Date(m.time).getTime()}.webm`,
+                    sender: m.sender,
+                    time: m.time,
+                    duration: m.duration || 0
+                  })}>
                     <button 
                       className="voice-play-btn"
-                      onClick={() => playVoiceMessage(m.fileUrl, m._id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playVoiceMessage(m.fileUrl, m._id);
+                      }}
                       title={playingVoiceId === m._id ? 'Pause' : 'Play'}
                     >
                       {playingVoiceId === m._id ? '⏸️' : '▶️'}
@@ -1181,15 +1228,7 @@ export default function App() {
                     <div className="voice-waveform">
                       <span className="voice-duration">{m.duration || 0}s</span>
                     </div>
-                    <a 
-                      href={m.fileUrl} 
-                      download={`voice-${new Date(m.time).getTime()}.webm`}
-                      className="voice-download-btn"
-                      title="Download voice message"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Download size={16} />
-                    </a>
+                    <Eye size={16} className="voice-view-icon" title="Open player" />
                   </div>
                 ) : renderMessageText(m)}
                 
@@ -1631,6 +1670,120 @@ export default function App() {
                 </button>
               </>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Viewer Modal */}
+      <AnimatePresence>
+        {imageViewer && (
+          <motion.div
+            className="media-viewer-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeImageViewer}
+          >
+            <div className="media-viewer-header">
+              <div className="media-viewer-info">
+                <User size={16} />
+                <span>{imageViewer.sender}</span>
+                <span className="media-viewer-time">
+                  {formatRelativeTime(imageViewer.time)}
+                </span>
+              </div>
+              <button className="media-viewer-close" onClick={closeImageViewer}>
+                <X size={24} />
+              </button>
+            </div>
+            <motion.div
+              className="image-viewer-content"
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img src={imageViewer.url} alt="Full view" />
+            </motion.div>
+            <div className="media-viewer-actions">
+              <button
+                className="media-action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadMedia(imageViewer.url, imageViewer.fileName);
+                }}
+              >
+                <Download size={20} />
+                <span>Download</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Voice Player Modal */}
+      <AnimatePresence>
+        {voicePlayer && (
+          <motion.div
+            className="media-viewer-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeVoicePlayer}
+          >
+            <motion.div
+              className="voice-player-modal"
+              initial={{ scale: 0.8, y: 50 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8, y: 50 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="voice-player-header">
+                <div className="media-viewer-info">
+                  <User size={16} />
+                  <span>{voicePlayer.sender}</span>
+                  <span className="media-viewer-time">
+                    {formatRelativeTime(voicePlayer.time)}
+                  </span>
+                </div>
+                <button className="media-viewer-close" onClick={closeVoicePlayer}>
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="voice-player-content">
+                <div className="voice-player-waveform">
+                  <div className="voice-wave-bars">
+                    {[...Array(20)].map((_, i) => (
+                      <div key={i} className="wave-bar" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="voice-player-controls">
+                  <button
+                    className="voice-player-play-btn"
+                    onClick={() => playVoiceMessage(voicePlayer.url, 'modal')}
+                  >
+                    {playingVoiceId === 'modal' ? '⏸️' : '▶️'}
+                  </button>
+                  <div className="voice-player-info">
+                    <span className="voice-player-duration">{voicePlayer.duration}s</span>
+                    <span className="voice-player-label">Voice Message</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="media-viewer-actions">
+                <button
+                  className="media-action-btn"
+                  onClick={() => downloadMedia(voicePlayer.url, voicePlayer.fileName)}
+                >
+                  <Download size={20} />
+                  <span>Download</span>
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
