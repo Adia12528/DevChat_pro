@@ -2217,6 +2217,23 @@ function App() {
     setIsCallMinimized(prev => !prev);
   }, []);
 
+  const selectedUser = useMemo(() => {
+    const currentRoomId = activeRoom || room;
+    if (!currentRoomId) return null;
+
+    const currentRoom = rooms.find(r => r.id === currentRoomId);
+    if (currentRoom?.type === 'dm') {
+      return currentRoom.with || currentRoom.name || null;
+    }
+
+    if (currentRoomId.includes('_dm_')) {
+      const participants = currentRoomId.split('_dm_');
+      return participants.find(participant => participant && participant !== username) || null;
+    }
+
+    return null;
+  }, [activeRoom, room, rooms, username]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
