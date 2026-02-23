@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, PlayCircle } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -59,11 +59,14 @@ function App() {
   const [slideDistance, setSlideDistance] = useState(0);
   const [startX, setStartX] = useState(0);
   
-  // Image preview states
+  // Image preview states - Enhanced for WhatsApp-like experience
   const [imagePreview, setImagePreview] = useState(null);
   const [imageCaption, setImageCaption] = useState('');
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]); // Multiple images: [{file, preview, id}]
+  const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
+  const [isDragging, setIsDragging] = useState(false); // Drag and drop state
   
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
@@ -101,6 +104,7 @@ function App() {
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null); // Separate ref for camera
   const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -633,51 +637,135 @@ function App() {
   }, [message, connected, replyingTo]);
 
   const handleFileUpload = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      console.log('No file selected');
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) {
+      console.log('No files selected');
       return;
     }
     
-    console.log(`📁 File selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB, ${file.type})`);
+    console.log(`📁 ${files.length} file(s) selected`);
     
-    // Validate file size (10MB max)
-    const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setErrorMessage('File too large! Maximum size is 10MB.');
-      setTimeout(() => setErrorMessage(''), 4000);
+    // Filter and validate files
+    const validFiles = [];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedDocTypes = ['application/pdf', 'application/msword', 
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    
+    for (const file of files) {
+      if (file.size > maxSize) {
+        setErrorMessage(`${file.name} is too large! Maximum size is 10MB.`);
+        setTimeout(() => setErrorMessage(''), 4000);
+        continue;
+      }
+      
+      if ([...allowedImageTypes, ...allowedDocTypes].includes(file.type)) {
+        validFiles.push(file);
+      } else {
+        setErrorMessage(`${file.name} is not a supported file type.`);
+        setTimeout(() => setErrorMessage(''), 4000);
+      }
+    }
+    
+    if (validFiles.length === 0) {
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
       return;
     }
     
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 
-                          'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowedTypes.includes(file.type)) {
-      setErrorMessage('File type not supported. Use images, PDFs, or Word documents.');
-      setTimeout(() => setErrorMessage(''), 4000);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
+    // Separate images from documents
+    const imageFiles = validFiles.filter(f => f.type.startsWith('image/'));
+    const docFiles = validFiles.filter(f => !f.type.startsWith('image/'));
+    
+    // Handle images with preview
+    if (imageFiles.length > 0) {
+      const imagePromises = imageFiles.map((file, index) => {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            resolve({
+              file: file,
+              preview: event.target.result,
+              id: Date.now() + index
+            });
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+      
+      const loadedImages = await Promise.all(imagePromises);
+      setSelectedImages(loadedImages);
+      setCurrentImageIndex(0);
+      setShowImagePreview(true);
+      setImageCaption('');
+      console.log(`🖼️ Loaded ${loadedImages.length} images for preview`);
     }
     
-    // Show preview for images
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImagePreview(event.target.result);
-        setPreviewFile(file);
-        setShowImagePreview(true);
-        setImageCaption('');
-      };
-      reader.readAsDataURL(file);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
+    // Handle documents directly
+    for (const docFile of docFiles) {
+      await uploadFile(docFile, '');
     }
     
-    // For non-images, upload directly
-    await uploadFile(file, '');
+    // Reset file inputs
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   }, []);
   
+  // Handle drag and drop
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+  
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragging to false if leaving the chat body entirely
+    if (e.target === chatBodyRef.current) {
+      setIsDragging(false);
+    }
+  }, []);
+  
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+  
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    
+    // Simulate file input event
+    const mockEvent = {
+      target: {
+        files: files
+      }
+    };
+    await handleFileUpload(mockEvent);
+  }, [handleFileUpload]);
+  
+  // Remove image from selection
+  const removeImage = useCallback((imageId) => {
+    setSelectedImages(prev => {
+      const filtered = prev.filter(img => img.id !== imageId);
+      if (filtered.length === 0) {
+        setShowImagePreview(false);
+        return [];
+      }
+      // Adjust current index if needed
+      if (currentImageIndex >= filtered.length) {
+        setCurrentImageIndex(filtered.length - 1);
+      }
+      return filtered;
+    });
+  }, [currentImageIndex]);
+  
+  // Upload single file (called for non-images or individual uploads)
   const uploadFile = useCallback(async (file, caption = '') => {
     setUploadingFile(true);
     setUploadProgress('Preparing...');
@@ -754,12 +842,84 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
   
+  // Upload multiple images at once
+  const uploadMultipleImages = useCallback(async () => {
+    if (selectedImages.length === 0) return;
+    
+    setUploadingFile(true);
+    setShowImagePreview(false);
+    
+    const totalImages = selectedImages.length;
+    let successCount = 0;
+    
+    for (let i = 0; i < selectedImages.length; i++) {
+      const { file } = selectedImages[i];
+      setUploadProgress(`Uploading image ${i + 1} of ${totalImages}...`);
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('upload_preset', 'devchat_uploads');
+        
+        const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok || data.error) {
+          console.error(`❌ Failed to upload ${file.name}:`, data.error);
+          continue;
+        }
+        
+        // Send message for each image (use caption only on first image if provided)
+        const messageText = (i === 0 && imageCaption) ? imageCaption : file.name;
+        
+        socketRef.current?.emit("send_message", {
+          room: roomRef.current,
+          sender: usernameRef.current,
+          text: messageText,
+          type: 'image',
+          fileUrl: data.secure_url,
+          fileName: file.name,
+          fileSize: file.size
+        });
+        
+        successCount++;
+        console.log(`✅ Uploaded ${i + 1}/${totalImages}: ${file.name}`);
+      } catch (error) {
+        console.error(`❌ Error uploading ${file.name}:`, error.message);
+      }
+    }
+    
+    if (successCount > 0) {
+      setSuccessMessage(`${successCount} image(s) sent successfully!`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } else {
+      setErrorMessage('Failed to upload images. Please try again.');
+      setTimeout(() => setErrorMessage(''), 4000);
+    }
+    
+    // Clear state
+    setSelectedImages([]);
+    setImageCaption('');
+    setCurrentImageIndex(0);
+    setUploadingFile(false);
+    setUploadProgress('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+  }, [selectedImages, imageCaption]);
+  
   const cancelImagePreview = useCallback(() => {
     setShowImagePreview(false);
     setImagePreview(null);
     setPreviewFile(null);
+    setSelectedImages([]);
     setImageCaption('');
+    setCurrentImageIndex(0);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   }, []);
 
   const handleEmojiClick = useCallback((emojiData) => {
@@ -1666,7 +1826,25 @@ function App() {
         </div>
       )}
 
-      <div className="chat-body" ref={chatBodyRef}>
+      <div 
+        className="chat-body" 
+        ref={chatBodyRef}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {/* Drag and drop overlay */}
+        {isDragging && (
+          <div className="drag-drop-overlay">
+            <div className="drag-drop-content">
+              <ImageIcon size={48} />
+              <h3>Drop images here</h3>
+              <p>Support for multiple images</p>
+            </div>
+          </div>
+        )}
+        
         <AnimatePresence>
           {filteredChat.map((m, i) => {
             const msgId = `${i}-${m.time}`;
@@ -1913,13 +2091,23 @@ function App() {
       )}
 
       <div className="chat-footer">
+        {/* Hidden file inputs */}
         <input
           type="file"
           ref={fileInputRef}
           onChange={handleFileUpload}
           style={{ display: 'none' }}
           accept="image/*,application/pdf,.doc,.docx"
+          multiple
+        />
+        <input
+          type="file"
+          ref={cameraInputRef}
+          onChange={handleFileUpload}
+          style={{ display: 'none' }}
+          accept="image/*"
           capture="environment"
+          multiple
         />
         
         {/* Left action buttons */}
@@ -1927,9 +2115,18 @@ function App() {
           className="file-upload-btn whatsapp-action-btn"
           onClick={() => fileInputRef.current?.click()}
           disabled={!connected || uploadingFile}
-          title="Attach file"
+          title="Attach images"
         >
           <ImageIcon size={22} />
+        </button>
+        
+        <button
+          className="camera-btn whatsapp-action-btn"
+          onClick={() => cameraInputRef.current?.click()}
+          disabled={!connected || uploadingFile}
+          title="Take photo"
+        >
+          📷
         </button>
         
         {/* Main input container - WhatsApp style */}
@@ -2047,9 +2244,9 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Image Preview Modal - WhatsApp Style */}
+      {/* Image Preview Modal - Enhanced WhatsApp Style */}
       <AnimatePresence>
-        {showImagePreview && (
+        {showImagePreview && selectedImages.length > 0 && (
           <motion.div 
             className="image-preview-overlay"
             initial={{ opacity: 0 }} 
@@ -2063,18 +2260,76 @@ function App() {
               >
                 <X size={24} />
               </button>
+              {selectedImages.length > 1 && (
+                <span className="image-counter">
+                  {currentImageIndex + 1} / {selectedImages.length}
+                </span>
+              )}
             </div>
             
+            {/* Main image display */}
             <div className="preview-image-container">
-              <img src={imagePreview} alt="Preview" />
+              <img 
+                src={selectedImages[currentImageIndex].preview} 
+                alt="Preview" 
+                key={selectedImages[currentImageIndex].id}
+              />
+              
+              {/* Navigation arrows for multiple images */}
+              {selectedImages.length > 1 && (
+                <>
+                  {currentImageIndex > 0 && (
+                    <button 
+                      className="preview-nav-btn prev"
+                      onClick={() => setCurrentImageIndex(prev => prev - 1)}
+                    >
+                      <ChevronLeft size={32} />
+                    </button>
+                  )}
+                  {currentImageIndex < selectedImages.length - 1 && (
+                    <button 
+                      className="preview-nav-btn next"
+                      onClick={() => setCurrentImageIndex(prev => prev + 1)}
+                    >
+                      <ChevronRight size={32} />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
             
+            {/* Thumbnails for multiple images */}
+            {selectedImages.length > 1 && (
+              <div className="preview-thumbnails">
+                {selectedImages.map((img, index) => (
+                  <div 
+                    key={img.id}
+                    className={`preview-thumbnail ${index === currentImageIndex ? 'active' : ''}`}
+                    onClick={() => setCurrentImageIndex(index)}
+                  >
+                    <img src={img.preview} alt={`Thumbnail ${index + 1}`} />
+                    <button 
+                      className="thumbnail-remove-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeImage(img.id);
+                      }}
+                      title="Remove"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Caption and send */}
             <div className="preview-footer">
               <div className="caption-input-wrapper">
                 <input
                   type="text"
                   className="caption-input"
-                  placeholder="Add a caption..."
+                  placeholder={selectedImages.length > 1 ? "Add a caption (applies to first image)..." : "Add a caption..."}
                   value={imageCaption}
                   onChange={(e) => setImageCaption(e.target.value)}
                   maxLength={200}
@@ -2082,8 +2337,9 @@ function App() {
               </div>
               <button
                 className="preview-send-btn"
-                onClick={() => uploadFile(previewFile, imageCaption)}
+                onClick={uploadMultipleImages}
                 disabled={uploadingFile}
+                title={`Send ${selectedImages.length} image(s)`}
               >
                 {uploadingFile ? <div className="spinner-small"></div> : <Send size={24} />}
               </button>
