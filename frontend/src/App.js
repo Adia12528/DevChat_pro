@@ -345,8 +345,39 @@ export default function App() {
       setUserProfiles(prev => ({ ...prev, [data.username]: { avatar: data.avatar, bio: data.bio } }));
     });
 
+    // Handle proper disconnect when user closes tab/browser
+    const handleBeforeUnload = () => {
+      if (newSocket.connected) {
+        newSocket.emit('user_leaving', { username: usernameRef.current, room: roomRef.current });
+        newSocket.disconnect();
+      }
+    };
+
+    // Handle visibility changes (tab switching, minimize)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (newSocket.connected) {
+          newSocket.emit('update_status', { username: usernameRef.current, status: 'away' });
+        }
+      } else {
+        if (newSocket.connected) {
+          newSocket.emit('update_status', { username: usernameRef.current, status: 'online' });
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      if (newSocket.connected) {
+        newSocket.emit('user_leaving', { username: usernameRef.current, room: roomRef.current });
+      }
       newSocket.disconnect();
+      
       typingTimersRef.current.forEach(id => clearTimeout(id));
       typingTimersRef.current.clear();
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);

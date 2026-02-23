@@ -215,6 +215,16 @@ io.on('connection', (socket) => {
         socket.to(socket.room).emit('profile_updated', { username, avatar, bio });
     });
 
+    socket.on('user_leaving', (data) => {
+        console.log("👋 User explicitly leaving:", data.username);
+        if (socket.room && roomUsers[socket.room]) {
+            delete roomUsers[socket.room][socket.id];
+            const users = Object.values(roomUsers[socket.room]);
+            io.to(socket.room).emit('user_left', { username: data.username, users, count: users.length });
+            if (users.length === 0) delete roomUsers[socket.room];
+        }
+    });
+
     socket.on('disconnect', () => {
         console.log("❌ Disconnected:", socket.id);
         if (socket.room && roomUsers[socket.room]) {
