@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate DevChat Icons</title>
+</head>
+<body>
+    <h2>Generate PWA Icons</h2>
+    <p>Right-click each canvas and "Save image as..."</p>
+    
+    <h3>192x192 Icon (save as: logo192.png)</h3>
+    <canvas id="icon192" width="192" height="192"></canvas>
+    
+    <h3>512x512 Icon (save as: logo512.png)</h3>
+    <canvas id="icon512" width="512" height="512"></canvas>
+
+    <script>
+        function createIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#00a884';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.35}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('DC', size / 2, size / 2);
+            
+            // Add a circle border
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.05;
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size * 0.4, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        
+        createIcon('icon192', 192);
+        createIcon('icon512', 512);
+        
+        // Auto-download
+        setTimeout(() => {
+            ['icon192', 'icon512'].forEach(id => {
+                const canvas = document.getElementById(id);
+                const link = document.createElement('a');
+                link.download = `logo${id.replace('icon', '')}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+            alert('Icons downloaded! Move them to frontend/public/ folder');
+        }, 500);
+    </script>
+</body>
+</html>
