@@ -17,7 +17,7 @@ console.log('🚀 DevChat Pro Version:', APP_VERSION);
 console.log('🔍 Build Date:', new Date().toISOString());
 console.log('✅ Context Menu Features: ENABLED');
 
-export default function App() {
+function App() {
   // Existing state
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
@@ -1927,3 +1927,11 @@ export default function App() {
     </div>
   );
 }
+
+// Enable Hot Module Replacement for instant updates during development
+if (module.hot) {
+  module.hot.accept();
+  console.log('🔥 HMR: App component updated');
+}
+
+export default App;
