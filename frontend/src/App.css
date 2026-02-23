@@ -3364,11 +3364,14 @@ body {
     gap: 6px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
   }
   
   .users-list::-webkit-scrollbar {
     height: 4px;
+  }
+  
+  .users-list::-webkit-scrollbar-track {
+    background: transparent;
   }
   
   .users-list::-webkit-scrollbar-thumb {

@@ -48,65 +48,72 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - NETWORK-FIRST strategy (always fetch fresh, fallback to cache)
 self.addEventListener('fetch', (event) => {
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {
     return;
   }
 
-  // Skip socket.io requests
-  if (event.request.url.includes('socket.io')) {
+  // Skip socket.io and API requests
+  if (event.request.url.includes('socket.io') || event.request.url.includes('/api/')) {
     return;
   }
 
   event.respondWith(
-    caches.match(event.request)
+    // Try network first
+    fetch(event.request)
       .then((response) => {
-        // Cache hit - return response
-        if (response) {
-          return response;
+        // Check if valid response
+        if (!response || response.status !== 200) {
+          return caches.match(event.request).then(cachedResponse => cachedResponse || response);
         }
 
-        return fetch(event.request).then((response) => {
-          // Check if valid response
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
+        // Clone response to cache
+        const responseToCache = response.clone();
 
-          // Clone response
-          const responseToCache = response.clone();
-
-          caches.open(CACHE_NAME)
+        caches.open(CACHE_NAME)
             .then((cache) => {
               cache.put(event.request, responseToCache);
             });
 
           return response;
-        });
-      })
+        })
       .catch(() => {
-        // Return offline page if available
-        return caches.match('/');
+        // Network failed, try cache
+        console.log('[ServiceWorker] Network failed, serving from cache');
+        return caches.match(event.request);
       })
   );
 });
 
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
+// Message event - handle messages from clients
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[ServiceWorker] Received SKIP_WAITING message');
+    self.skipWaiting();
+  }
+  
+  if (event.data && event.data.type === 'CLEAR_ALL_CACHES') {
+    console.log('[ServiceWorker] Clearing all caches');
+    event.waitUntil(
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            console.log('[ServiceWorker] Deleting cache:', cacheName);
             return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+          })
+        );
+      }).then(() => {
+        // Notify all clients that caches are cleared
+        return self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({ type: 'CACHES_CLEARED' });
+          });
+        });
+      })
+    );
+  }
 });
 
 // Push notification event

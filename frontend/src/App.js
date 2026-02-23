@@ -123,6 +123,58 @@ function App() {
     console.log(`%cBuild Date: ${new Date(BUILD_DATE).toLocaleString()}`, 'color: #00ccff; font-size: 12px;');
   }, []);
 
+  // Force cache clear and update check on every load
+  useEffect(() => {
+    const clearCachesAndUpdate = async () => {
+      try {
+        // Clear browser cache
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          console.log('%c🧹 Clearing all caches...', 'color: #ff9800; font-weight: bold;');
+          await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+          console.log('%c✅ All caches cleared', 'color: #4caf50; font-weight: bold;');
+        }
+
+        // Check for service worker updates
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            console.log('%c🔄 Checking for service worker updates...', 'color: #2196f3; font-weight: bold;');
+            
+            // Force update check
+            await registration.update();
+            
+            // Listen for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('%c🆕 New version available! Reloading...', 'color: #00ff88; font-weight: bold;');
+                    // Skip waiting and reload
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+            
+            // Clear service worker cache
+            if (navigator.serviceWorker.controller) {
+              navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_ALL_CACHES' });
+            }
+          }
+        }
+        
+        console.log(`%c✨ Running latest version: v${APP_VERSION}`, 'color: #00ff88; font-weight: bold;');
+      } catch (error) {
+        console.error('Cache clearing error:', error);
+      }
+    };
+
+    clearCachesAndUpdate();
+  }, []);
+
   // Theme effect
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);

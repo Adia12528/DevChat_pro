@@ -33,6 +33,11 @@ function registerValidSW(swUrl, config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
+      // Check for updates every 30 seconds
+      setInterval(() => {
+        registration.update();
+      }, 30000);
+
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {
@@ -41,7 +46,16 @@ function registerValidSW(swUrl, config) {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              console.log('New content is available; please refresh.');
+              console.log('%c🔄 New content is available! Auto-reloading...', 'color: #ff9800; font-weight: bold;');
+              
+              // Automatically skip waiting and reload
+              installingWorker.postMessage({ type: 'SKIP_WAITING' });
+              
+              // Reload after a short delay
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+              
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
               }
