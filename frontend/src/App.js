@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, PlayCircle } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -950,11 +950,30 @@ function App() {
       case 'react':
         // Handle reactions
         break;
+      case 'view':
+        // Open image viewer for image messages
+        if (contextMenuMessage.type === 'image' && contextMenuMessage.fileUrl) {
+          console.log('🖼️ Opening image from context menu:', contextMenuMessage.fileUrl);
+          openImageViewer({
+            url: contextMenuMessage.fileUrl,
+            fileName: `image-${new Date(contextMenuMessage.time).getTime()}.jpg`,
+            sender: contextMenuMessage.sender,
+            time: contextMenuMessage.time
+          });
+        }
+        break;
+      case 'play':
+        // Play voice message
+        if (contextMenuMessage.type === 'voice' && contextMenuMessage.fileUrl) {
+          console.log('🔊 Playing voice from context menu:', contextMenuMessage.fileUrl);
+          playVoiceMessage(contextMenuMessage.fileUrl, contextMenuMessage._id);
+        }
+        break;
       default:
         break;
     }
     closeContextMenu();
-  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, closeContextMenu]);
+  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, closeContextMenu, openImageViewer, playVoiceMessage]);
 
   const renderMessageText = (msg) => {
     if (!showMarkdown) return <p>{msg.text}</p>;
@@ -2329,6 +2348,27 @@ function App() {
               <Pin size={16} />
               <span>{contextMenuMessage.isPinned ? 'Unpin' : 'Pin'}</span>
             </button>
+            
+            {/* Media-specific actions */}
+            {contextMenuMessage.type === 'image' && contextMenuMessage.fileUrl && (
+              <button
+                className="context-menu-item"
+                onClick={() => handleContextMenuAction('view')}
+              >
+                <ImageIcon size={16} />
+                <span>View Image</span>
+              </button>
+            )}
+            {contextMenuMessage.type === 'voice' && contextMenuMessage.fileUrl && (
+              <button
+                className="context-menu-item"
+                onClick={() => handleContextMenuAction('play')}
+              >
+                <PlayCircle size={16} />
+                <span>Play Voice</span>
+              </button>
+            )}
+            
             <div className="context-menu-divider"></div>
             <div className="context-menu-reactions">
               {QUICK_REACTIONS.map(emoji => (
