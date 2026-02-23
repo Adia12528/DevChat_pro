@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3 } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,6 +11,24 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { APP_VERSION, BUILD_DATE } from './version';
 import './App.css';
 import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
+import {
+  OPTIMAL_AUDIO_CONSTRAINTS,
+  OPTIMAL_VIDEO_CONSTRAINTS,
+  OPTIMAL_AUDIO_ONLY_CONSTRAINTS,
+  MOBILE_VIDEO_CONSTRAINTS,
+  CallStatistics,
+  CallRecorder,
+  VideoEffectsProcessor,
+  CallHistory,
+  AdaptiveQualityController,
+  getScreenStream,
+  switchToScreenShare,
+  switchBackToCamera,
+  getQualityIndicator
+} from './callUtils';
+import CallPanel from './CallPanel';
+import CallHistoryPanel from './CallHistoryPanel';
+import './callStyles.css';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
@@ -153,6 +171,22 @@ function App() {
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
   
+  // PREMIUM: Advanced Call Features
+  const [callStats, setCallStats] = useState(null);
+  const [isCallRecording, setIsCallRecording] = useState(false);
+  const [showCallStats, setShowCallStats] = useState(false);
+  const [showVideoEffects, setShowVideoEffects] = useState(false);
+  const [videoEffectSettings, setVideoEffectSettings] = useState({
+    backgroundBlur: 0,
+    brightness: 1,
+    contrast: 1,
+    saturation: 1
+  });
+  const [callHistory, setCallHistory] = useState([]);
+  const [showCallHistory, setShowCallHistory] = useState(false);
+  const [qualityIndicator, setQualityIndicator] = useState(null);
+  const [connectionQuality, setConnectionQuality] = useState('excellent'); // excellent, good, fair, poor
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -183,6 +217,15 @@ function App() {
   const soundEnabledRef = useRef(true);
   const isAtBottomRef = useRef(true);
   const lastMessageIdRef = useRef(null);
+  
+  // PREMIUM: Advanced call features refs
+  const callRecorderRef = useRef(null);
+  const callStatsRef = useRef(null);
+  const qualityControllerRef = useRef(null);
+  const statsUpdateIntervalRef = useRef(null);
+  const videoEffectsCanvasRef = useRef(null);
+  const callHistoryRef = useRef(null);
+  const screenStreamRef = useRef(null);
 
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
@@ -194,6 +237,12 @@ function App() {
     document.title = unreadCount > 0 ? `(${unreadCount}) DevChat Pro` : 'DevChat Pro';
     return () => { document.title = 'DevChat Pro'; };
   }, [unreadCount]);
+
+  // Initialize premium calling features
+  useEffect(() => {
+    console.log('🎯 Initializing premium calling features');
+    initializeCallHistory();
+  }, [initializeCallHistory]);
 
   // Escape key closes all modals
   useEffect(() => {
@@ -1918,11 +1967,14 @@ function App() {
   // ==========================
 
   // ICE servers configuration (FREE STUN servers)
-  const iceServers = {
+  // Use optimized ICE servers from callUtils
+  const iceServersConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
       { urls: 'stun:stun.services.mozilla.com' }
     ]
   };
@@ -1968,12 +2020,22 @@ function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }, []);
 
-  // Initialize peer connection
+  // Initialize peer connection with premium features
   const createPeerConnection = useCallback((targetUsername) => {
-    const pc = new RTCPeerConnection(iceServers);
-    console.log('🔧 Creating peer connection for:', targetUsername);
+    console.log('🔧 Creating PREMIUM peer connection for:', targetUsername);
+    
+    const pc = new RTCPeerConnection(iceServersConfig);
+    
+    // PREMIUM: Initialize call statistics
+    const stats = new CallStatistics();
+    callStatsRef.current = stats;
 
-    // Handle ICE candidates - use passed targetUsername to avoid stale closure
+    // PREMIUM: Initialize adaptive quality controller
+    const qualityController = new AdaptiveQualityController(pc);
+    qualityControllerRef.current = qualityController;
+    qualityController.start();
+
+    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
         console.log('🧊 Sending ICE candidate to:', targetUsername);
@@ -1986,94 +2048,108 @@ function App() {
       }
     };
 
-    // Handle remote stream
+    // Handle remote stream with premium audio processing
     pc.ontrack = (event) => {
       console.log('🎥 [ONTRACK] Remote track received!', {
         kind: event.track.kind,
-        id: event.track.id,
         enabled: event.track.enabled,
-        streams: event.streams.length,
         state: event.track.readyState
       });
       
       if (event.streams && event.streams.length > 0) {
         const remoteStream = event.streams[0];
-        console.log('📊 [ONTRACK] Remote stream details:', {
-          audioTracks: remoteStream.getAudioTracks().length,
-          videoTracks: remoteStream.getVideoTracks().length,
-          id: remoteStream.id
-        });
-        
         setRemoteStream(remoteStream);
         
-        // Set video source
         if (remoteVideoRef.current) {
-          console.log('📹 [ONTRACK] Setting remoteVideoRef.srcObject');
+          console.log('📹 [ONTRACK] Setting remote video');
           remoteVideoRef.current.srcObject = remoteStream;
-        } else {
-          console.warn('⚠️ [ONTRACK] remoteVideoRef.current is null!');
         }
       }
     };
 
-    // Handle connection state changes
+    // Handle connection state with detailed monitoring
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('🔗 Connection state changed to:', state);
-      if (state === 'connecting') {
-        console.log('🔄 [CONNECTION] Attempting to connect...');
-      } else if (state === 'connected') {
-        console.log('✅ [CONNECTION] Connected!');
-      } else if (state === 'disconnected') {
-        console.log('⚠️ [CONNECTION] Disconnected');
-        setCallError('Connection lost');
+      console.log('🔗 Connection state:', state);
+      
+      if (state === 'connected') {
+        console.log('✅ [CONNECTION] Connected - Starting quality monitoring');
+        
+        // Start periodic stats updates
+        if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+        statsUpdateIntervalRef.current = setInterval(async () => {
+          if (callStatsRef.current && peerConnectionRef.current === pc) {
+            await callStatsRef.current.updateStats(pc);
+            const quality = callStatsRef.current.getQualityScore();
+            setQualityIndicator(getQualityIndicator(callStatsRef.current));
+            setConnectionQuality(callStatsRef.current.getQualityLabel());
+          }
+        }, 1000);
+      } else if (state === 'failed' || state === 'disconnected') {
+        console.log('❌ Connection issue:', state);
+        if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+        setCallError(`Connection ${state}`);
         endCall();
-      } else if (state === 'failed') {
-        console.log('❌ [CONNECTION] Connection failed!');
-        setCallError('Connection failed');
-        endCall();
-      } else if (state === 'closed') {
-        console.log('🔴 [CONNECTION] Connection closed');
       }
+    };
+
+    // Monitor ICE connection state
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE Connection state:', pc.iceConnectionState);
     };
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [callPeer]);
+  }, []);
 
-  // Start a call (voice or video)
+  // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
-    if (!targetUser ||!socketRef.current) return;
+    if (!targetUser || !socketRef.current) return;
 
     try {
-      console.log('📞 [CALLER] Starting', type, 'call to:', targetUser);
+      console.log('📞 [CALLER] Starting PREMIUM', type, 'call to:', targetUser);
       setCallType(type);
       setCallPeer({ username: targetUser, userId: targetUser });
       setCallState('calling');
       setCallError(null);
 
-      // Get media stream
-      const constraints = type === 'video' 
-        ? { audio: true, video: { width: 1280, height: 720 } }
-        : { audio: true, video: false };
+      // PREMIUM: Use optimal constraints for better quality
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      const constraints = type === 'video'
+        ? (isMobile ? MOBILE_VIDEO_CONSTRAINTS : OPTIMAL_VIDEO_CONSTRAINTS)
+        : OPTIMAL_AUDIO_ONLY_CONSTRAINTS;
 
+      console.log('🎙️ [CALLER] Requesting media with optimal constraints');
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('📹 [CALLER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
+      console.log('📹 [CALLER] Got media stream:', {
+        audio: stream.getAudioTracks().length,
+        video: stream.getVideoTracks().length
+      });
+      
       setLocalStream(stream);
 
       if (localVideoRef.current && type === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection - pass targetUser to avoid stale closure
+      // Create peer connection with premium features
       const pc = createPeerConnection(targetUser);
 
       // Add local stream tracks
       stream.getTracks().forEach(track => {
+        console.log('🎚️ [CALLER] Adding track:', track.kind);
         pc.addTrack(track, stream);
       });
 
-      //Create offer
+      // PREMIUM: Start recording if enabled
+      const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
+      if (shouldRecord && type === 'voice') {
+        callRecorderRef.current = new CallRecorder();
+        callRecorderRef.current.start(stream);
+        setIsRecording(true);
+      }
+
+      // Create offer
       const offer = await pc.createOffer();
       console.log('🎤 [CALLER] Created offer');
       await pc.setLocalDescription(offer);
@@ -2092,16 +2168,16 @@ function App() {
       playRingtone();
 
     } catch (err) {
-      console.error('Error starting call:', err);
-      setCallError(err.message === 'Permission denied' 
-        ? 'Camera/microphone access denied' 
+      console.error('❌ Error starting call:', err);
+      setCallError(err.message === 'Permission denied'
+        ? 'Camera/microphone access denied'
         : 'Failed to start call');
       setCallState('idle');
       stopRingtone();
     }
   }, [username, createPeerConnection, playRingtone, stopRingtone]);
 
-  // Answer incoming call
+  // Answer incoming call with premium features
   const answerCall = useCallback(async () => {
     if (!incomingCall || !socketRef.current) return;
 
@@ -2113,7 +2189,7 @@ function App() {
       setCallPeer({ username: callerUsername, userId: callerUsername });
       setCallState('active');
       
-      // FORCE STOP RINGTONE - make absolutely sure
+      // FORCE STOP RINGTONE
       console.log('🛑 [RECEIVER] Force-stopping ringtone');
       stopRingtone();
       if (ringtoneRef.current) {
@@ -2121,12 +2197,17 @@ function App() {
         ringtoneRef.current.currentTime = 0;
       }
 
-      // Get media stream
-      const constraints = incomingCall.callType === 'video'
-        ? { audio: true, video: { width: 1280, height: 720 } }
-        : { audio: true, video: false };
+      // Get media stream with optimal constraints
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      let constraints;
+      
+      if (incomingCall.callType === 'video') {
+        constraints = isMobile ? MOBILE_VIDEO_CONSTRAINTS : OPTIMAL_VIDEO_CONSTRAINTS;
+      } else {
+        constraints = { audio: OPTIMAL_AUDIO_CONSTRAINTS, video: false };
+      }
 
-      console.log('📹 [RECEIVER] Requesting media with constraints:', constraints);
+      console.log('📹 [RECEIVER] Device:', isMobile ? 'Mobile' : 'Desktop', '| Requesting media with constraints:', constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
       setLocalStream(stream);
@@ -2135,10 +2216,21 @@ function App() {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection - pass caller username to avoid stale closure
+      // Initialize call statistics
+      console.log('📊 [RECEIVER] Initializing call statistics');
+      const stats = new CallStatistics();
+      callStatsRef.current = stats;
+      setCallStats(stats.getStats());
+
+      // Create peer connection with quality control
       console.log('🔧 [RECEIVER] Creating peer connection for caller:', callerUsername);
       const pc = createPeerConnection(callerUsername);
-      peerConnectionRef.current = pc; // Ensure it's stored
+      peerConnectionRef.current = pc;
+
+      // Initialize adaptive quality controller
+      console.log('⚙️ [RECEIVER] Initializing adaptive quality controller');
+      const qualityController = new AdaptiveQualityController(pc);
+      qualityControllerRef.current = qualityController;
 
       // Add local stream tracks
       console.log('➕ [RECEIVER] Adding local tracks to peer connection');
@@ -2146,6 +2238,15 @@ function App() {
         console.log('📌 [RECEIVER] Adding track:', track.kind, track.id);
         pc.addTrack(track, stream);
       });
+
+      // Initialize call recorder if auto-record is enabled
+      const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
+      if (shouldRecord && incomingCall.callType === 'voice') {
+        console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
+        callRecorderRef.current = new CallRecorder();
+        callRecorderRef.current.start(stream);
+        setIsRecording(true);
+      }
 
       // Set remote description from offer
       console.log('🎧 [RECEIVER] Setting remote description from offer');
@@ -2168,13 +2269,26 @@ function App() {
       });
       console.log('✅ [RECEIVER] Call:answer sent');
 
+      // Start periodic stats update
+      const intervalId = setInterval(() => {
+        if (stats && stats.update) {
+          stats.update(pc);
+          setCallStats(stats.getStats());
+          setQualityIndicator(getQualityIndicator(stats.getStats().qualityScore));
+          setConnectionQuality(stats.getStats().qualityScore);
+        }
+      }, 1000);
+      statsUpdateIntervalRef.current = intervalId;
+
       setIncomingCall(null);
       console.log('⏱️ [RECEIVER] Starting call timer');
       startCallTimer();
 
     } catch (err) {
-      console.error('Error answering call:', err);
-      setCallError('Failed to answer call');
+      console.error('❌ Error answering call:', err);
+      setCallError(err.message === 'Permission denied'
+        ? 'Camera/microphone access denied'
+        : 'Failed to answer call');
       rejectCall();
     }
   }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone]);
@@ -2193,7 +2307,7 @@ function App() {
     setIncomingCall(null);
   }, [incomingCall, username, stopRingtone]);
 
-  // End call
+  // End call with premium cleanup
   const endCall = useCallback(() => {
     console.log('📴 Ending call');
 
@@ -2219,6 +2333,55 @@ function App() {
       peerConnectionRef.current = null;
     }
 
+    // Stop and save call recording
+    if (callRecorderRef.current && isCallRecording) {
+      console.log('💾 Saving recording');
+      callRecorderRef.current.stop();
+      callRecorderRef.current = null;
+      setIsCallRecording(false);
+    }
+
+    // Stop quality monitoring
+    if (statsUpdateIntervalRef.current) {
+      console.log('⏸️ Stopping stats monitoring');
+      clearInterval(statsUpdateIntervalRef.current);
+      statsUpdateIntervalRef.current = null;
+    }
+
+    // Stop quality controller
+    if (qualityControllerRef.current) {
+      console.log('⏸️ Stopping quality controller');
+      qualityControllerRef.current.destroy?.();
+      qualityControllerRef.current = null;
+    }
+
+    // Log call to history
+    if (callStatsRef.current && callHistoryRef.current) {
+      try {
+        const finalStats = callStatsRef.current.getStats();
+        console.log('📝 Logging call to history:', { duration: callDuration, quality: finalStats.qualityScore });
+        callHistoryRef.current.addCall({
+          peer: callPeer?.username || 'Unknown',
+          type: callType || 'unknown',
+          duration: callDuration,
+          timestamp: new Date(),
+          stats: finalStats
+        });
+        const history = callHistoryRef.current.getCallHistory();
+        setCallHistory(history);
+      } catch (err) {
+        console.warn('⚠️ Failed to log call to history:', err);
+      }
+      callStatsRef.current = null;
+    }
+
+    // Stop screen stream if active
+    if (screenStreamRef.current) {
+      console.log('🛑 Stopping screen stream');
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
     // Reset state
     setCallState('idle');
     setCallType(null);
@@ -2231,9 +2394,13 @@ function App() {
     setIsCallMinimized(false);
     setCallDuration(0);
     setCallError(null);
+    setCallStats(null);
+    setShowCallStats(false);
+    setQualityIndicator(null);
+    setConnectionQuality(0);
     stopCallTimer();
     stopRingtone();
-  }, [localStream, remoteStream, callPeer, username, stopCallTimer, stopRingtone]);
+  }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone]);
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -2310,6 +2477,87 @@ function App() {
   // Toggle call minimize
   const toggleCallMinimize = useCallback(() => {
     setIsCallMinimized(prev => !prev);
+  }, []);
+
+  // Toggle call recording
+  const toggleRecording = useCallback(async () => {
+    try {
+      if (isCallRecording && callRecorderRef.current) {
+        console.log('🛑 Stopping call recording');
+        callRecorderRef.current.stop();
+        setIsCallRecording(false);
+        setCallError(null);
+      } else if (localStream) {
+        console.log('🎙️ Starting call recording');
+        callRecorderRef.current = new CallRecorder();
+        callRecorderRef.current.start(localStream);
+        setIsCallRecording(true);
+      }
+    } catch (err) {
+      console.error('❌ Recording error:', err);
+      setCallError('Failed to toggle recording');
+    }
+  }, [isCallRecording, localStream]);
+
+  // Apply video effect
+  const applyVideoEffect = useCallback((effect, value) => {
+    try {
+      console.log('🎨 Applying video effect:', effect, '=', value);
+      setVideoEffectSettings(prev => ({
+        ...prev,
+        [effect]: value
+      }));
+    } catch (err) {
+      console.error('❌ Effect error:', err);
+      setCallError('Failed to apply effect');
+    }
+  }, []);
+
+  // Get call history
+  const getCallHistoryData = useCallback(() => {
+    if (!callHistoryRef.current) {
+      callHistoryRef.current = new CallHistory();
+    }
+    const history = callHistoryRef.current.getCallHistory();
+    return history;
+  }, []);
+
+  // Initialize call history
+  const initializeCallHistory = useCallback(() => {
+    try {
+      if (!callHistoryRef.current) {
+        console.log('📚 Initializing call history');
+        callHistoryRef.current = new CallHistory();
+        const history = callHistoryRef.current.getCallHistory();
+        setCallHistory(history);
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to initialize call history:', err);
+    }
+  }, []);
+
+  // Format call duration
+  const formatDuration = useCallback((seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  }, []);
+
+  // Get quality label style
+  const getQualityLabelStyle = useCallback((qualityScore) => {
+    if (qualityScore >= 80) return { color: '#4CAF50', label: 'Excellent' };
+    if (qualityScore >= 60) return { color: '#8BC34A', label: 'Good' };
+    if (qualityScore >= 40) return { color: '#FFC107', label: 'Fair' };
+    if (qualityScore >= 20) return { color: '#FF9800', label: 'Poor' };
+    return { color: '#F44336', label: 'Very Poor' };
   }, []);
 
   const selectedUser = useMemo(() => {
@@ -4052,126 +4300,66 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Active Call Interface */}
+      {/* Premium Active Call Interface */}
       <AnimatePresence>
-        {callState === 'active' && (
-          <motion.div
-            className={`call-interface ${isCallMinimized ? 'minimized' : 'fullscreen'}`}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-          >
+        {callState === 'active' && callPeer && (
+          <AnimatePresence mode="wait">
             {!isCallMinimized ? (
-              <>
-                {/* Full-screen call interface */}
-                <div className="call-video-container">
-                  {/* Remote video (main) */}
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    className="remote-video"
-                  />
-                  
-                  {/* Local video (picture-in-picture) */}
-                  {callType === 'video' && !isScreenSharing && (
-                    <video
-                      ref={localVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="local-video"
-                    />
-                  )}
-                  
-                  {/* Call info overlay */}
-                  <div className="call-info-overlay">
-                    <div className="call-peer-name">{callPeer?.username}</div>
-                    <div className="call-duration">{formatCallDuration(callDuration)}</div>
-                    {isScreenSharing && <div className="call-status-badge">Screen Sharing</div>}
-                  </div>
-                  
-                  {/* Call controls */}
-                  <div className="call-controls">
-                    <button 
-                      className={`call-control-btn ${isMuted ? 'active' : ''}`}
-                      onClick={toggleMute}
-                      title={isMuted ? "Unmute" : "Mute"}
-                    >
-                      <Mic size={24} style={{ opacity: isMuted ? 0.5 : 1 }}/>
-                    </button>
-                    
-                    {callType === 'video' && (
-                      <button 
-                        className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
-                        onClick={toggleVideo}
-                        title={isVideoOff ? "Turn on camera" : "Turn off camera"}
-                      >
-                        {isVideoOff ? <VideoOff size={24}/> : <Video size={24}/>}
-                      </button>
-                    )}
-                    
-                    {callType === 'video' && (
-                      <button 
-                        className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
-                        onClick={toggleScreenShare}
-                        title={isScreenSharing ? "Stop sharing" : "Share screen"}
-                      >
-                        <Monitor size={24}/>
-                      </button>
-                    )}
-                    
-                    <button 
-                      className="call-control-btn minimize-btn"
-                      onClick={toggleCallMinimize}
-                      title="Minimize call"
-                    >
-                      <Minimize2 size={24}/>
-                    </button>
-                    
-                    <button 
-                      className="call-control-btn end-call-btn"
-                      onClick={endCall}
-                      title="End call"
-                    >
-                      <PhoneOff size={24}/>
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              /* Minimized call panel */
-              <div className="call-minimized-panel">
-                <div className="call-minimized-info">
-                  <Phone size={16}/>
-                  <span>{callPeer?.username}</span>
-                  <span className="call-minimized-duration">{formatCallDuration(callDuration)}</span>
-                </div>
-                <div className="call-minimized-controls">
-                  <button 
-                    className="call-minimized-btn"
-                    onClick={toggleMute}
-                    title={isMuted ? "Unmute" : "Mute"}
-                  >
-                    <Mic size={18} style={{ opacity: isMuted ? 0.5 : 1 }}/>
-                  </button>
-                  <button 
-                    className="call-minimized-btn"
-                    onClick={toggleCallMinimize}
-                    title="Maximize call"
-                  >
-                    <Maximize2 size={18}/>
-                  </button>
-                  <button 
-                    className="call-minimized-btn end-btn"
-                    onClick={endCall}
-                    title="End call"
-                  >
-                    <PhoneOff size={18}/>
-                  </button>
-                </div>
-              </div>
-            )}
+              <CallPanel
+                callType={callType}
+                callPeer={callPeer?.username}
+                callDuration={callDuration}
+                callStats={callStats}
+                isRecording={isCallRecording}
+                qualityIndicator={qualityIndicator}
+                connectionQuality={connectionQuality}
+                isMuted={isMuted}
+                isVideoOff={isVideoOff}
+                isScreenSharing={isScreenSharing}
+                isCallMinimized={isCallMinimized}
+                videoEffectSettings={videoEffectSettings}
+                onToggleMute={toggleMute}
+                onToggleVideo={() => callType === 'video' && toggleVideo()}
+                onToggleScreenShare={callType === 'video' ? toggleScreenShare : null}
+                onToggleRecording={toggleRecording}
+                onApplyEffect={applyVideoEffect}
+                onEndCall={endCall}
+                onToggleMinimize={toggleCallMinimize}
+                onShowStats={() => setShowCallStats(!showCallStats)}
+                localVideoRef={localVideoRef}
+                remoteVideoRef={remoteVideoRef}
+                formatDuration={formatDuration}
+                getQualityLabelStyle={getQualityLabelStyle}
+                localStream={localStream}
+                remoteStream={remoteStream}
+              />
+            ) : null}
+          </AnimatePresence>
+        )}
+      </AnimatePresence>
+
+      {/* Call History Panel */}
+      <AnimatePresence>
+        {showCallStats && callHistory && (
+          <motion.div
+            className="call-history-modal"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 1001
+            }}
+          >
+            <CallHistoryPanel
+              callHistory={callHistory}
+              onClose={() => setShowCallStats(false)}
+              formatDuration={formatDuration}
+              getQualityLabelStyle={getQualityLabelStyle}
+            />
           </motion.div>
         )}
       </AnimatePresence>

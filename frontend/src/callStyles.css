@@ -1,0 +1,783 @@
+/* ========================================
+   PREMIUM CALLING SYSTEM - STYLES
+   ======================================== */
+
+/* Call Panel Container */
+.call-panel-container {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  max-height: 85vh;
+  z-index: 1000;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: -2px 0 20px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px 0 0 16px;
+  overflow: hidden;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Main Call Panel */
+.call-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.5));
+  color: white;
+}
+
+/* Header */
+.call-header {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.call-info {
+  flex: 1;
+}
+
+.call-peer-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-details {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.call-duration {
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.quality-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.recording-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #f44336;
+  font-size: 11px;
+  font-weight: 600;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.call-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Buttons */
+.call-btn {
+  padding: 8px 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+
+.call-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.call-btn:active {
+  transform: translateY(0);
+}
+
+.call-btn.muted {
+  background: rgba(255, 100, 100, 0.5);
+}
+
+.call-btn.video-off {
+  background: rgba(255, 100, 100, 0.5);
+}
+
+.call-btn.screen-active {
+  background: rgba(100, 200, 255, 0.5);
+}
+
+.call-btn.recording {
+  background: rgba(244, 67, 54, 0.7);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.call-btn.end-btn {
+  background: rgba(244, 67, 54, 0.8);
+  font-weight: 700;
+  padding: 8px 16px;
+}
+
+.call-btn.end-btn:hover {
+  background: rgba(244, 67, 54, 1);
+  box-shadow: 0 0 20px rgba(244, 67, 54, 0.6);
+}
+
+.call-btn.stats-btn,
+.call-btn.minimize-btn {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+/* Video Container */
+.video-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  background: black;
+  position: relative;
+  overflow: hidden;
+}
+
+.video-grid {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+.video-wrapper {
+  flex: 1;
+  position: relative;
+  background: black;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.video-wrapper.remote {
+  flex: 2;
+}
+
+.video-wrapper.local {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.video-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.video-off-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: inherit;
+}
+
+/* Audio Call View */
+.audio-call-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
+  padding: 40px 20px;
+}
+
+.avatar-large {
+  font-size: 72px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.audio-call-info {
+  text-align: center;
+}
+
+.audio-call-info h3 {
+  margin: 0;
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.call-status {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 14px;
+}
+
+.audio-waveform {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 20px;
+  height: 40px;
+}
+
+.wave {
+  width: 4px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 2px;
+  animation: waveAnimation 0.6s ease-in-out infinite;
+}
+
+.wave:nth-child(1) { animation-delay: 0s; height: 20%; }
+.wave:nth-child(2) { animation-delay: 0.1s; height: 40%; }
+.wave:nth-child(3) { animation-delay: 0.2s; height: 60%; }
+.wave:nth-child(4) { animation-delay: 0.1s; height: 40%; }
+.wave:nth-child(5) { animation-delay: 0s; height: 20%; }
+
+@keyframes waveAnimation {
+  0%, 100% {
+    height: 20%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+/* Stats Bar */
+.call-stats-bar {
+  display: flex;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #4CAF50;
+}
+
+/* Controls */
+.call-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  flex-wrap: wrap;
+}
+
+/* Effects Panel */
+.call-effects-panel {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.call-effects-panel h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.effect-group {
+  margin-bottom: 12px;
+}
+
+.effect-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.effect-group input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+  cursor: pointer;
+}
+
+.effect-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.btn-reset-effects {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn-reset-effects:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Options Panel */
+.call-options-panel {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.option-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.option-item:last-child {
+  border-bottom: none;
+}
+
+.option-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.info-text {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* Minimized Call Indicator */
+.call-minimized-indicator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  z-index: 999;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  min-width: 180px;
+}
+
+.call-minimized-indicator:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+}
+
+.call-mini-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: white;
+}
+
+.call-type-icon {
+  font-size: 18px;
+}
+
+.call-mini-info {
+  flex: 1;
+}
+
+.call-peer-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.call-timer {
+  font-size: 12px;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
+.quality-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+
+.quality-dot.good {
+  background: #4CAF50;
+}
+
+.quality-dot.fair {
+  background: #FFC107;
+}
+
+.quality-dot.poor {
+  background: #F44336;
+}
+
+@keyframes dot-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+  }
+}
+
+/* ========================================
+   CALL HISTORY PANEL STYLES
+   ======================================== */
+
+.call-history-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 600px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.95), rgba(118, 75, 162, 0.95));
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  color: white;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.close-btn:hover {
+  opacity: 1;
+}
+
+/* Stats Summary */
+.history-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.stat-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: #4CAF50;
+}
+
+.stat-label {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* Controls */
+.history-controls {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.control-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.control-group label {
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.control-group select {
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.control-group select option {
+  background: #333;
+  color: white;
+}
+
+/* History List */
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.call-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.call-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.call-peer {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-metadata {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.call-date,
+.call-duration {
+  white-space: nowrap;
+}
+
+.call-stats-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.latency {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 24px;
+  text-align: center;
+  color: white;
+  opacity: 0.7;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .call-panel-container {
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+
+  .call-controls {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .call-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .call-peer-name {
+    font-size: 16px;
+  }
+
+  .history-stats {
+    flex-wrap: wrap;
+  }
+
+  .history-controls {
+    flex-direction: column;
+  }
+}
+
+/* Scrollbar Styling */
+.call-effects-panel::-webkit-scrollbar,
+.call-options-panel::-webkit-scrollbar,
+.history-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.call-effects-panel::-webkit-scrollbar-track,
+.call-options-panel::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.call-effects-panel::-webkit-scrollbar-thumb,
+.call-options-panel::-webkit-scrollbar-thumb,
+.history-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+}
+
+.call-effects-panel::-webkit-scrollbar-thumb:hover,
+.call-options-panel::-webkit-scrollbar-thumb:hover,
+.history-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
