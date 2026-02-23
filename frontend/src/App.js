@@ -115,6 +115,7 @@ function App() {
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   
   // Menu dropdown state
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
@@ -348,17 +349,27 @@ function App() {
       e.preventDefault();
       setDeferredPrompt(e);
       setShowInstallPrompt(true);
+      setIsAppInstalled(false);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setShowInstallPrompt(false);
+      setIsAppInstalled(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
 
     // Check if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setShowInstallPrompt(false);
+      setIsAppInstalled(true);
     }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
@@ -1764,6 +1775,7 @@ function App() {
     
     if (outcome === 'accepted') {
       console.log('✅ App installed');
+      setIsAppInstalled(true);
     }
     
     setDeferredPrompt(null);
@@ -1886,18 +1898,29 @@ function App() {
                     <span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
                   </button>
                   
-                  {deferredPrompt && (
-                    <button 
-                      className="menu-item"
-                      onClick={() => {
+                  <button 
+                    className="menu-item"
+                    onClick={() => {
+                      if (deferredPrompt) {
                         handleInstallClick();
                         setShowMenuDropdown(false);
-                      }}
-                    >
-                      <Smartphone size={18}/>
-                      <span>Install as App</span>
-                    </button>
-                  )}
+                      }
+                    }}
+                    disabled={!deferredPrompt}
+                    style={{
+                      cursor: deferredPrompt ? 'pointer' : 'default',
+                      opacity: deferredPrompt ? 1 : 0.6
+                    }}
+                  >
+                    <Smartphone size={18}/>
+                    <span>
+                      {isAppInstalled 
+                        ? '✓ App Installed' 
+                        : deferredPrompt 
+                          ? 'Install as App' 
+                          : 'Install (Desktop Only)'}
+                    </span>
+                  </button>
                   
                   <div className="menu-divider"></div>
                   
