@@ -78,6 +78,33 @@ function App() {
   });
   const [showStarredPanel, setShowStarredPanel] = useState(false);
 
+  // Read receipts & last seen
+  const [readBy, setReadBy] = useState({}); // { msgId: [usernames] }
+  const [userLastSeen, setUserLastSeen] = useState({}); // { username: timestamp }
+  const [reactionCounts, setReactionCounts] = useState({}); // { msgId: { emoji: count } }
+  
+  // Quick reply templates
+  const [quickReplyTemplates, setQuickReplyTemplates] = useState([
+    'Got it! 👍',
+    'Thanks for the info!',
+    'Let me look into it 🔍',
+    'I agree 💯',
+    'Not sure, let me check 🤔',
+    'ASAP! ⚡'
+  ]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  
+  // Mention notifications
+  const [mentionedMessages, setMentionedMessages] = useState([]);
+  const [recentMentions, setRecentMentions] = useState(0);
+
+  // Conversation stats
+  const [conversationStats, setConversationStats] = useState({
+    totalMessages: 0,
+    totalUsers: 0,
+    avgMessageLength: 0,
+    mostActiveMember: null
+  });
   
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -180,6 +207,57 @@ function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Mention detection, read receipts & conversation stats
+  useEffect(() => {
+    if (chat.length === 0) return;
+    
+    // Update read receipts (mark messages as read by current user)
+    setReadBy(prev => {
+      const updated = { ...prev };
+      chat.forEach(msg => {
+        if (!updated[msg._id]) updated[msg._id] = [];
+        if (username && !updated[msg._id].includes(username)) {
+          updated[msg._id] = [...updated[msg._id], username];
+        }
+      });
+      return updated;
+    });
+
+    // Detect mentions and track notification count
+    const mentions = chat.filter(msg => 
+      msg.text.includes(`@${username}`) || msg.text.includes('@everyone')
+    );
+    setMentionedMessages(mentions);
+    setRecentMentions(mentions.filter(m => m.sender !== username).length);
+
+    // Calculate conversation stats
+    const totalMessages = chat.length;
+    const uniqueUsers = new Set(chat.map(m => m.sender)).size;
+    const avgLength = totalMessages > 0 ? chat.reduce((sum, m) => sum + (m.text?.length || 0), 0) / totalMessages : 0;
+    const senderCounts = {};
+    chat.forEach(m => senderCounts[m.sender] = (senderCounts[m.sender] || 0) + 1);
+    const mostActive = Object.entries(senderCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    setConversationStats({
+      totalMessages,
+      totalUsers: uniqueUsers,
+      avgMessageLength: Math.round(avgLength),
+      mostActiveMember: mostActive
+    });
+
+    // Update last seen for each user
+    const now = Date.now();
+    setUserLastSeen(prev => {
+      const updated = { ...prev };
+      chat.forEach(msg => {
+        if (msg.sender && !updated[msg.sender]) {
+          updated[msg.sender] = now;
+        }
+      });
+      return updated;
+    });
+  }, [chat, username]);
 
   // Session management - restore from sessionStorage on mount
   useEffect(() => {
@@ -1730,6 +1808,46 @@ function App() {
                     <Users size={18}/>
                     <span>Conversations</span>
                   </button>
+
+                  <button 
+                    className="menu-item"
+                    onClick={() => setShowQuickReplies(!showQuickReplies)}
+                    title="Quick reply templates"
+                  >
+                    <MessageSquare size={18}/>
+                    <span>Quick Replies</span>
+                  </button>
+
+                  {recentMentions > 0 && (
+                    <button 
+                      className="menu-item"
+                      onClick={() => {
+                        setChat(prev => {
+                          const firstMention = mentionedMessages[0];
+                          if (firstMention && msgRefsMap.current[firstMention._id]) {
+                            msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                          return prev;
+                        });
+                        setShowMenuDropdown(false);
+                      }}
+                      title={`You have ${recentMentions} mention${recentMentions !== 1 ? 's' : ''}`}
+                    >
+                      <AtSign size={18}/>
+                      <span>Mentions {recentMentions > 0 && <span className="menu-badge">{recentMentions}</span>}</span>
+                    </button>
+                  )}
+
+                  <button 
+                    className="menu-item"
+                    onClick={() => setShowMenuDropdown(false)}
+                    title="Conversation statistics"
+                  >
+                    <Hash size={18}/>
+                    <span>
+                      Stats: {conversationStats.totalMessages} msgs, {conversationStats.totalUsers} users
+                    </span>
+                  </button>
                   
                   <div className="menu-divider"></div>
                   
@@ -2086,13 +2204,27 @@ function App() {
                   </div>
                 )}
                 
+                {Object.entries(reactions).reduce((total, [_, users]) => total + users.length, 0) > 0 && (
+                  <div className="reaction-summary">
+                    {Object.entries(reactions).map(([emoji, users]) => {
+                      const userList = users.join(', ');
+                      const count = users.length;
+                      return (
+                        <span key={emoji} className="reaction-count" title={userList}>
+                          {emoji} {count > 1 ? `+${count - 1}` : ''}
+                        </span>
+                      );
+                    }).slice(0, 3)}
+                  </div>
+                )}
+                
                 <div className="msg-footer">
                   <span className="timestamp" title={new Date(m.time).toLocaleString()}>
                     {formatRelativeTime(m.time)}
                   </span>
-                  {m.readBy && m.readBy.length > 0 && (
-                    <span className="read-receipt" title={`Read by: ${m.readBy.join(', ')}`}>
-                      <CheckCircle size={10} /> {m.readBy.length}
+                  {isOwn && readBy[m._id]?.length > 1 && (
+                    <span className="read-receipt" title={`Read by: ${readBy[m._id].slice(1).join(', ')}`}>
+                      <CheckCircle size={11} /> {readBy[m._id].length - 1}
                     </span>
                   )}
                 </div>
@@ -2160,6 +2292,36 @@ function App() {
           <span>{uploadProgress || 'Uploading file...'}</span>
         </div>
       )}
+
+      {/* Quick replies panel */}
+      <AnimatePresence>
+        {showQuickReplies && (
+          <motion.div 
+            className="quick-replies-panel"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="quick-replies-content">
+              {quickReplyTemplates.map((template, idx) => (
+                <button
+                  key={idx}
+                  className="quick-reply-btn"
+                  onClick={() => {
+                    setMessage(template);
+                    setShowQuickReplies(false);
+                    textareaRef.current?.focus();
+                  }}
+                  title={template}
+                >
+                  {template}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="chat-footer">
         {/* Hidden file inputs */}

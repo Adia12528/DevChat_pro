@@ -211,6 +211,8 @@ body {
 
 .login-card { 
   background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: var(--space-8) var(--space-6); 
@@ -1932,8 +1934,8 @@ body {
 
 .edit-modal { 
   background: var(--glass-bg); 
-  backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border); 
   border-radius: var(--radius-xl); 
   max-width: 500px; 
@@ -3204,6 +3206,11 @@ body {
   z-index: 1000;
   -webkit-user-select: none;
   -moz-user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-select: none;
   user-select: none;
   animation: contextMenuIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -5134,4 +5141,232 @@ textarea.whatsapp-input {
   text-overflow: ellipsis;
   white-space: nowrap;
   opacity: 0.85;
+}
+
+/* ============================================================
+   v2.13 — Enhanced Conversation Features
+   ============================================================ */
+
+/* QUICK REPLY TEMPLATES PANEL */
+.quick-replies-panel {
+  background: var(--glass-bg, rgba(32,44,51,0.9));
+  border-bottom: 1px solid var(--divider, rgba(255,255,255,0.06));
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+.quick-replies-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-reply-btn {
+  background: var(--primary-muted, rgba(0,168,132,0.15));
+  color: var(--txt, #e9edef);
+  border: 1px solid var(--primary, #00a884);
+  padding: 8px 14px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast, 0.15s);
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.quick-reply-btn:hover {
+  background: var(--primary, #00a884);
+  color: #000;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.3));
+}
+.quick-reply-btn:active {
+  transform: translateY(0);
+}
+
+/* READ RECEIPTS - Blue checkmarks */
+.read-receipt {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--primary, #00a884);
+  margin-left: 6px;
+  line-height: 1;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+.read-receipt:hover {
+  opacity: 1;
+}
+
+/* REACTION SUMMARY - Below message */
+.reaction-summary {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.reaction-count {
+  background: var(--primary-muted, rgba(0,168,132,0.15));
+  color: var(--txt, #e9edef);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s);
+  user-select: none;
+}
+.reaction-count:hover {
+  background: var(--primary-muted, rgba(0,168,132,0.25));
+  transform: scale(1.05);
+}
+
+/* MENTION HIGHLIGHTING */
+.mention-highlight {
+  background: var(--primary-muted, rgba(0,168,132,0.2));
+  color: var(--primary, #00a884);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.mention-highlight:hover {
+  background: var(--primary-muted, rgba(0,168,132,0.35));
+}
+.msg-bubble.mentioned { }
+
+/* ENHANCED MESSAGE FOOTER */
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.timestamp {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.2;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.msg-bubble:hover .timestamp {
+  opacity: 1;
+}
+.other .timestamp {
+  color: var(--txt-muted, #8696a0);
+}
+
+/* LAST SEEN INDICATOR (optional) */
+.last-seen-badge {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--txt-muted, #8696a0);
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface, #202c33);
+  border: 1px solid var(--border, rgba(255,255,255,0.06));
+  white-space: nowrap;
+}
+
+/* ENHANCED CONVERSATION STAT DISPLAY IN MENU */
+.menu-item[title*="Conversation statistics"] {
+  font-size: 13px;
+  color: var(--txt-muted, #8696a0);
+}
+.menu-item[title*="Conversation statistics"]:hover {
+  background: transparent;
+  color: var(--txt-muted, #8696a0);
+}
+
+/* MESSAGE GROUPING IMPROVEMENTS */
+.msg-bubble.grouped {
+  margin-top: 1px;
+}
+
+/* MENTION NOTIFICATION BADGE */
+.mention-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ff5722;
+  color: white;
+  border-radius: 999 px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  animation: pulse 2s infinite;
+}
+
+/* CONVERSATION STATS HEADER ENHANCEMENT */
+.meta .room-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.meta .room-info span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* REACTION ITEM IMPROVEMENTS */
+.reaction-item {
+  position: relative;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--primary-muted, rgba(0,168,132,0.1));
+  border: 1px solid var(--primary-muted, rgba(0,168,132,0.2));
+  font-size: 12px;
+  transition: all var(--transition-fast, 0.15s);
+  cursor: pointer;
+}
+.reaction-item:hover {
+  background: var(--primary, #00a884);
+  border-color: var(--primary, #00a884);
+  transform: scale(1.1);
+}
+.reaction-item.reacted {
+  background: var(--primary, #00a884);
+  border-color: var(--primary, #00a884);
+  color: #000;
+  font-weight: 600;
+}
+
+/* MESSAGE REACTIONS CONTAINER */
+.message-reactions {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+/* MEDIA VIEWER ENHANCEMENTS */
+@media (max-width: 600px) {
+  .quick-replies-content {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .quick-reply-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+  .reaction-summary {
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .msg-footer {
+    gap: 3px;
+    margin-top: 3px;
+  }
 }
