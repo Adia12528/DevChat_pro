@@ -20,7 +20,7 @@ if (-not $message) {
 # If still no message, use guided mode
 if (-not $message -and $type) {
     $detail = Read-Host "Enter what you changed"
-    $message = "$type: $detail"
+    $message = "${type}: $detail"
 } elseif (-not $message) {
     Write-Host "Error: No commit message provided"
     exit 1
