@@ -629,7 +629,12 @@ function App() {
 
   const handleFileUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+    
+    console.log(`📁 File selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB, ${file.type})`);
     
     // Validate file size (10MB max)
     const maxSize = 10 * 1024 * 1024;
@@ -691,6 +696,8 @@ function App() {
         const data = await res.json();
         
         if (data.error) throw new Error(data.error.message);
+        
+        console.log(`✅ File uploaded successfully: ${data.secure_url}`);
         
         const messageText = caption || file.name;
         
@@ -971,9 +978,12 @@ function App() {
   const startVoiceRecording = useCallback(async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setErrorMessage('Voice recording not supported in this browser. Please use Chrome, Safari, or Firefox.');
-      setTimeout(() => setErrorMessage(''), 4000);
+      setTimeout(() => setErrorMessage(''), 5000);
       return;
     }
+    
+    console.log('🎙️ Requesting microphone access...');
+    setUploadProgress('Requesting microphone access...');
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -986,17 +996,30 @@ function App() {
       
       // Determine best audio format for the device
       let mimeType = 'audio/webm';
+      let fileExtension = 'webm';
+      
       if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
         mimeType = 'audio/webm;codecs=opus';
+        fileExtension = 'webm';
       } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
         mimeType = 'audio/mp4';
+        fileExtension = 'mp4';
       } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
         mimeType = 'audio/ogg;codecs=opus';
+        fileExtension = 'ogg';
       }
+      
+      console.log(`🎤 Using audio format: ${mimeType}`);
+      
+      setUploadProgress('');
       
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      
+      // Store mimeType and extension for later use
+      mediaRecorder.customMimeType = mimeType;
+      mediaRecorder.customExtension = fileExtension;
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -1005,11 +1028,18 @@ function App() {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        // Use the correct mimeType that was set during recording
+        const actualMimeType = mediaRecorder.customMimeType || 'audio/webm';
+        const fileExt = mediaRecorder.customExtension || 'webm';
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         stream.getTracks().forEach(track => track.stop());
+        
+        console.log(`📦 Created audio blob: ${(audioBlob.size / 1024).toFixed(2)} KB, type: ${actualMimeType}`);
         
         // Check if cancelled (very short recording)
         if (recordingTime < 1) {
+          console.log('⏹️ Recording cancelled (too short)');
           setIsRecording(false);
           setRecordingTime(0);
           setRecordingLocked(false);
@@ -1024,13 +1054,26 @@ function App() {
           return;
         }
         
+        // Validate blob has content
+        if (audioBlob.size === 0) {
+          setErrorMessage('Recording failed - no audio captured. Please try again.');
+          setTimeout(() => setErrorMessage(''), 4000);
+          setIsRecording(false);
+          setRecordingTime(0);
+          setRecordingLocked(false);
+          setSlideDistance(0);
+          return;
+        }
+        
         setUploadingFile(true);
         setUploadProgress('Uploading voice message...');
         
         // Upload to Cloudinary with retry
         const formData = new FormData();
-        formData.append('file', audioBlob, 'voice-message.webm');
+        formData.append('file', audioBlob, `voice-message.${fileExt}`);
         formData.append('upload_preset', 'devchat_uploads');
+        
+        console.log(`⬆️ Uploading ${(audioBlob.size / 1024).toFixed(2)} KB as voice-message.${fileExt}`);
         
         let retries = 3;
         while (retries > 0) {
@@ -1106,6 +1149,8 @@ function App() {
       }, 1000);
     } catch (error) {
       console.error('Failed to start recording:', error);
+      setUploadProgress('');
+      
       if (error.name === 'NotAllowedError') {
         setErrorMessage('Microphone access denied. Please allow microphone access.');
       } else if (error.name === 'NotFoundError') {
