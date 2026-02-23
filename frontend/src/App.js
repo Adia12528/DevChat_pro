@@ -531,6 +531,7 @@ function App() {
       } else {
         setOnlineUsers((prev) => prev.filter(u => u !== data.username));
       }
+      setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
 
@@ -545,6 +546,7 @@ function App() {
     newSocket.on("user_offline", (data) => {
       console.log("🔌 User went offline:", data.username);
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
 
@@ -552,6 +554,7 @@ function App() {
     newSocket.on("user_logout", (data) => {
       console.log("🚪 User logged out:", data.username);
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
 
@@ -639,6 +642,11 @@ function App() {
     });
 
     // WebRTC Signaling Events
+    newSocket.on("user_status_changed", (data) => {
+      console.log("🔄 User status changed:", data.username, "→", data.status);
+      setUserStatus(prev => ({ ...prev, [data.username]: data.status }));
+    });
+
     newSocket.on("call:incoming", async (data) => {
       console.log("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
       console.log("🔔 Setting incomingCall state and playing ringtone");
