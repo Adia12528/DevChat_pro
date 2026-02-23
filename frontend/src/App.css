@@ -1,9 +1,9 @@
 ﻿:root { 
-  --bg: #111b21; 
-  --header: #202c33; 
+  --bg: #0a1014; 
+  --header: #1c2730; 
   --green: #00a884; 
-  --me: #005c4b; 
-  --other: #2a3942; 
+  --me: #056162; 
+  --other: #1f2c34; 
   --txt: #e9edef; 
   --gray: #8696a0;
   --border: #2a3942;
@@ -11,8 +11,8 @@
 
 /* Light theme */
 [data-theme="light"] {
-  --bg: #efeae2;
-  --header: #f0f2f5;
+  --bg: #f0f2f5;
+  --header: #ffffff;
   --green: #00a884;
   --me: #d9fdd3;
   --other: #ffffff;
@@ -242,7 +242,7 @@ body {
   flex: 1; 
   overflow-y: auto; 
   padding: 12px; 
-  background: #0a1014;
+  background: #0d1418;
   display: flex; 
   flex-direction: column; 
   gap: 4px;
@@ -270,6 +270,7 @@ body {
 .me { 
   align-self: flex-end; 
   background: var(--me); 
+  color: #ffffff;
   border-radius: 7.5px;
   border-top-right-radius: 0;
 }
@@ -277,6 +278,7 @@ body {
 .other { 
   align-self: flex-start; 
   background: var(--other); 
+  color: var(--txt);
   border-radius: 7.5px;
   border-top-left-radius: 0;
 }
@@ -1311,10 +1313,12 @@ body {
 
 [data-theme="light"] .msg-bubble.me {
   color: #111b21;
+  background: #d9fdd3;
 }
 
 [data-theme="light"] .msg-bubble.other {
   color: #111b21;
+  background: #ffffff;
 }
 
 /* MEDIA VIEWER OVERLAY */
@@ -1439,6 +1443,7 @@ body {
   right: 0;
   bottom: 0;
   background: rgba(0,0,0,0.4);
+  -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   display: flex;
   flex-direction: column;
@@ -1455,6 +1460,49 @@ body {
 
 .image-container:hover .image-overlay {
   opacity: 1;
+}
+
+/* Image and Voice Message Wrappers */
+.image-message-wrapper,
+.voice-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.media-download-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  color: var(--txt);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-start;
+  font-weight: 500;
+}
+
+.media-download-btn:hover {
+  background: rgba(255,255,255,0.15);
+  transform: translateY(-1px);
+}
+
+.media-download-btn:active {
+  transform: translateY(0);
+}
+
+[data-theme="light"] .media-download-btn {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.1);
+}
+
+[data-theme="light"] .media-download-btn:hover {
+  background: rgba(0,0,0,0.1);
 }
 
 /* VOICE PLAYER MODAL */
