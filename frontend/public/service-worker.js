@@ -1,6 +1,6 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'devchat-pro-v2.10.1-b1771880755217';
+const CACHE_NAME = 'devchat-pro-v2.10.1-b1771881821025';
 const urlsToCache = [
   '/',
   '/static/css/main.css',
