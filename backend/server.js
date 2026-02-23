@@ -7,9 +7,6 @@ require('dotenv').config();
 
 const app = express();
 
-// 🛠️ Render Keep-Alive Hack
-app.get('/ping', (req, res) => res.status(200).send('pong'));
-
 // CORS Configuration - Allow all Vercel deployments and localhost
 const allowedOrigins = [
     'https://devchat-pro-frontend.vercel.app',
@@ -37,6 +34,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// 🛠️ Render Keep-Alive Hack (MUST be after CORS middleware)
+app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 const server = http.createServer(app);
 
