@@ -10,26 +10,57 @@ const app = express();
 // 🛠️ Render Keep-Alive Hack
 app.get('/ping', (req, res) => res.status(200).send('pong'));
 
-app.use(cors());
+// CORS Configuration - Allow all Vercel deployments and localhost
+const allowedOrigins = [
+    'https://dev-chat-pro.vercel.app',
+    'https://devchat-pro.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5000'
+];
+
+const corsOptions = {
+    origin: function(origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        // Check if origin is in allowed list or is a Vercel preview URL
+        if (allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
+            callback(null, true);
+        } else {
+            console.log('⚠️ CORS origin:', origin);
+            callback(null, true); // Allow for now, can restrict later
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const server = http.createServer(app);
 
-// 🔌 Production Socket Configuration
+// 🔌 Production Socket Configuration with flexible CORS
 const io = new Server(server, { 
     cors: { 
-        origin: [
-            "https://dev-chat-pro.vercel.app",
-            "https://dev-chat-pro-adia12528s-projects.vercel.app",
-            "http://localhost:3000",
-            "http://localhost:5000"
-        ],
+        origin: function(origin, callback) {
+            if (!origin) return callback(null, true);
+            // Allow all Vercel preview and production URLs
+            if (allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
+                callback(null, true);
+            } else {
+                console.log('⚠️ Socket CORS origin:', origin);
+                callback(null, true); // Allow for now
+            }
+        },
         methods: ["GET", "POST"],
         credentials: true
     },
     transports: ['websocket', 'polling'],
     pingInterval: 25000,
-    pingTimeout: 60000
+    pingTimeout: 60000,
+    allowEIO3: true
 });
 
 const PORT = process.env.PORT || 5000;
