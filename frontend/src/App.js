@@ -2238,6 +2238,14 @@ function App() {
     return null;
   }, [activeRoom, room, rooms, username]);
 
+  const isSelectedUserOnline = useMemo(() => {
+    if (!selectedUser) return false;
+    return onlineUsers.some((user) => {
+      if (typeof user === 'string') return user === selectedUser;
+      return user?.username === selectedUser;
+    });
+  }, [onlineUsers, selectedUser]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -2443,7 +2451,7 @@ function App() {
         </div>
         
         {/* Call Buttons - Only show when a user is selected in DM */}
-        {selectedUser && onlineUsers.find(u => u.username === selectedUser) && callState !== 'active' && (
+        {selectedUser && isSelectedUserOnline && callState !== 'active' && (
           <div className="call-buttons">
             <button 
               className="call-btn voice-call-btn"
