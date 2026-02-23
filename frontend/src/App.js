@@ -691,16 +691,23 @@ function App() {
     while (retries > 0) {
       try {
         setUploadProgress(`Uploading... (${4 - retries}/3)`);
+        console.log(`🔄 Upload attempt ${4 - retries} of 3`);
         const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
           method: 'POST',
           body: formData
         });
         
-        if (!res.ok) throw new Error('Upload failed with status ' + res.status);
-        
         const data = await res.json();
         
-        if (data.error) throw new Error(data.error.message);
+        if (!res.ok) {
+          console.error('❌ Cloudinary error response:', data);
+          throw new Error(data.error?.message || `Upload failed with status ${res.status}`);
+        }
+        
+        if (data.error) {
+          console.error('❌ Cloudinary returned error:', data.error);
+          throw new Error(data.error.message);
+        }
         
         console.log(`✅ File uploaded successfully: ${data.secure_url}`);
         
@@ -730,12 +737,13 @@ function App() {
         setImageCaption('');
         break;
       } catch (error) {
-        console.error('Upload attempt failed:', error);
+        console.error(`❌ Upload attempt ${4 - retries} failed:`, error.message);
         retries--;
         if (retries === 0) {
-          setErrorMessage('Upload failed after 3 attempts. Check your connection.');
+          setErrorMessage(`Upload failed: ${error.message}. Check your connection and try again.`);
           setTimeout(() => setErrorMessage(''), 5000);
         } else {
+          console.log(`🔄 Retrying... (${retries} attempts left)`);
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
@@ -1090,22 +1098,29 @@ function App() {
         const formData = new FormData();
         formData.append('file', audioBlob, `voice-message.${fileExt}`);
         formData.append('upload_preset', 'devchat_uploads');
+        formData.append('resource_type', 'video'); // Audio files use 'video' resource type in Cloudinary
         
-        console.log(`⬆️ Uploading ${(audioBlob.size / 1024).toFixed(2)} KB as voice-message.${fileExt}`);
+        console.log(`⬆️ Uploading voice: ${(audioBlob.size / 1024).toFixed(2)} KB as voice-message.${fileExt}, type: ${actualMimeType}`);
         
         let retries = 3;
         while (retries > 0) {
           try {
-            const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
+            const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/video/upload', {
               method: 'POST',
               body: formData
             });
             
-            if (!res.ok) throw new Error('Upload failed');
-            
             const data = await res.json();
             
-            if (data.error) throw new Error(data.error.message);
+            if (!res.ok) {
+              console.error('❌ Cloudinary error response:', data);
+              throw new Error(data.error?.message || `Upload failed with status ${res.status}`);
+            }
+            
+            if (data.error) {
+              console.error('❌ Cloudinary returned error:', data.error);
+              throw new Error(data.error.message);
+            }
             
             console.log(`📤 Sending voice message:`, {
               type: 'voice',
@@ -1126,12 +1141,13 @@ function App() {
             setTimeout(() => setSuccessMessage(''), 2000);
             break;
           } catch (error) {
-            console.error('Voice upload attempt failed:', error);
+            console.error(`❌ Voice upload attempt ${4 - retries} failed:`, error.message);
             retries--;
             if (retries === 0) {
-              setErrorMessage('Failed to send voice message. Try again.');
-              setTimeout(() => setErrorMessage(''), 4000);
+              setErrorMessage(`Failed to send voice message: ${error.message}. Please try again.`);
+              setTimeout(() => setErrorMessage(''), 5000);
             } else {
+              console.log(`🔄 Retrying... (${retries} attempts left)`);
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
