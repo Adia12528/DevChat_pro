@@ -129,8 +129,13 @@ io.on('connection', (socket) => {
 
     socket.on('send_message', async (data) => {
         if (!data.text?.trim()) return;
-        const newMessage = new Message({ ...data, type: 'text' });
+        // Preserve the type from client data (text, image, voice, file)
+        const newMessage = new Message({ 
+            ...data, 
+            type: data.type || 'text' // Use client-provided type or default to 'text'
+        });
         const savedMessage = await newMessage.save();
+        console.log(`📤 Message saved: ${savedMessage.type} - ${savedMessage.text?.substring(0, 30)}`);
         io.to(data.room).emit("receive_message", serializeMessage(savedMessage));
         io.to(data.room).emit('user_stopped_typing', data.sender);
     });

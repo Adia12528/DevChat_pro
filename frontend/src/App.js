@@ -332,7 +332,12 @@ function App() {
     };
 
     newSocket.on("receive_message", (data) => {
-      console.log("💬 Received message:", data);
+      console.log("💬 Received message:", {
+        type: data.type,
+        sender: data.sender,
+        hasFileUrl: !!data.fileUrl,
+        text: data.text?.substring(0, 30)
+      });
       
       // Prevent duplicate messages
       if (lastMessageIdRef.current === data._id) return;
@@ -700,12 +705,19 @@ function App() {
         console.log(`✅ File uploaded successfully: ${data.secure_url}`);
         
         const messageText = caption || file.name;
+        const messageType = file.type.startsWith('image/') ? 'image' : 'file';
+        
+        console.log(`📤 Sending ${messageType} message:`, {
+          type: messageType,
+          fileUrl: data.secure_url,
+          fileName: file.name
+        });
         
         socketRef.current?.emit("send_message", { 
           room: roomRef.current, 
           sender: usernameRef.current, 
           text: messageText,
-          type: file.type.startsWith('image/') ? 'image' : 'file',
+          type: messageType,
           fileUrl: data.secure_url,
           fileName: file.name,
           fileSize: file.size
@@ -1088,6 +1100,12 @@ function App() {
             const data = await res.json();
             
             if (data.error) throw new Error(data.error.message);
+            
+            console.log(`📤 Sending voice message:`, {
+              type: 'voice',
+              fileUrl: data.secure_url,
+              duration: recordingTime
+            });
             
             socketRef.current?.emit("send_message", {
               room: roomRef.current,
