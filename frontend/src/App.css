@@ -5237,7 +5237,6 @@ textarea.whatsapp-input {
 .mention-highlight:hover {
   background: var(--primary-muted, rgba(0,168,132,0.35));
 }
-.msg-bubble.mentioned { }
 
 /* ENHANCED MESSAGE FOOTER */
 .msg-footer {
