@@ -838,7 +838,10 @@ function App() {
     
     if (isInteractive) return;
     
-    e.preventDefault();
+    // Only preventDefault if event is cancelable
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     e.stopPropagation();
     
     const x = e.clientX || e.touches?.[0]?.clientX || 0;
@@ -889,7 +892,10 @@ function App() {
     const timer = setTimeout(() => {
       const touch = e.touches?.[0];
       if (touch) {
-        e.preventDefault();
+        // Only preventDefault if event is cancelable to avoid console warnings
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         handleContextMenu({ 
           preventDefault: () => {}, 
           stopPropagation: () => {},
@@ -1235,19 +1241,50 @@ function App() {
     startVoiceRecording();
   }, [startVoiceRecording]);
 
-  const playVoiceMessage = useCallback((audioUrl, msgId) => {
+  const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
+    console.log(`🎵 Play voice message requested: ${msgId}`);
+    
     if (playingVoiceId === msgId) {
+      // Pause currently playing audio
       audioRef.current?.pause();
+      console.log('⏸️ Voice paused');
       setPlayingVoiceId(null);
     } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
+      try {
+        // Stop any currently playing audio
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        
+        console.log('🎧 Creating new audio:', audioUrl);
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        
+        // Set up event handlers before playing
+        audio.onended = () => {
+          console.log('✅ Voice playback ended');
+          setPlayingVoiceId(null);
+        };
+        
+        audio.onerror = (error) => {
+          console.error('❌ Audio playback error:', error);
+          setErrorMessage('Failed to play voice message. File may be corrupted.');
+          setTimeout(() => setErrorMessage(''), 4000);
+          setPlayingVoiceId(null);
+        };
+        
+        // Play returns a promise - handle it properly
+        setPlayingVoiceId(msgId);
+        await audio.play();
+        console.log('▶️ Voice playing');
+      } catch (error) {
+        console.error('❌ Failed to play voice:', error);
+        setErrorMessage('Unable to play voice message. Try again or check your browser settings.');
+        setTimeout(() => setErrorMessage(''), 4000);
+        setPlayingVoiceId(null);
+        audioRef.current = null;
       }
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      audio.play();
-      setPlayingVoiceId(msgId);
-      audio.onended = () => setPlayingVoiceId(null);
     }
   }, [playingVoiceId]);
 
@@ -1672,6 +1709,10 @@ function App() {
                         className="voice-play-btn"
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (!m.fileUrl) {
+                            console.error('❌ No fileUrl for voice message');
+                            return;
+                          }
                           playVoiceMessage(m.fileUrl, m._id);
                         }}
                         title={playingVoiceId === m._id ? 'Pause' : 'Play'}
