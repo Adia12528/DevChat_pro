@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, MicOff, Camera, Volume2, VolumeX, Play, Pause, File, FileText, ChevronDown, Bell, BellOff, Check, Trash, Forward, ArrowDown, MessageSquare } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,9 +10,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { APP_VERSION, BUILD_DATE } from './version';
 import './App.css';
-import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
+import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👏'];
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
 function App() {
   // Existing state
@@ -85,6 +85,16 @@ function App() {
   // Menu dropdown state
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
   
+  // Confirmation modals
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  
+  // Pinned messages panel
+  const [showPinnedPanel, setShowPinnedPanel] = useState(false);
+  
+  // Message refs for scroll-to-reply
+  const msgRefsMap = useRef({});
+  
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuMessage, setContextMenuMessage] = useState(null);
@@ -109,6 +119,7 @@ function App() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingIntervalRef = useRef(null);
+  const recordingTimeRef = useRef(0);
   const audioRef = useRef(null);
   const usernameRef = useRef("");
   const roomRef = useRef("");
@@ -120,6 +131,33 @@ function App() {
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
+
+  // Update tab title with unread count
+  useEffect(() => {
+    document.title = unreadCount > 0 ? `(${unreadCount}) DevChat Pro` : 'DevChat Pro';
+    return () => { document.title = 'DevChat Pro'; };
+  }, [unreadCount]);
+
+  // Escape key closes all modals
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showEmojiPicker) { setShowEmojiPicker(false); return; }
+      if (showMenuDropdown) { setShowMenuDropdown(false); return; }
+      if (showPinnedPanel) { setShowPinnedPanel(false); return; }
+      if (showClearConfirm) { setShowClearConfirm(false); return; }
+      if (showLogoutConfirm) { setShowLogoutConfirm(false); return; }
+      if (editingMsgId) { setEditingMsgId(null); return; }
+      if (showDeleteConfirm) { setShowDeleteConfirm(false); return; }
+      if (replyingTo) { setReplyingTo(null); return; }
+      if (contextMenu) { setContextMenu(null); setContextMenuMessage(null); return; }
+      if (imageViewer) { setImageViewer(null); return; }
+      if (voicePlayer) { setVoicePlayer(null); setPlayingVoiceId(null); if (audioRef.current) audioRef.current.pause(); return; }
+      if (isRecording) { cancelVoiceRecording(); }
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [showEmojiPicker, showMenuDropdown, showPinnedPanel, showClearConfirm, showLogoutConfirm, editingMsgId, showDeleteConfirm, replyingTo, contextMenu, imageViewer, voicePlayer, isRecording, cancelVoiceRecording]);
 
   // Version logging
   useEffect(() => {
@@ -956,6 +994,16 @@ function App() {
     URL.revokeObjectURL(url);
   }, [chat, room]);
 
+  // Scroll to a specific message by ID (used for scroll-to-reply)
+  const scrollToMessage = useCallback((messageId) => {
+    const el = msgRefsMap.current[messageId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('msg-highlight');
+      setTimeout(() => el.classList.remove('msg-highlight'), 1500);
+    }
+  }, []);
+
   const handleCopyMessage = useCallback((text, msgId) => {
     copyToClipboard(text);
     setCopiedMsgId(msgId);
@@ -1298,13 +1346,16 @@ function App() {
         const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
         stream.getTracks().forEach(track => track.stop());
         
-        console.log(`📦 Created audio blob: ${(audioBlob.size / 1024).toFixed(2)} KB, type: ${actualMimeType}`);
+        // Get the actual recording time from ref (avoids stale closure)
+        const actualRecordingTime = recordingTimeRef.current;
+        console.log(`📦 Created audio blob: ${(audioBlob.size / 1024).toFixed(2)} KB, type: ${actualMimeType}, duration: ${actualRecordingTime}s`);
         
         // Check if cancelled (very short recording)
-        if (recordingTime < 1) {
+        if (actualRecordingTime < 1) {
           console.log('⏹️ Recording cancelled (too short)');
           setIsRecording(false);
           setRecordingTime(0);
+          recordingTimeRef.current = 0;
           setRecordingLocked(false);
           setSlideDistance(0);
           return;
@@ -1362,7 +1413,7 @@ function App() {
             console.log(`📤 Sending voice message:`, {
               type: 'voice',
               fileUrl: data.secure_url,
-              duration: recordingTime
+              duration: actualRecordingTime
             });
             
             socketRef.current?.emit("send_message", {
@@ -1371,7 +1422,7 @@ function App() {
               text: 'Voice message',
               type: 'voice',
               fileUrl: data.secure_url,
-              duration: recordingTime
+              duration: actualRecordingTime
             });
             
             setSuccessMessage('Voice message sent!');
@@ -1392,6 +1443,8 @@ function App() {
         
         setUploadingFile(false);
         setUploadProgress('');
+        setRecordingTime(0);
+        recordingTimeRef.current = 0;
         setRecordingLocked(false);
         setSlideDistance(0);
       };
@@ -1401,6 +1454,8 @@ function App() {
         setErrorMessage('Recording failed. Please try again.');
         setTimeout(() => setErrorMessage(''), 4000);
         setIsRecording(false);
+        setRecordingTime(0);
+        recordingTimeRef.current = 0;
         setRecordingLocked(false);
         setSlideDistance(0);
         stream.getTracks().forEach(track => track.stop());
@@ -1409,19 +1464,22 @@ function App() {
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      recordingTimeRef.current = 0;
       setRecordingLocked(false);
       setSlideDistance(0);
       
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime(t => {
+          const newTime = t + 1;
+          recordingTimeRef.current = newTime; // Keep ref in sync
           // Auto-stop at 2 minutes
-          if (t >= 120) {
+          if (newTime >= 120) {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
               mediaRecorderRef.current.stop();
             }
             return 120;
           }
-          return t + 1;
+          return newTime;
         });
       }, 1000);
     } catch (error) {
@@ -1461,6 +1519,7 @@ function App() {
       audioChunksRef.current = [];
       setIsRecording(false);
       setRecordingTime(0);
+      recordingTimeRef.current = 0;
       setRecordingLocked(false);
       setSlideDistance(0);
     }
@@ -1583,36 +1642,32 @@ function App() {
     setShowInstallPrompt(false);
   }, [deferredPrompt]);
 
-  const handleLogout = useCallback(() => {
-    // Confirm logout
-    if (window.confirm('Are you sure you want to logout?')) {
-      console.log('🚪 Logging out...');
-      
-      // Disconnect socket
-      if (socketRef.current) {
-        socketRef.current.emit('update_status', { username: usernameRef.current, status: 'offline' });
-        socketRef.current.emit('leave_room', { room: roomRef.current, username: usernameRef.current });
-        socketRef.current.disconnect();
-      }
-      
-      // Clear session data (sessionStorage clears automatically on browser close)
-      sessionStorage.removeItem('chatUsername');
-      sessionStorage.removeItem('chatRoom');
-      
-      // Reset state
-      setUsername('');
-      setRoom('');
-      setShowChat(false);
-      setChat([]);
-      setOnlineUsers([]);
-      setTypingUsers(new Set());
-      setConnected(false);
-      setMessage('');
-      setSearchQuery('');
-      setShowMenuDropdown(false);
-      
-      console.log('✅ Logged out successfully');
+  const performLogout = useCallback(() => {
+    console.log('🚪 Logging out...');
+    if (socketRef.current) {
+      socketRef.current.emit('update_status', { username: usernameRef.current, status: 'offline' });
+      socketRef.current.emit('leave_room', { room: roomRef.current, username: usernameRef.current });
+      socketRef.current.disconnect();
     }
+    sessionStorage.removeItem('chatUsername');
+    sessionStorage.removeItem('chatRoom');
+    setUsername('');
+    setRoom('');
+    setShowChat(false);
+    setChat([]);
+    setOnlineUsers([]);
+    setTypingUsers(new Set());
+    setConnected(false);
+    setMessage('');
+    setSearchQuery('');
+    setShowMenuDropdown(false);
+    setShowLogoutConfirm(false);
+    console.log('✅ Logged out successfully');
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    setShowLogoutConfirm(true);
+    setShowMenuDropdown(false);
   }, []);
 
   if (!showChat) return (
@@ -1620,8 +1675,8 @@ function App() {
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
         <Zap color="#00a884" size={48} fill="#00a884" />
         <h2 className="brand">DevChat <span>Pro+</span></h2>
-        <div className="input-group"><User size={18}/><input placeholder="Name" onChange={e => setUsername(e.target.value)} /></div>
-        <div className="input-group"><Hash size={18}/><input placeholder="Room ID" onChange={e => setRoom(e.target.value)} /></div>
+        <div className="input-group"><User size={18}/><input placeholder="Name" onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
+        <div className="input-group"><Hash size={18}/><input placeholder="Room ID" onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
         <button className="join-btn" onClick={joinRoom}>Enter Chat</button>
       </motion.div>
     </div>
@@ -1773,11 +1828,11 @@ function App() {
         <button 
           className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`}
           onClick={() => setSoundEnabled(!soundEnabled)}
-          title={soundEnabled ? "Sound on" : "Sound off"}
+          title={soundEnabled ? "Mute notifications" : "Unmute notifications"}
         >
-          🔔
+          {soundEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}
         </button>
-        <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", roomRef.current)}><Trash2 size={18}/></button>
+        <button className="clear-btn" onClick={() => setShowClearConfirm(true)} title="Clear all messages"><Trash2 size={18}/></button>
       </div>
 
       <div className="search-bar">
@@ -1799,11 +1854,37 @@ function App() {
       </div>
 
       {pinnedMessages.length > 0 && (
-        <div className="pinned-messages-bar">
+        <div className="pinned-messages-bar" onClick={() => setShowPinnedPanel(p => !p)} style={{cursor:'pointer'}}>
           <Pin size={14} />
           <span>{pinnedMessages.length} pinned message{pinnedMessages.length > 1 ? 's' : ''}</span>
+          <ChevronDown size={14} style={{marginLeft:'auto', transform: showPinnedPanel ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}} />
         </div>
       )}
+      <AnimatePresence>
+        {showPinnedPanel && pinnedMessages.length > 0 && (
+          <motion.div
+            className="pinned-panel"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            style={{ overflow: 'hidden' }}
+          >
+            {pinnedMessages.map((pm, idx) => (
+              <div
+                key={pm._id || idx}
+                className="pinned-panel-item"
+                onClick={() => { scrollToMessage(pm._id); setShowPinnedPanel(false); }}
+              >
+                <Pin size={12} />
+                <span className="pinned-panel-text">
+                  {pm.type === 'image' ? '📷 Photo' : pm.type === 'voice' ? '🎤 Voice' : (pm.text || '').substring(0, 60)}
+                </span>
+                <span className="pinned-panel-sender">{pm.sender}</span>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {onlineUsers.length > 0 && (
         <div className="users-list">
@@ -1846,29 +1927,21 @@ function App() {
         )}
         
         <AnimatePresence>
-          {filteredChat.map((m, i) => {
-            const msgId = `${i}-${m.time}`;
+          {filteredChat.flatMap((m, i) => {
             const isOwn = m.sender === username;
             const reactions = m.reactions || {};
-            
-            // Debug log for media messages
-            if (m.type === 'image' || m.type === 'voice') {
-              console.log(`📋 Rendering ${m.type} message:`, {
-                sender: m.sender,
-                isOwn,
-                hasFileUrl: !!m.fileUrl,
-                fileUrl: m.fileUrl?.substring(0, 50) + '...',
-                duration: m.duration
-              });
-            }
-            
-            return (
+            const grouped = i > 0 && isGroupedMessage(m, filteredChat[i - 1]);
+            const showDateSep = i === 0 || needsDateSeparator(m.time, filteredChat[i - 1]?.time);
+
+            const bubble = (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} 
                 animate={{ opacity: 1, y: 0 }} 
                 exit={{ opacity: 0, y: -10 }}
-                key={i} 
-                className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""}`}
+                key={`msg-${m._id || i}`}
+                id={`msg-${m._id}`}
+                ref={el => { if (el && m._id) msgRefsMap.current[m._id] = el; }}
+                className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""} ${grouped ? "grouped" : ""}`}
                 onContextMenu={(e) => handleContextMenu(e, m)}
                 onTouchStart={(e) => handleLongPressStart(e, m)}
                 onTouchEnd={handleLongPressEnd}
@@ -1879,12 +1952,28 @@ function App() {
                 {m.isPinned && <Pin size={12} className="pin-icon" />}
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
                 
-                {m.replyTo && (
-                  <div className="reply-preview">
-                    <Reply size={12} />
-                    <span>Replying to message</span>
-                  </div>
-                )}
+                {m.replyTo && (() => {
+                  const repliedMsg = chat.find(c => c._id === m.replyTo);
+                  return (
+                    <div
+                      className="reply-preview"
+                      onClick={() => scrollToMessage(m.replyTo)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Reply size={12} />
+                      <div className="reply-preview-content">
+                        <span className="reply-preview-sender">{repliedMsg?.sender || 'Unknown'}</span>
+                        <span className="reply-preview-text">
+                          {repliedMsg?.type === 'image' ? '📷 Photo' :
+                           repliedMsg?.type === 'voice' ? '🎤 Voice message' :
+                           repliedMsg?.type === 'file' ? `📎 ${repliedMsg?.fileName || 'File'}` :
+                           ((repliedMsg?.text || '').substring(0, 60) + ((repliedMsg?.text || '').length > 60 ? '...' : ''))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()
+                }
                 
                 {m.type === 'image' ? (
                   <div className="image-message-wrapper">
@@ -1949,8 +2038,13 @@ function App() {
                     )}
                   </div>
                 ) : m.type === 'file' ? (
-                  <a href={m.fileUrl} download={m.fileName} className="file-link">
-                    📎 {m.fileName} ({(m.fileSize / 1024).toFixed(1)} KB)
+                  <a href={m.fileUrl} download={m.fileName} className="file-card" onClick={e => e.stopPropagation()}>
+                    <div className="file-card-icon"><FileText size={20}/></div>
+                    <div className="file-card-info">
+                      <span className="file-card-name">{m.fileName || 'File'}</span>
+                      <span className="file-card-size">{m.fileSize ? formatFileSize(m.fileSize) : 'Download'}</span>
+                    </div>
+                    <Download size={16} />
                   </a>
                 ) : m.type === 'voice' ? (
                   <div className="voice-message-wrapper">
@@ -1982,7 +2076,7 @@ function App() {
                             }}
                             title={playingVoiceId === m._id ? 'Pause' : 'Play'}
                           >
-                            {playingVoiceId === m._id ? '⏸️' : '▶️'}
+                            {playingVoiceId === m._id ? <Pause size={16}/> : <Play size={16}/>}
                           </button>
                           <div className="voice-waveform">
                             <span className="voice-duration">{m.duration || 0}s</span>
@@ -2037,6 +2131,16 @@ function App() {
                 </div>
               </motion.div>
             );
+            const items = [];
+            if (showDateSep) {
+              items.push(
+                <div key={`sep-${m.time || i}`} className="date-separator">
+                  <span className="date-separator-text">{formatDateSeparator(m.time)}</span>
+                </div>
+              );
+            }
+            items.push(bubble);
+            return items;
           })}
         </AnimatePresence>
 
@@ -2126,7 +2230,7 @@ function App() {
           disabled={!connected || uploadingFile}
           title="Take photo"
         >
-          📷
+          <Camera size={22}/>
         </button>
         
         {/* Main input container - WhatsApp style */}
@@ -2170,7 +2274,7 @@ function App() {
             disabled={!connected}
             title={isRecording ? `Recording: ${recordingTime}s (click to stop)` : 'Click to record voice message'}
           >
-            {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
+            {isRecording ? <><span className="rec-dot"></span><span className="rec-time">{recordingTime}s</span></> : <Mic size={22}/>}
           </button>
         )}
       </div>
@@ -2232,6 +2336,7 @@ function App() {
               
               {/* Stop & Send button for desktop */}
               <button 
+                type="button"
                 className="stop-send-btn"
                 onClick={stopVoiceRecording}
                 title="Stop & Send"
@@ -2546,7 +2651,7 @@ function App() {
                     onClick={() => switchRoom(r.id)}
                   >
                     <div className="room-icon">
-                      {r.type === 'dm' ? '💬' : '#'}
+                      {r.type === 'dm' ? <MessageSquare size={16}/> : '#'}
                     </div>
                     <span>{r.name}</span>
                   </button>
@@ -2679,7 +2784,7 @@ function App() {
                   className="context-menu-item danger"
                   onClick={() => handleContextMenuAction('delete')}
                 >
-                  <X size={16} />
+                  <Trash2 size={16} />
                   <span>Delete</span>
                 </button>
               </>
@@ -2779,7 +2884,7 @@ function App() {
                     className="voice-player-play-btn"
                     onClick={() => playVoiceMessage(voicePlayer.url, 'modal')}
                   >
-                    {playingVoiceId === 'modal' ? '⏸️' : '▶️'}
+                    {playingVoiceId === 'modal' ? <Pause size={20}/> : <Play size={20}/>}
                   </button>
                   <div className="voice-player-info">
                     <span className="voice-player-duration">{voicePlayer.duration}s</span>
@@ -2795,6 +2900,81 @@ function App() {
                 >
                   <Download size={20} />
                   <span>Download</span>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Clear Chat Confirmation Modal */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <motion.div
+            className="delete-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowClearConfirm(false)}
+          >
+            <motion.div
+              className="delete-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="delete-modal-icon">
+                <Trash2 size={48} color="var(--error, #f44336)" />
+              </div>
+              <h3>Clear All Messages?</h3>
+              <p>This will permanently delete all <strong>{chat.length}</strong> messages in <strong>{room}</strong> for everyone. This action cannot be undone.</p>
+              <div className="delete-modal-footer">
+                <button className="btn-cancel" onClick={() => setShowClearConfirm(false)} type="button">Cancel</button>
+                <button
+                  className="btn-delete"
+                  onClick={() => { socketRef.current?.emit("clear_chat", roomRef.current); setShowClearConfirm(false); }}
+                  type="button"
+                >
+                  Clear All
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <motion.div
+            className="delete-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowLogoutConfirm(false)}
+          >
+            <motion.div
+              className="delete-modal"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="delete-modal-icon">
+                <LogOut size={48} color="var(--warning, #ff9800)" />
+              </div>
+              <h3>Logout?</h3>
+              <p>You'll be signed out as <strong>{username}</strong> and your session will end. Messages are still saved.</p>
+              <div className="delete-modal-footer">
+                <button className="btn-cancel" onClick={() => setShowLogoutConfirm(false)} type="button">Stay</button>
+                <button
+                  className="btn-delete"
+                  style={{ background: 'var(--warning, #ff9800)' }}
+                  onClick={performLogout}
+                  type="button"
+                >
+                  Logout
                 </button>
               </div>
             </motion.div>

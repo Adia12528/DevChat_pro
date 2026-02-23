@@ -1,3 +1,37 @@
+// Format date for chat date separators (Today / Yesterday / full date)
+export const formatDateSeparator = (timestamp) => {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+// Check if two messages should have a date separator between them
+export const needsDateSeparator = (timestamp, prevTimestamp) => {
+  if (!prevTimestamp) return true;
+  return new Date(timestamp).toDateString() !== new Date(prevTimestamp).toDateString();
+};
+
+// Check if a message should be visually grouped with previous (same sender, within 2 mins)
+export const isGroupedMessage = (msg, prevMsg) => {
+  if (!prevMsg) return false;
+  if (msg.sender !== prevMsg.sender) return false;
+  if (msg.type !== prevMsg.type && (msg.type || prevMsg.type)) return false;
+  const diff = new Date(msg.time) - new Date(prevMsg.time);
+  return diff < 2 * 60 * 1000; // within 2 minutes
+};
+
+// Format file size nicely
+export const formatFileSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 // Relative time formatter (e.g., "5 mins ago")
 export const formatRelativeTime = (timestamp) => {
   const now = new Date();
