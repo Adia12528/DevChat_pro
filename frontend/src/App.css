@@ -303,10 +303,75 @@ body {
 
 .chat-img { 
   max-width: 100%; 
-  max-height: 300px;
+  width: 100%;
+  max-height: 400px;
+  min-height: 150px;
   border-radius: 8px; 
-  margin-top: 4px; 
-  object-fit: cover;
+  display: block;
+  object-fit: contain;
+  background: rgba(0,0,0,0.05);
+  cursor: pointer;
+}
+
+/* Image Container */
+.image-container {
+  position: relative;
+  max-width: 100%;
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-error {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  color: var(--gray);
+  gap: 10px;
+}
+
+.image-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.image-container:hover .image-actions {
+  opacity: 1;
+}
+
+.download-btn {
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(10px);
+  color: white;
+  border: none;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  min-width: 32px;
+  min-height: 32px;
+  text-decoration: none;
+}
+
+.download-btn:hover {
+  background: rgba(0,0,0,0.9);
+  transform: scale(1.1);
+}
+
+.download-btn:active {
+  transform: scale(0.95);
 }
 
 /* Typing indicator */
@@ -657,23 +722,32 @@ body {
   display: flex; 
   align-items: center; 
   gap: 10px; 
-  padding: 6px 0; 
-  min-width: 180px; 
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 20px;
+  min-width: 220px;
+  margin: 4px 0;
 }
 
 .voice-play-btn { 
   background: var(--green); 
   border: none; 
   color: white; 
-  width: 38px; 
-  height: 38px; 
+  width: 40px; 
+  height: 40px; 
   border-radius: 50%; 
   cursor: pointer; 
   font-size: 14px; 
   display: flex; 
   align-items: center; 
   justify-content: center; 
-  transition: transform 0.2s; 
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.voice-play-btn:hover {
+  background: #06cf87;
+  transform: scale(1.05);
 }
 
 .voice-play-btn:active { 
@@ -682,17 +756,45 @@ body {
 
 .voice-waveform { 
   flex: 1; 
-  height: 26px; 
-  background: rgba(255,255,255,0.1);
-  border-radius: 13px; 
+  height: 32px; 
+  background: rgba(255,255,255,0.08);
+  border-radius: 16px; 
   display: flex; 
   align-items: center; 
-  padding: 0 10px; 
+  justify-content: center;
+  padding: 0 12px; 
 }
 
 .voice-duration { 
-  font-size: 11px; 
-  color: rgba(255,255,255,0.6);
+  font-size: 12px; 
+  font-weight: 500;
+  color: rgba(255,255,255,0.8);
+}
+
+.voice-download-btn {
+  background: rgba(255,255,255,0.1);
+  color: var(--txt);
+  border: none;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  min-width: 32px;
+  min-height: 32px;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.voice-download-btn:hover {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.1);
+}
+
+.voice-download-btn:active {
+  transform: scale(0.95);
 }
 
 .voice-record-btn { 

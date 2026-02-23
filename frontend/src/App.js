@@ -1115,7 +1115,31 @@ export default function App() {
                 )}
                 
                 {m.type === 'image' ? (
-                  <img src={m.fileUrl || m.text} className="chat-img" alt="shared" />
+                  <div className="image-container">
+                    <img 
+                      src={m.fileUrl || m.text} 
+                      className="chat-img" 
+                      alt="shared"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                    <div className="image-error" style={{display: 'none'}}>
+                      <ImageIcon size={32} />
+                      <span>Image failed to load</span>
+                    </div>
+                    <div className="image-actions">
+                      <a 
+                        href={m.fileUrl || m.text} 
+                        download={`image-${new Date(m.time).getTime()}.jpg`}
+                        className="download-btn"
+                        title="Download image"
+                      >
+                        <Download size={16} />
+                      </a>
+                    </div>
+                  </div>
                 ) : m.type === 'file' ? (
                   <a href={m.fileUrl} download={m.fileName} className="file-link">
                     📎 {m.fileName} ({(m.fileSize / 1024).toFixed(1)} KB)
@@ -1125,12 +1149,22 @@ export default function App() {
                     <button 
                       className="voice-play-btn"
                       onClick={() => playVoiceMessage(m.fileUrl, m._id)}
+                      title={playingVoiceId === m._id ? 'Pause' : 'Play'}
                     >
                       {playingVoiceId === m._id ? '⏸️' : '▶️'}
                     </button>
                     <div className="voice-waveform">
                       <span className="voice-duration">{m.duration || 0}s</span>
                     </div>
+                    <a 
+                      href={m.fileUrl} 
+                      download={`voice-${new Date(m.time).getTime()}.webm`}
+                      className="voice-download-btn"
+                      title="Download voice message"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Download size={16} />
+                    </a>
                   </div>
                 ) : renderMessageText(m)}
                 
