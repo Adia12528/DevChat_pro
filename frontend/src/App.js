@@ -1,4 +1,4 @@
-// DevChat Pro v2.8.0 - Updated CORS configuration for new Vercel deployment
+// DevChat Pro v2.9.0 - Fixed Service Worker cache versioning
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
