@@ -1117,14 +1117,14 @@ function App() {
         const formData = new FormData();
         formData.append('file', audioBlob, `voice-message.${fileExt}`);
         formData.append('upload_preset', 'devchat_uploads');
-        formData.append('resource_type', 'video'); // Audio files use 'video' resource type in Cloudinary
+        formData.append('resource_type', 'auto'); // Let Cloudinary auto-detect audio format
         
         console.log(`⬆️ Uploading voice: ${(audioBlob.size / 1024).toFixed(2)} KB as voice-message.${fileExt}, type: ${actualMimeType}`);
         
         let retries = 3;
         while (retries > 0) {
           try {
-            const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/video/upload', {
+            const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
               method: 'POST',
               body: formData
             });
@@ -1275,6 +1275,23 @@ function App() {
     setStartX(touch.clientX);
     startVoiceRecording();
   }, [startVoiceRecording]);
+  
+  // Desktop click handler - toggle recording on/off
+  const handleDesktopRecordingClick = useCallback((e) => {
+    // Prevent if this is a touch event (mobile)
+    if (e.type === 'touchstart' || e.type === 'touchend') return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isRecording) {
+      // Stop recording
+      stopVoiceRecording();
+    } else {
+      // Start recording
+      startVoiceRecording();
+    }
+  }, [isRecording, startVoiceRecording, stopVoiceRecording]);
 
   const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
     console.log(`🎵 Play voice message requested: ${msgId}`);
@@ -1948,15 +1965,12 @@ function App() {
         ) : (
           <button
             className={`voice-record-btn whatsapp-action-btn ${isRecording ? 'recording' : ''}`}
-            onMouseDown={handleRecordingStart}
+            onClick={handleDesktopRecordingClick}
             onTouchStart={handleRecordingStart}
-            onMouseMove={handleRecordingSlide}
             onTouchMove={handleRecordingSlide}
-            onMouseUp={recordingLocked ? undefined : stopVoiceRecording}
             onTouchEnd={recordingLocked ? undefined : stopVoiceRecording}
-            onMouseLeave={recordingLocked ? undefined : cancelVoiceRecording}
             disabled={!connected}
-            title={isRecording ? `Recording: ${recordingTime}s` : 'Hold for voice message'}
+            title={isRecording ? `Recording: ${recordingTime}s (click to stop)` : 'Click to record voice message'}
           >
             {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
           </button>
