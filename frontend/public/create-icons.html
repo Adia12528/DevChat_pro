@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Generate DevChat Icons</title>
 </head>
 <body>
@@ -16,7 +18,14 @@
     <script>
         function createIcon(canvasId, size) {
             const canvas = document.getElementById(canvasId);
+            if (!canvas) {
+                return;
+            }
+
             const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return;
+            }
             
             // Background
             ctx.fillStyle = '#00a884';
@@ -44,6 +53,9 @@
         setTimeout(() => {
             ['icon192', 'icon512'].forEach(id => {
                 const canvas = document.getElementById(id);
+                if (!canvas) {
+                    return;
+                }
                 const link = document.createElement('a');
                 link.download = `logo${id.replace('icon', '')}.png`;
                 link.href = canvas.toDataURL('image/png');
