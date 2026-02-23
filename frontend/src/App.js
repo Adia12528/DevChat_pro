@@ -13,6 +13,10 @@ import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColo
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👏'];
 const APP_VERSION = 'v2.5.0-context-menu'; // Version identifier for deployment verification
 
+console.log('🚀 DevChat Pro Version:', APP_VERSION);
+console.log('🔍 Build Date:', new Date().toISOString());
+console.log('✅ Context Menu Features: ENABLED');
+
 export default function App() {
   // Existing state
   const [username, setUsername] = useState("");
