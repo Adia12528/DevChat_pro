@@ -8,51 +8,58 @@ require('dotenv').config();
 const app = express();
 
 // CORS Configuration - Allow all Vercel deployments and localhost
+const frontendOrigin = process.env.FRONTEND_ORIGIN;
 const allowedOrigins = [
     'https://devchat-pro-frontend.vercel.app',
     'http://localhost:3000',
-    'http://localhost:5000'
-];
+    'http://localhost:5000',
+    frontendOrigin
+].filter(Boolean);
+
+const isAllowedOrigin = (origin) => {
+    if (!origin) return true;
+    return allowedOrigins.includes(origin) || origin.endsWith('.vercel.app');
+};
+
+const getOriginLabel = (origin) => origin || 'no-origin';
+
+const corsOriginHandler = (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+        callback(null, true);
+    } else {
+        console.log('⚠️ CORS blocked origin:', getOriginLabel(origin));
+        callback(new Error('Not allowed by CORS'));
+    }
+};
 
 const corsOptions = {
-    origin: function(origin, callback) {
-        // Allow requests with no origin (mobile apps, curl, postman, etc.)
-        if (!origin) return callback(null, true);
-        
-        // Check if origin is in allowed list or is a Vercel preview URL
-        if (allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
-            callback(null, true);
-        } else {
-            console.log('⚠️ CORS origin:', origin);
-            callback(null, true); // Allow for now, can restrict later
-        }
-    },
+    origin: corsOriginHandler,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 // 🛠️ Render Keep-Alive Hack (MUST be after CORS middleware)
 app.get('/ping', (req, res) => res.status(200).send('pong'));
+app.get('/healthz', (req, res) => {
+    res.status(200).json({
+        ok: true,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+    });
+});
 
 const server = http.createServer(app);
 
 // 🔌 Production Socket Configuration with flexible CORS
 const io = new Server(server, { 
     cors: { 
-        origin: function(origin, callback) {
-            if (!origin) return callback(null, true);
-            // Allow all Vercel preview and production URLs
-            if (allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
-                callback(null, true);
-            } else {
-                console.log('⚠️ Socket CORS origin:', origin);
-                callback(null, true); // Allow for now
-            }
-        },
+        origin: corsOriginHandler,
         methods: ["GET", "POST"],
         credentials: true
     },
@@ -106,6 +113,13 @@ const roomUsers = {};
 
 io.on('connection', (socket) => {
     console.log(`✅ Connected: ${socket.id}`);
+
+    const findTargetSocketInRoom = (room, targetUsername) => {
+        if (!room || !targetUsername || !roomUsers[room]) return null;
+        return Object.keys(roomUsers[room]).find(
+            sid => roomUsers[room][sid] === targetUsername
+        ) || null;
+    };
 
     socket.on('join_room', async (data) => {
         const room = typeof data === 'string' ? data : data.room;
@@ -260,9 +274,8 @@ io.on('connection', (socket) => {
         
         // Find target user's socket
         if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = Object.keys(roomUsers[socket.room]).find(
-                sid => roomUsers[socket.room][sid].username === data.to
-            );
+            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 call:offer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
                 io.to(targetSocket).emit('call:incoming', {
@@ -283,9 +296,8 @@ io.on('connection', (socket) => {
         console.log(`✅ Call answered: ${data.from} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = Object.keys(roomUsers[socket.room]).find(
-                sid => roomUsers[socket.room][sid].username === data.to
-            );
+            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 call:answer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
                 io.to(targetSocket).emit('call:answered', {
@@ -302,9 +314,8 @@ io.on('connection', (socket) => {
         console.log(`🧊 ICE candidate: ${socket.username} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = Object.keys(roomUsers[socket.room]).find(
-                sid => roomUsers[socket.room][sid].username === data.to
-            );
+            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 call:ice-candidate target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
                 io.to(targetSocket).emit('call:ice-candidate', {
@@ -320,9 +331,8 @@ io.on('connection', (socket) => {
         console.log(`❌ Call rejected: ${data.from} declined call from ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = Object.keys(roomUsers[socket.room]).find(
-                sid => roomUsers[socket.room][sid].username === data.to
-            );
+            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 call:reject target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
                 io.to(targetSocket).emit('call:rejected', {
@@ -337,9 +347,8 @@ io.on('connection', (socket) => {
         console.log(`📴 Call ended: ${data.from} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = Object.keys(roomUsers[socket.room]).find(
-                sid => roomUsers[socket.room][sid].username === data.to
-            );
+            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 call:end target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
                 io.to(targetSocket).emit('call:ended', {

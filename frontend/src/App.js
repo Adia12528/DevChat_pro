@@ -420,18 +420,17 @@ function App() {
   // Socket setup
   useEffect(() => {
     const isProduction = window.location.hostname !== 'localhost';
-    const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
-    
-    if (isProduction) fetch(BACKEND_URL + "/ping").catch(() => {});
+    const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || (isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000");
 
     const newSocket = io(BACKEND_URL, {
-        transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: Infinity,
         upgrade: true,
-        rejectUnauthorized: false
+      withCredentials: true,
+      timeout: 20000
     });
     socketRef.current = newSocket;
 
@@ -1819,6 +1818,11 @@ function App() {
 
   // DM functions
   const createDM = useCallback((targetUser) => {
+    if (!targetUser || targetUser === usernameRef.current) {
+      setErrorMessage('You can only start a DM with another user');
+      setTimeout(() => setErrorMessage(''), 2500);
+      return;
+    }
     const dmRoom = [username, targetUser].sort().join('_dm_');
     const existingRoom = rooms.find(r => r.id === dmRoom);
     if (!existingRoom) {
@@ -2626,6 +2630,15 @@ function App() {
                       >
                         @
                       </button>
+                      {user !== username && (
+                        <button
+                          className="user-dropdown-mention"
+                          onClick={() => createDM(user)}
+                          title={`Start DM with ${user}`}
+                        >
+                          DM
+                        </button>
+                      )}
                     </motion.div>
                   );
                 })
@@ -2699,6 +2712,18 @@ function App() {
                           <td className="joined-cell">{joinedDate}</td>
                           <td className="last-seen-cell">{lastSeenDate}</td>
                           <td className="action-cell">
+                            {user !== username && (
+                              <button
+                                className="mention-cell-btn"
+                                onClick={() => {
+                                  createDM(user);
+                                  setShowUsersModal(false);
+                                }}
+                                title={`Start DM with ${user}`}
+                              >
+                                DM
+                              </button>
+                            )}
                             <button 
                               className="mention-cell-btn"
                               onClick={() => {
