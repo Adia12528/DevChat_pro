@@ -2032,6 +2032,16 @@ function App() {
                   />
                 ))}
               </div>
+              
+              {/* Stop & Send button for desktop */}
+              <button 
+                className="stop-send-btn"
+                onClick={stopVoiceRecording}
+                title="Stop & Send"
+              >
+                <Send size={20} />
+                <span>Stop & Send</span>
+              </button>
             </div>
           </motion.div>
         )}

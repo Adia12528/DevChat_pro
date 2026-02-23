@@ -1007,6 +1007,34 @@ body {
   100% { height: 100%; }
 }
 
+/* Stop & Send button in recording overlay */
+.stop-send-btn {
+  background: var(--green);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  padding: 16px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+  margin-top: 16px;
+}
+
+.stop-send-btn:hover {
+  background: #1da65d;
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(37, 211, 102, 0.6);
+}
+
+.stop-send-btn:active {
+  transform: scale(0.98);
+}
+
 /* Image Preview Modal - WhatsApp Style */
 .image-preview-overlay {
   position: fixed;
