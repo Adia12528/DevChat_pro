@@ -13,17 +13,39 @@ const urlsToCache = [
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {
+  console.log('[ServiceWorker] Installing version:', CACHE_NAME);
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
+        console.log('[ServiceWorker] Opened cache:', CACHE_NAME);
         return cache.addAll(urlsToCache);
       })
       .catch((error) => {
-        console.log('Cache failed:', error);
+        console.log('[ServiceWorker] Cache failed:', error);
       })
   );
+  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
+});
+
+// Activate event - claim clients immediately
+self.addEventListener('activate', (event) => {
+  console.log('[ServiceWorker] Activating version:', CACHE_NAME);
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[ServiceWorker] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => {
+      console.log('[ServiceWorker] Claiming clients');
+      return self.clients.claim();
+    })
+  );
 });
 
 // Fetch event - serve from cache, fallback to network
