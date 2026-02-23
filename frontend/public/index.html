@@ -2,24 +2,87 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="color-scheme" content="dark light" />
+    
+    <!-- PWA Configuration -->
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="DevChat Pro" />
+    
+    <!-- iOS Specific -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="DevChat Pro" />
+    <link rel="apple-touch-icon" href="/logo192.png" />
+    <link rel="apple-touch-startup-image" href="/logo512.png" />
+    
+    <!-- Windows Specific -->
+    <meta name="msapplication-TileColor" content="#00a884" />
+    <meta name="msapplication-TileImage" content="/logo192.png" />
+    <meta name="msapplication-config" content="/browserconfig.xml" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    
+    <!-- Android Specific -->
+    <meta name="theme-color" content="#00a884" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b141a" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    
+    <!-- Performance & Caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
+    
+    <!-- Security -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <!-- Behavior -->
     <meta name="format-detection" content="telephone=no" />
-    <title>DevChat Pro v2.10.0</title>
+    <meta name="format-detection" content="date=no" />
+    <meta name="format-detection" content="address=no" />
+    <meta name="format-detection" content="email=no" />
+    
+    <!-- SEO & Social -->
+    <meta name="description" content="DevChat Pro - Feature-rich real-time chat application with voice messages, reactions, and more. Works on Windows, Android, iOS, and macOS." />
+    <meta name="keywords" content="chat, messaging, real-time, voice messages, reactions, cross-platform" />
+    <meta name="author" content="DevChat Pro" />
+    
+    <title>DevChat Pro v2.10.1</title>
+    
     <style>
-      html, body { width: 100%; height: 100%; position: fixed; overflow: hidden; }
-      #root { width: 100%; height: 100%; }
+      html, body { 
+        width: 100%; 
+        height: 100%; 
+        position: fixed; 
+        overflow: hidden; 
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        touch-action: pan-y;
+      }
+      #root { 
+        width: 100%; 
+        height: 100%;
+        /* Support for safe areas (notched devices) */
+        padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+      }
+      /* Loading state */
+      .app-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #0b141a;
+        color: #00a884;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      }
     </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-loading">
+        <div>Loading DevChat Pro...</div>
+      </div>
+    </div>
   </body>
 </html>

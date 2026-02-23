@@ -1,7 +1,7 @@
 {
   "short_name": "DevChat Pro",
   "name": "DevChat Pro - Real-time Chat Application",
-  "description": "Feature-rich real-time chat with voice messages, reactions, markdown, and private DMs",
+  "description": "Feature-rich real-time chat with voice messages, reactions, markdown, and private DMs. Works on Windows, Android, iOS, and macOS.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -25,9 +25,17 @@
   "display": "standalone",
   "theme_color": "#00a884",
   "background_color": "#0b141a",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "categories": ["social", "productivity"],
+  "screenshots": [],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
   "shortcuts": [
     {
       "name": "New Chat",
@@ -35,6 +43,25 @@
       "description": "Start a new chat room",
       "url": "/",
       "icons": [{ "src": "favicon.ico", "sizes": "64x64" }]
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "image/*": [".jpg", ".jpeg", ".png", ".gif", ".webp"],
+        "text/plain": [".txt"]
+      }
     }
   ]
 }

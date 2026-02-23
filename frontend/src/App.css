@@ -74,6 +74,16 @@
   --radius-xl: 24px;
   --radius-full: 9999px;
   
+  /* Safe Area Insets - For notched devices (iPhone X+, Android) */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  
+  /* Touch Target Sizes - Mobile optimized */
+  --touch-target-min: 44px; /* iOS human interface guidelines */
+  --touch-target-comfortable: 48px; /* Android material design */
+  
   /* Legacy compatibility */
   --green: var(--primary);
   --gray: var(--txt-secondary);
@@ -5986,3 +5996,285 @@ textarea.whatsapp-input {
   }
 }
 
+/* ============================================
+   CROSS-PLATFORM OPTIMIZATIONS
+   Windows, Android, iOS, macOS Support
+   ============================================ */
+
+/* Safe Area Insets - For notched devices */
+.chat-header {
+  padding-left: max(var(--space-4), var(--safe-area-left));
+  padding-right: max(var(--space-4), var(--safe-area-right));
+  padding-top: max(var(--space-3), var(--safe-area-top));
+}
+
+.App {
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
+}
+
+/* Touch Target Optimization - Mobile */
+@media (hover: none) and (pointer: coarse) {
+  /* Increase touch targets for mobile devices */
+  button, .btn, .icon-btn, .menu-item, .user-item {
+    min-height: var(--touch-target-comfortable);
+    min-width: var(--touch-target-comfortable);
+  }
+  
+  /* Better spacing for touch interfaces */
+  .msg-actions {
+    gap: 12px;
+  }
+  
+  .reaction-picker button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Larger click areas for interactive elements */
+  .msg-bubble {
+    margin: 8px 0;
+  }
+  
+  /* Prevent accidental zooming on input focus (iOS) */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Windows-Specific Optimizations */
+@supports (-ms-ime-align: auto) {
+  /* Windows scrollbar styling */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--txt-muted) transparent;
+  }
+  
+  /* Windows drag regions for PWA */
+  .chat-header {
+    -webkit-app-region: drag;
+  }
+  
+  .chat-header button,
+  .chat-header input,
+  .chat-header select,
+  .chat-header .meta {
+    -webkit-app-region: no-drag;
+  }
+}
+
+/* macOS-Specific Optimizations */
+@supports (-webkit-backdrop-filter: blur(1px)) {
+  @media (min-width: 1024px) {
+    /* Enhanced glass effect on macOS */
+    .chat-header,
+    .sidebar,
+    .pinned-panel {
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      backdrop-filter: blur(40px) saturate(180%);
+    }
+  }
+}
+
+/* Android-Specific Optimizations */
+@media (max-width: 768px) and (hover: none) {
+  /* Material Design touch ripple simulation */
+  button:active,
+  .btn:active,
+  .icon-btn:active {
+    transform: scale(0.95);
+    transition: transform 0.1s;
+  }
+  
+  /* Better keyboard handling on Android */
+  .chat-messages {
+    padding-bottom: calc(80px + var(--safe-area-bottom));
+  }
+  
+  /* Prevent overscroll bounce on Android Chrome */
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* iOS-Specific Optimizations */
+@supports (-webkit-touch-callout: none) {
+  /* iOS safe area support */
+  .chat-header {
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  
+  /* iOS keyboard handling */
+  .chat-input-wrapper {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  
+  /* Prevent iOS text selection issues */
+  .msg-bubble img,
+  .avatar,
+  .icon-btn {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Fix iOS input zoom */
+  select,
+  textarea,
+  input[type="text"],
+  input[type="search"] {
+    font-size: 16px;
+  }
+}
+
+/* Landscape Mode Optimizations - Mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Compact header in landscape */
+  .chat-header {
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+  
+  /* Hide non-essential UI in landscape */
+  .conversation-stats-panel,
+  .pinned-panel {
+    max-height: 60vh;
+  }
+  
+  /* Maximize chat area */
+  .chat-messages {
+    flex: 1;
+  }
+}
+
+/* High DPI / Retina Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Sharper borders on high-DPI screens */
+  .msg-bubble,
+  .input-pill,
+  .btn {
+    border-width: 0.5px;
+  }
+}
+
+/* Reduced Motion - Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .msg-bubble {
+    animation: none !important;
+  }
+}
+
+/* Dark Mode Optimization - System Level */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+  }
+}
+
+/* PWA Display Mode Detection */
+@media (display-mode: standalone) {
+  /* Hide browser-specific UI when running as installed app */
+  .pwa-install-prompt {
+    display: none;
+  }
+  
+  /* Add extra padding for standalone mode */
+  .chat-header {
+    padding-top: max(var(--space-3), var(--safe-area-top), 8px);
+  }
+}
+
+@media (display-mode: minimal-ui) {
+  /* Optimizations for minimal-ui mode */
+  .chat-header {
+    border-top: 1px solid var(--divider);
+  }
+}
+
+/* Tablet Optimizations */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Hybrid touch-desktop layout for tablets */
+  .chat-container {
+    max-width: 100%;
+  }
+  
+  /* Comfortable touch targets on tablets */
+  button,
+  .btn,
+  .icon-btn {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  
+  /* Optimized spacing */
+  .chat-messages {
+    padding: 16px 24px;
+  }
+}
+
+/* Foldable Devices Support */
+@media (horizontal-viewport-segments: 2) {
+  .App {
+    display: grid;
+    grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
+  }
+}
+
+/* Print Styles - Desktop */
+@media print {
+  .chat-header,
+  .chat-input-wrapper,
+  .sidebar,
+  .pinned-panel,
+  button,
+  .msg-actions {
+    display: none !important;
+  }
+  
+  .chat-messages {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .msg-bubble {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/* Performance Optimization - GPU Acceleration */
+.msg-bubble,
+.chat-header,
+.sidebar,
+.menu-dropdown,
+.modal-overlay {
+  will-change: transform;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* Network Status Handling */
+@media (prefers-reduced-data: reduce) {
+  /* Reduce data usage when requested */
+  * {
+    background-image: none !important;
+  }
+  
+  .msg-bubble img {
+    opacity: 0.7;
+  }
+}
