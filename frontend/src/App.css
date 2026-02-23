@@ -702,14 +702,154 @@ body {
 
 .chat-footer { 
   background: var(--header); 
-  padding: 8px 12px; 
+  padding: 10px 16px; 
   display: flex; 
-  gap: 8px; 
-  align-items: center;
+  gap: 10px; 
+  align-items: flex-end;
   min-height: 62px;
   border-top: 1px solid var(--border);
 }
 
+/* WHATSAPP-STYLE INPUT WRAPPER */
+.whatsapp-input-wrapper {
+  flex: 1;
+  background: var(--bg);
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  gap: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.whatsapp-input-wrapper:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 2px 8px rgba(0, 168, 132, 0.15);
+}
+
+.whatsapp-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--txt);
+  font-size: 15px;
+  padding: 4px 0;
+  min-height: 24px;
+}
+
+.whatsapp-input::placeholder {
+  color: var(--gray);
+  opacity: 0.7;
+}
+
+.whatsapp-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* EMOJI BUTTON INLINE */
+.emoji-btn-inline {
+  background: transparent;
+  border: none;
+  color: var(--gray);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.emoji-btn-inline:hover:not(:disabled) {
+  color: var(--green);
+  transform: scale(1.1);
+}
+
+.emoji-btn-inline:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.emoji-btn-inline:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* WHATSAPP ACTION BUTTONS */
+.whatsapp-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--gray);
+  cursor: pointer;
+  padding: 10px;
+  min-width: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.whatsapp-action-btn:hover:not(:disabled) {
+  background: rgba(0, 168, 132, 0.1);
+  color: var(--green);
+}
+
+.whatsapp-action-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.whatsapp-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.whatsapp-action-btn.recording {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+  animation: pulse-record 1.5s infinite;
+}
+
+/* WHATSAPP SEND BUTTON */
+.whatsapp-send {
+  background: var(--green);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  min-width: 48px;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.whatsapp-send:hover:not(:disabled) {
+  background: #06cf87;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 168, 132, 0.3);
+}
+
+.whatsapp-send:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.whatsapp-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* OLD STYLES - KEEPING FOR BACKWARD COMPATIBILITY */
 .chat-footer input { 
   flex: 1; 
   background: var(--bg); 
@@ -722,7 +862,7 @@ body {
   min-height: 42px; 
   border: 2px solid transparent;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  min-width: 0; /* Allow flex shrinking */
+  min-width: 0;
 }
 
 .chat-footer input:focus {
@@ -1234,16 +1374,40 @@ body {
   
   .chat-footer { 
     padding: 8px; 
-    gap: 6px; 
+    gap: 8px; 
     min-height: 54px;
+  }
+  
+  .whatsapp-input-wrapper {
+    padding: 6px 12px;
+  }
+  
+  .whatsapp-input {
+    font-size: 16px; /* Prevents iOS zoom */
+  }
+  
+  .whatsapp-action-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+  }
+  
+  .whatsapp-send {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+  }
+  
+  .emoji-btn-inline {
+    padding: 6px;
   }
   
   .chat-footer input { 
     padding: 10px 12px; 
-    font-size: 16px; /* Prevents iOS zoom */
+    font-size: 16px;
     min-height: 44px;
     flex: 1;
-    min-width: 100px; /* Ensure input doesn't shrink too much */
+    min-width: 100px;
   }
   
   .send-btn { 
@@ -1848,8 +2012,26 @@ body {
   }
   
   .chat-footer { 
-    padding: 8px; 
+    padding: 6px; 
     gap: 6px;
+  }
+  
+  .whatsapp-input-wrapper {
+    padding: 6px 10px;
+  }
+  
+  .whatsapp-action-btn {
+    min-width: 40px;
+    min-height: 40px;
+    width: 40px;
+    height: 40px;
+    padding: 6px;
+  }
+  
+  .whatsapp-send {
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
   }
   
   .chat-footer input {
@@ -2217,6 +2399,54 @@ body {
 
 [data-theme="light"] .voice-waveform {
   background: rgba(0,0,0,0.05);
+}
+
+/* WHATSAPP LIGHT THEME */
+[data-theme="light"] .chat-footer {
+  background: #f0f2f5;
+}
+
+[data-theme="light"] .whatsapp-input-wrapper {
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(11, 20, 26, 0.08);
+}
+
+[data-theme="light"] .whatsapp-input-wrapper:focus-within {
+  border-color: #00a884;
+  box-shadow: 0 2px 8px rgba(0, 168, 132, 0.15);
+}
+
+[data-theme="light"] .whatsapp-input {
+  color: #111b21;
+}
+
+[data-theme="light"] .whatsapp-input::placeholder {
+  color: #667781;
+}
+
+[data-theme="light"] .emoji-btn-inline {
+  color: #54656f;
+}
+
+[data-theme="light"] .emoji-btn-inline:hover:not(:disabled) {
+  color: #00a884;
+}
+
+[data-theme="light"] .whatsapp-action-btn {
+  color: #54656f;
+}
+
+[data-theme="light"] .whatsapp-action-btn:hover:not(:disabled) {
+  background: rgba(0, 168, 132, 0.1);
+  color: #00a884;
+}
+
+[data-theme="light"] .whatsapp-send {
+  background: #00a884;
+}
+
+[data-theme="light"] .whatsapp-send:hover:not(:disabled) {
+  background: #06cf87;
 }
 
 [data-theme="light"] .voice-message:hover {
@@ -2977,6 +3207,27 @@ body {
   .chat-footer {
     padding: 6px;
     gap: 4px;
+  }
+  
+  .whatsapp-input-wrapper {
+    padding: 5px 8px;
+  }
+  
+  .whatsapp-action-btn {
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+    padding: 5px;
+  }
+  
+  .whatsapp-send {
+    min-width: 40px;
+    width: 40px;
+    height: 40px;
+  }
+  
+  .emoji-btn-inline {
+    padding: 4px;
   }
   
   .emoji-btn,

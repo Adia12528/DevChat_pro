@@ -1543,38 +1543,58 @@ function App() {
           style={{ display: 'none' }}
           accept="image/*,application/pdf,.doc,.docx"
         />
+        
+        {/* Left action buttons */}
         <button
-          className="file-upload-btn"
+          className="file-upload-btn whatsapp-action-btn"
           onClick={() => fileInputRef.current?.click()}
           disabled={!connected || uploadingFile}
+          title="Attach file"
         >
-          <ImageIcon size={20} />
+          <ImageIcon size={22} />
         </button>
-        <button
-          className={`voice-record-btn ${isRecording ? 'recording' : ''}`}
-          onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-          disabled={!connected}
-          title={isRecording ? `Recording: ${recordingTime}s` : 'Record voice message'}
-        >
-          {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
-        </button>
-        <button
-          className="emoji-btn"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          disabled={!connected}
-        >
-          <Smile size={20} />
-        </button>
-        <input 
-          disabled={!connected}
-          value={message} 
-          placeholder={connected ? "Type a message..." : "Connecting to server..."} 
-          onChange={handleMessageChange} 
-          onKeyPress={e => e.key === 'Enter' && sendMessage()} 
-        />
-        <button className="send-btn" onClick={sendMessage} disabled={!connected || sendingMessage}>
-          {sendingMessage ? <div className="spinner-small"></div> : <Send size={20}/>}
-        </button>
+        
+        {/* Main input container - WhatsApp style */}
+        <div className="whatsapp-input-wrapper">
+          <button
+            className="emoji-btn-inline"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            disabled={!connected}
+            title="Emoji"
+          >
+            <Smile size={22} />
+          </button>
+          
+          <input 
+            className="whatsapp-input"
+            disabled={!connected}
+            value={message} 
+            placeholder={connected ? "Type a message..." : "Connecting..."} 
+            onChange={handleMessageChange} 
+            onKeyPress={e => e.key === 'Enter' && sendMessage()} 
+          />
+        </div>
+        
+        {/* Right action button - transforms based on message */}
+        {message.trim() ? (
+          <button 
+            className="send-btn whatsapp-send" 
+            onClick={sendMessage} 
+            disabled={!connected || sendingMessage}
+            title="Send message"
+          >
+            {sendingMessage ? <div className="spinner-small"></div> : <Send size={20}/>}
+          </button>
+        ) : (
+          <button
+            className={`voice-record-btn whatsapp-action-btn ${isRecording ? 'recording' : ''}`}
+            onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+            disabled={!connected}
+            title={isRecording ? `Recording: ${recordingTime}s` : 'Voice message'}
+          >
+            {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
+          </button>
+        )}
       </div>
 
       {showEmojiPicker && (
