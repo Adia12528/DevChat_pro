@@ -527,6 +527,21 @@ body {
   filter: brightness(1.05);
 }
 
+/* Responsive image sizing */
+@media (max-width: 768px) {
+  .chat-img {
+    max-height: 300px;
+    min-height: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-img {
+    max-height: 250px;
+    min-height: 100px;
+  }
+}
+
 /* Image Container */
 .image-container {
   position: relative;
@@ -546,6 +561,21 @@ body {
 
 .image-container:active {
   transform: scale(0.98);
+}
+
+/* Image container responsive */
+@media (max-width: 600px) {
+  .image-container {
+    border-radius: 10px;
+    margin: 6px 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .image-container {
+    border-radius: 8px;
+    margin: 4px 0;
+  }
 }
 
 .image-error {
@@ -849,6 +879,229 @@ body {
   cursor: not-allowed;
 }
 
+/* Voice Recording Overlay - WhatsApp Style */
+.voice-recording-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.recording-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  padding: 32px;
+}
+
+.recording-locked,
+.recording-slide {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: white;
+  font-size: 16px;
+}
+
+.recording-time {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--green);
+  min-width: 80px;
+  text-align: center;
+}
+
+.slide-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: transform 0.1s ease;
+}
+
+.slide-indicator svg {
+  animation: slideHint 1.5s ease-in-out infinite;
+}
+
+@keyframes slideHint {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-8px); }
+}
+
+.lock-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cancel-recording-btn {
+  background: rgba(255, 59, 48, 0.9);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-recording-btn:hover {
+  background: rgba(255, 59, 48, 1);
+  transform: scale(1.1);
+}
+
+/* Waveform Animation */
+.waveform-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 60px;
+  padding: 0 20px;
+}
+
+.waveform-bar {
+  width: 4px;
+  background: var(--green);
+  border-radius: 2px;
+  animation: waveform 1s ease-in-out infinite alternate;
+}
+
+@keyframes waveform {
+  0% { height: 20%; }
+  100% { height: 100%; }
+}
+
+/* Image Preview Modal - WhatsApp Style */
+.image-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-header {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preview-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.preview-image-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+.preview-image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.preview-footer {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.caption-input-wrapper {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 24px;
+  padding: 12px 20px;
+}
+
+.caption-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: white;
+  font-size: 15px;
+}
+
+.caption-input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.preview-send-btn {
+  background: var(--green);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 168, 132, 0.4);
+}
+
+.preview-send-btn:hover:not(:disabled) {
+  background: #06cf87;
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 168, 132, 0.5);
+}
+
+.preview-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.preview-send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* OLD STYLES - KEEPING FOR BACKWARD COMPATIBILITY */
 .chat-footer input { 
   flex: 1; 
@@ -960,6 +1213,8 @@ body {
   overflow: hidden;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: calc(100vw - 32px);
+  max-height: 450px;
 }
 
 @keyframes slideUpFade {
@@ -1479,6 +1734,30 @@ body {
   border: 2px solid transparent;
 }
 
+/* Voice message responsive */
+@media (max-width: 600px) {
+  .voice-message {
+    min-width: 200px;
+    padding: 7px 10px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .voice-message {
+    min-width: 180px;
+    padding: 6px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .voice-message {
+    min-width: 160px;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+}
+
 .voice-message:hover {
   background: rgba(0, 168, 132, 0.1);
   transform: scale(1.02);
@@ -1505,6 +1784,22 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(0, 168, 132, 0.3);
+}
+
+@media (max-width: 600px) {
+  .voice-play-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .voice-play-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
 }
 
 .voice-play-btn:hover {
@@ -2078,6 +2373,105 @@ body {
   
   .users-info {
     min-width: 36px;
+  }
+  
+  /* Voice Recording Responsive */
+  .recording-container {
+    padding: 20px;
+    gap: 24px;
+  }
+  
+  .recording-time {
+    font-size: 24px;
+  }
+  
+  .waveform-container {
+    height: 50px;
+    gap: 2px;
+  }
+  
+  .waveform-bar {
+    width: 3px;
+  }
+  
+  /* Image Preview Responsive */
+  .preview-header {
+    padding: 12px;
+  }
+  
+  .preview-close-btn {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .preview-footer {
+    padding: 12px;
+    gap: 8px;
+  }
+  
+  .preview-send-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .caption-input {
+    font-size: 14px;
+  }
+  
+  /* Emoji Picker Mobile */
+  .emoji-picker-container {
+    bottom: 60px;
+    right: 8px;
+    left: 8px;
+    max-height: 350px;
+    width: auto;
+  }
+  
+  /* Context Menu Mobile */
+  .context-menu {
+    max-width: calc(100vw - 40px);
+    max-height: calc(100vh - 100px);
+  }
+  
+  .context-menu-reactions {
+    gap: 8px;
+  }
+  
+  .context-menu-emoji {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+  
+  /* Media Components Mobile */
+  .media-container {
+    max-width: 100%;
+  }
+  
+  .media-img,
+  .media-file {
+    max-width: 100%;
+  }
+  
+  /* Edit Modal Mobile */
+  .edit-modal {
+    max-width: 90%;
+    margin: 0 16px;
+  }
+  
+  .edit-textarea {
+    min-height: 100px;
+    font-size: 15px;
+  }
+  
+  /* Voice Message Mobile */
+  .voice-player {
+    padding: 10px;
+  }
+  
+  .voice-controls button {
+    min-width: 32px;
+    min-height: 32px;
   }
 }
 
@@ -2879,6 +3273,33 @@ body {
   .voice-player-modal {
     min-width: 90vw;
     max-width: 90vw;
+    padding: 20px;
+  }
+  
+  .voice-player-waveform {
+    height: 80px;
+  }
+  
+  .voice-player-play-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .voice-player-duration {
+    font-size: 20px;
+  }
+  
+  /* Download button mobile */
+  .download-btn {
+    padding: 6px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+  
+  /* Media viewer responsive */
+  .image-viewer-content {
+    max-width: 95vw;
+    max-height: 70vh;
   }
   
   .media-viewer-header,
@@ -2886,8 +3307,80 @@ body {
     padding: 16px;
   }
   
-  .image-viewer-content img {
-    max-height: 70vh;
+  .media-action-btn {
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+  
+  /* Search bar mobile */
+  .search-bar {
+    padding: 8px;
+  }
+  
+  .search-input {
+    font-size: 16px; /* Prevents iOS zoom */
+  }
+  
+  /* User tags mobile */
+  .user-tag {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+  
+  .user-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+  
+  /* File links mobile */
+  .file-link {
+    font-size: 13px;
+    padding: 10px 12px;
+    word-break: break-word;
+  }
+  
+  /* Login mobile optimizations */
+  .login-screen {
+    padding: 16px;
+  }
+  
+  .brand {
+    font-size: 26px;
+  }
+  
+  .input-group {
+    min-height: 44px; /* Better touch target */
+  }
+  
+  .join-btn {
+    min-height: 44px; /* Better touch target */
+  }
+  
+  /* User list mobile optimization */
+  .users-list {
+    padding: 8px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  
+  .users-list::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .users-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+  }
+  
+  /* Delete button mobile */
+  .delete-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
   }
 }
 
@@ -3200,6 +3693,63 @@ body {
   .login-card h2 {
     font-size: 20px;
   }
+  
+  /* Emoji Picker Extra Mobile */
+  .emoji-picker-container {
+    bottom: 58px;
+    max-height: 320px;
+  }
+  
+  /* Context Menu Extra Mobile */
+  .context-menu {
+    min-width: calc(100vw - 32px);
+  }
+  
+  .context-menu-header {
+    font-size: 11px;
+    padding: 6px 12px;
+  }
+  
+  .context-menu-item {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  /* Voice Recording Overlay */
+  .recording-time {
+    font-size: 22px;
+  }
+  
+  .slide-indicator {
+    font-size: 13px;
+  }
+  
+  /* Image Preview */
+  .preview-footer {
+    padding: 10px;
+  }
+  
+  .preview-send-btn {
+    width: 46px;
+    height: 46px;
+  }
+  
+  .caption-input {
+    font-size: 15px;
+  }
+  
+  /* Typing Pill */
+  .typing-pill {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+  
+  /* Unread Badge */
+  .unread-badge {
+    font-size: 12px;
+    padding: 8px 14px;
+    bottom: 70px;
+  }
 }
 
 /* VERY SMALL MOBILE (max-width: 360px) - Extreme mobile optimization */
@@ -3251,9 +3801,121 @@ body {
     min-height: 38px;
   }
   
-  /* Hide voice record button on very small screens to save space */
-  .voice-record-btn {
-    display: none;
+  /* Compact emoji picker for very small screens */
+  .emoji-picker-container {
+    bottom: 56px;
+    max-height: 280px;
+  }
+  
+  /* Context Menu Very Small */
+  .context-menu {
+    min-width: calc(100vw - 24px);
+  }
+  
+  .context-menu-reactions {
+    gap: 6px;
+  }
+  
+  .context-menu-emoji {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+  
+  /* Voice Recording Very Small */
+  .recording-container {
+    padding: 16px;
+  }
+  
+  .recording-time {
+    font-size: 20px;
+  }
+  
+  .waveform-container {
+    height: 40px;
+  }
+  
+  .waveform-bar {
+    width: 2px;
+  }
+  
+  .slide-indicator,
+  .lock-indicator {
+    font-size: 12px;
+  }
+  
+  /* Image Preview Very Small */
+  .preview-close-btn {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .preview-send-btn {
+    width: 42px;
+    height: 42px;
+  }
+  
+  .caption-input-wrapper {
+    padding: 10px 16px;
+  }
+  
+  /* Message Reactions */
+  .message-reactions {
+    gap: 4px;
+  }
+  
+  .reaction-item {
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+  
+  /* Delete button mobile */
+  .delete-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+  
+  /* User list mobile optimization */
+  .users-list {
+    padding: 8px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  
+  .users-list::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .users-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+  }
+  
+  /* File links mobile */
+  .file-link {
+    font-size: 13px;
+    padding: 10px 12px;
+    word-break: break-word;
+  }
+  
+  /* Login mobile optimizations */
+  .login-screen {
+    padding: 16px;
+  }
+  
+  .brand {
+    font-size: 26px;
+  }
+  
+  .input-group {
+    min-height: 44px; /* Better touch target */
+  }
+  
+  .join-btn {
+    min-height: 44px; /* Better touch target */
   }
 }
 
@@ -3282,14 +3944,85 @@ body {
   
   .chat-footer {
     padding: 6px 10px;
+  }
+  
+  /* Emoji picker landscape */
+  .emoji-picker-container {
+    max-height: 250px;
+    bottom: 55px;
+  }
+  
+  /* Voice recording landscape */
+  .recording-container {
+    padding: 20px;
+    gap: 20px;
+  }
+  
+  .recording-time {
+    font-size: 24px;
+  }
+  
+  .waveform-container {
+    height: 40px;
+  }
+  
+  /* Image preview landscape */
+  .preview-image-container {
+    padding: 12px;
+  }
+  
+  .preview-footer {
+    padding: 10px 16px;
+  }
+  
+  /* Context menu landscape */
+  .context-menu {
+    max-height: 70vh;
+  }
+  
+  /* Edit modal landscape */
+  .edit-modal {
+    max-height: 70vh;
+  }
+  
+  .edit-textarea {
+    min-height: 80px;
+    max-height: 150px;
+  }
+  
+  /* Login landscape */
+  .login-card {
+    max-width: 360px;
+    padding: 30px 24px;
+  }
+  
+  /* User list landscape */  
+  .users-list {
+    max-width: calc(100vw - 300px);
+  }
+  
+  /* Message bubbles landscape */
+  .msg-bubble {
+    max-width: 75%;
+  }
+  
+  /* Voice player landscape */
+  .voice-player-modal {
+    max-width: 400px;
+  }
+  
+  /* Chat header landscape */
+  .chat-header {
     min-height: 48px;
   }
   
+  /* User list landscape */
   .users-list {
     min-height: 36px;
     padding: 4px 8px;
   }
   
+  /* Login landscape adjustments */
   .login-screen {
     padding: 10px;
   }

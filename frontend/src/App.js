@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -55,6 +55,15 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [recordingLocked, setRecordingLocked] = useState(false);
+  const [slideDistance, setSlideDistance] = useState(0);
+  const [startX, setStartX] = useState(0);
+  
+  // Image preview states
+  const [imagePreview, setImagePreview] = useState(null);
+  const [imageCaption, setImageCaption] = useState('');
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
   
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
@@ -581,8 +590,29 @@ function App() {
       return;
     }
     
+    // Show preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImagePreview(event.target.result);
+        setPreviewFile(file);
+        setShowImagePreview(true);
+        setImageCaption('');
+      };
+      reader.readAsDataURL(file);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    
+    // For non-images, upload directly
+    await uploadFile(file, '');
+  }, []);
+  
+  const uploadFile = useCallback(async (file, caption = '') => {
     setUploadingFile(true);
     setUploadProgress('Preparing...');
+    setShowImagePreview(false);
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', 'devchat_uploads');
@@ -602,10 +632,12 @@ function App() {
         
         if (data.error) throw new Error(data.error.message);
         
+        const messageText = caption || file.name;
+        
         socketRef.current?.emit("send_message", { 
           room: roomRef.current, 
           sender: usernameRef.current, 
-          text: file.name,
+          text: messageText,
           type: file.type.startsWith('image/') ? 'image' : 'file',
           fileUrl: data.secure_url,
           fileName: file.name,
@@ -614,7 +646,10 @@ function App() {
         
         setSuccessMessage('File uploaded successfully!');
         setTimeout(() => setSuccessMessage(''), 3000);
-        break; // Success, exit loop
+        setImagePreview(null);
+        setPreviewFile(null);
+        setImageCaption('');
+        break;
       } catch (error) {
         console.error('Upload attempt failed:', error);
         retries--;
@@ -622,13 +657,21 @@ function App() {
           setErrorMessage('Upload failed after 3 attempts. Check your connection.');
           setTimeout(() => setErrorMessage(''), 5000);
         } else {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     }
     
     setUploadingFile(false);
     setUploadProgress('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+  
+  const cancelImagePreview = useCallback(() => {
+    setShowImagePreview(false);
+    setImagePreview(null);
+    setPreviewFile(null);
+    setImageCaption('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -888,6 +931,15 @@ function App() {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         stream.getTracks().forEach(track => track.stop());
         
+        // Check if cancelled (very short recording)
+        if (recordingTime < 1) {
+          setIsRecording(false);
+          setRecordingTime(0);
+          setRecordingLocked(false);
+          setSlideDistance(0);
+          return;
+        }
+        
         // Check size (5MB max for voice)
         if (audioBlob.size > 5 * 1024 * 1024) {
           setErrorMessage('Voice message too long. Maximum 5MB.');
@@ -943,6 +995,8 @@ function App() {
         
         setUploadingFile(false);
         setUploadProgress('');
+        setRecordingLocked(false);
+        setSlideDistance(0);
       };
       
       mediaRecorder.onerror = (event) => {
@@ -950,12 +1004,16 @@ function App() {
         setErrorMessage('Recording failed. Please try again.');
         setTimeout(() => setErrorMessage(''), 4000);
         setIsRecording(false);
+        setRecordingLocked(false);
+        setSlideDistance(0);
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
+      setRecordingLocked(false);
+      setSlideDistance(0);
       
       recordingIntervalRef.current = setInterval(() => {
         setRecordingTime(t => {
@@ -991,6 +1049,51 @@ function App() {
       }
     }
   }, [isRecording]);
+  
+  const cancelVoiceRecording = useCallback(() => {
+    if (mediaRecorderRef.current) {
+      // Stop without saving
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+      if (mediaRecorderRef.current.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+      audioChunksRef.current = [];
+      setIsRecording(false);
+      setRecordingTime(0);
+      setRecordingLocked(false);
+      setSlideDistance(0);
+    }
+  }, []);
+  
+  const lockRecording = useCallback(() => {
+    setRecordingLocked(true);
+    setSlideDistance(0);
+  }, []);
+  
+  const handleRecordingSlide = useCallback((e) => {
+    if (recordingLocked) return;
+    
+    const touch = e.touches ? e.touches[0] : e;
+    const currentX = touch.clientX;
+    const distance = startX - currentX;
+    
+    if (distance > 0) {
+      setSlideDistance(Math.min(distance, 150));
+      
+      // Cancel if slid too far (more than 120px)
+      if (distance > 120) {
+        cancelVoiceRecording();
+      }
+    }
+  }, [recordingLocked, startX, cancelVoiceRecording]);
+  
+  const handleRecordingStart = useCallback((e) => {
+    const touch = e.touches ? e.touches[0] : e;
+    setStartX(touch.clientX);
+    startVoiceRecording();
+  }, [startVoiceRecording]);
 
   const playVoiceMessage = useCallback((audioUrl, msgId) => {
     if (playingVoiceId === msgId) {
@@ -1588,9 +1691,15 @@ function App() {
         ) : (
           <button
             className={`voice-record-btn whatsapp-action-btn ${isRecording ? 'recording' : ''}`}
-            onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+            onMouseDown={handleRecordingStart}
+            onTouchStart={handleRecordingStart}
+            onMouseMove={handleRecordingSlide}
+            onTouchMove={handleRecordingSlide}
+            onMouseUp={recordingLocked ? undefined : stopVoiceRecording}
+            onTouchEnd={recordingLocked ? undefined : stopVoiceRecording}
+            onMouseLeave={recordingLocked ? undefined : cancelVoiceRecording}
             disabled={!connected}
-            title={isRecording ? `Recording: ${recordingTime}s` : 'Voice message'}
+            title={isRecording ? `Recording: ${recordingTime}s` : 'Hold for voice message'}
           >
             {isRecording ? `🔴 ${recordingTime}s` : '🎤'}
           </button>
@@ -1602,6 +1711,104 @@ function App() {
           <EmojiPicker onEmojiClick={handleEmojiClick} theme={theme} />
         </div>
       )}
+
+      {/* Voice Recording Overlay - WhatsApp Style */}
+      <AnimatePresence>
+        {isRecording && (
+          <motion.div 
+            className="voice-recording-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+          >
+            <div className="recording-container">
+              {recordingLocked ? (
+                <div className="recording-locked">
+                  <Lock size={24} />
+                  <span className="recording-time">{recordingTime}s</span>
+                  <button 
+                    className="cancel-recording-btn"
+                    onClick={cancelVoiceRecording}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              ) : (
+                <div className="recording-slide">
+                  <div className="slide-indicator" style={{ transform: `translateX(-${slideDistance}px)` }}>
+                    <ChevronLeft size={20} />
+                    <span>Slide to cancel</span>
+                  </div>
+                  <span className="recording-time">{recordingTime}s</span>
+                  <div className="lock-indicator">
+                    <ChevronUp size={16} />
+                    <Lock size={16} />
+                  </div>
+                </div>
+              )}
+              
+              {/* Waveform visualization */}
+              <div className="waveform-container">
+                {[...Array(40)].map((_, i) => (
+                  <div 
+                    key={i} 
+                    className="waveform-bar"
+                    style={{
+                      animationDelay: `${i * 0.05}s`,
+                      height: `${Math.random() * 60 + 20}%`
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Preview Modal - WhatsApp Style */}
+      <AnimatePresence>
+        {showImagePreview && (
+          <motion.div 
+            className="image-preview-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+          >
+            <div className="preview-header">
+              <button 
+                className="preview-close-btn"
+                onClick={cancelImagePreview}
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="preview-image-container">
+              <img src={imagePreview} alt="Preview" />
+            </div>
+            
+            <div className="preview-footer">
+              <div className="caption-input-wrapper">
+                <input
+                  type="text"
+                  className="caption-input"
+                  placeholder="Add a caption..."
+                  value={imageCaption}
+                  onChange={(e) => setImageCaption(e.target.value)}
+                  maxLength={200}
+                />
+              </div>
+              <button
+                className="preview-send-btn"
+                onClick={() => uploadFile(previewFile, imageCaption)}
+                disabled={uploadingFile}
+              >
+                {uploadingFile ? <div className="spinner-small"></div> : <Send size={24} />}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Edit Modal */}
       <AnimatePresence>
