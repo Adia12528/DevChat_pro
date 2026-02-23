@@ -241,8 +241,17 @@ function App() {
   // Initialize premium calling features
   useEffect(() => {
     console.log('🎯 Initializing premium calling features');
-    initializeCallHistory();
-  }, [initializeCallHistory]);
+    try {
+      if (!callHistoryRef.current) {
+        console.log('📚 Initializing call history');
+        callHistoryRef.current = new CallHistory();
+        const history = callHistoryRef.current.getCallHistory();
+        setCallHistory(history);
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to initialize call history:', err);
+    }
+  }, []);
 
   // Escape key closes all modals
   useEffect(() => {
@@ -2520,20 +2529,6 @@ function App() {
     }
     const history = callHistoryRef.current.getCallHistory();
     return history;
-  }, []);
-
-  // Initialize call history
-  const initializeCallHistory = useCallback(() => {
-    try {
-      if (!callHistoryRef.current) {
-        console.log('📚 Initializing call history');
-        callHistoryRef.current = new CallHistory();
-        const history = callHistoryRef.current.getCallHistory();
-        setCallHistory(history);
-      }
-    } catch (err) {
-      console.warn('⚠️ Failed to initialize call history:', err);
-    }
   }, []);
 
   // Format call duration
