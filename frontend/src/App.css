@@ -1607,6 +1607,36 @@ body {
   background: rgba(0,168,132,0.15);
 }
 
+[data-theme="light"] .input-group {
+  background: #ffffff;
+  border-color: #d1d7db;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .input-group:focus-within {
+  background: #ffffff;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.15);
+}
+
+[data-theme="light"] .input-group input {
+  color: #111b21;
+  font-weight: 500;
+}
+
+[data-theme="light"] .input-group input::placeholder {
+  color: #667781;
+  opacity: 0.8;
+}
+
+[data-theme="light"] .login-card {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+}
+
+[data-theme="light"] .login-card h2 {
+  color: #111b21;
+}
+
 /* MEDIA VIEWER OVERLAY */
 .media-viewer-overlay {
   position: fixed;
