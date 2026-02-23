@@ -1218,7 +1218,7 @@ body {
     gap: 6px; 
     min-height: 44px;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
   }
   
   .user-tag { padding: 5px 10px; font-size: 12px; }
@@ -2773,7 +2773,6 @@ body {
     overflow-x: auto;
     overflow-y: hidden;
     flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
     padding: 6px 10px;
   }
