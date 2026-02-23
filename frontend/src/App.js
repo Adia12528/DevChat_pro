@@ -11,7 +11,7 @@ import './App.css';
 import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '🤔', '👏'];
-const APP_VERSION = 'v2.5.0-context-menu'; // Version identifier for deployment verification
+const APP_VERSION = 'v2.7.0-menu-actions'; // Version identifier for deployment verification
 
 console.log('🚀 DevChat Pro Version:', APP_VERSION);
 console.log('🔍 Build Date:', new Date().toISOString());
