@@ -658,22 +658,45 @@ export default function App() {
 
   // Context menu handlers
   const handleContextMenu = useCallback((e, message) => {
+    // Don't show context menu if clicking on interactive elements
+    const target = e.target;
+    const isInteractive = target.tagName === 'A' || 
+                         target.tagName === 'BUTTON' || 
+                         target.closest('a') || 
+                         target.closest('button');
+    
+    if (isInteractive) return;
+    
     e.preventDefault();
-    setContextMenu({
-      x: e.clientX || e.touches?.[0]?.clientX,
-      y: e.clientY || e.touches?.[0]?.clientY,
-    });
+    e.stopPropagation();
+    
+    const x = e.clientX || e.touches?.[0]?.clientX || 0;
+    const y = e.clientY || e.touches?.[0]?.clientY || 0;
+    
+    setContextMenu({ x, y });
     setContextMenuMessage(message);
   }, []);
 
   const handleLongPressStart = useCallback((e, message) => {
+    // Don't trigger long press on interactive elements
+    const target = e.target;
+    const isInteractive = target.tagName === 'A' || 
+                         target.tagName === 'BUTTON' || 
+                         target.closest('a') || 
+                         target.closest('button');
+    
+    if (isInteractive) return;
+    
     const timer = setTimeout(() => {
       const touch = e.touches?.[0];
       if (touch) {
+        e.preventDefault();
         handleContextMenu({ 
           preventDefault: () => {}, 
+          stopPropagation: () => {},
           clientX: touch.clientX, 
-          clientY: touch.clientY 
+          clientY: touch.clientY,
+          target: e.target
         }, message);
       }
     }, 500); // 500ms for long press
@@ -1103,6 +1126,8 @@ export default function App() {
                 onTouchStart={(e) => handleLongPressStart(e, m)}
                 onTouchEnd={handleLongPressEnd}
                 onTouchMove={handleLongPressEnd}
+                onTouchCancel={handleLongPressEnd}
+                style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 {m.isPinned && <Pin size={12} className="pin-icon" />}
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
