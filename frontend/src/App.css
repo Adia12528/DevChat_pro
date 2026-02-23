@@ -288,6 +288,71 @@ body {
 .clear-btn:active { 
   transform: rotate(90deg) scale(0.95); 
 }
+
+/* INSTALL APP BUTTON */
+.install-app-btn {
+  background: linear-gradient(135deg, #00a884 0%, #00d9a5 100%);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px 16px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 600;
+  font-size: 13px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 168, 132, 0.3);
+}
+
+.install-app-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transition: left 0.5s;
+}
+
+.install-app-btn:hover::before {
+  left: 100%;
+}
+
+.install-app-btn:hover {
+  background: linear-gradient(135deg, #00d9a5 0%, #00ffba 100%);
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 168, 132, 0.4);
+}
+
+.install-app-btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 6px rgba(0, 168, 132, 0.3);
+}
+
+.install-text {
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+@media (max-width: 768px) {
+  .install-text {
+    display: none;
+  }
+  
+  .install-app-btn {
+    padding: 8px;
+    min-width: 40px;
+    border-radius: 50%;
+  }
+}
+
 .chat-body { 
   flex: 1; 
   overflow-y: auto; 

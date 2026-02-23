@@ -1117,6 +1117,16 @@ export default function App() {
           <Users size={16}/>
           <span className="users-count">{onlineUsers.length}</span>
         </div>
+        {deferredPrompt && (
+          <button 
+            className="install-app-btn"
+            onClick={handleInstallClick}
+            title="Install as App"
+          >
+            <Download size={18}/>
+            <span className="install-text">Install App</span>
+          </button>
+        )}
         <button 
           className="theme-toggle"
           onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
