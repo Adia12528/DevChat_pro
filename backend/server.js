@@ -12,8 +12,7 @@ app.get('/ping', (req, res) => res.status(200).send('pong'));
 
 // CORS Configuration - Allow all Vercel deployments and localhost
 const allowedOrigins = [
-    'https://dev-chat-pro.vercel.app',
-    'https://devchat-pro.vercel.app',
+    'https://devchat-pro-frontend.vercel.app',
     'http://localhost:3000',
     'http://localhost:5000'
 ];
