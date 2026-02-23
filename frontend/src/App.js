@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -72,6 +72,9 @@ export default function App() {
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  
+  // Menu dropdown state
+  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
   
   // Context menu state
   const [contextMenu, setContextMenu] = useState(null);
@@ -1090,13 +1093,78 @@ export default function App() {
       </AnimatePresence>
 
       <div className="chat-header">
-        <button 
-          className="sidebar-toggle"
-          onClick={() => setShowRoomSidebar(true)}
-          title="Show conversations"
-        >
-          ☰
-        </button>
+        <div className="menu-container">
+          <button 
+            className="menu-toggle"
+            onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+            title="Menu"
+          >
+            <Menu size={20}/>
+          </button>
+          
+          <AnimatePresence>
+            {showMenuDropdown && (
+              <>
+                <motion.div 
+                  className="menu-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowMenuDropdown(false)}
+                />
+                <motion.div 
+                  className="menu-dropdown"
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="menu-header">Actions</div>
+                  
+                  <button 
+                    className="menu-item"
+                    onClick={() => {
+                      exportChat();
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <FileDown size={18}/>
+                    <span>Export Chat</span>
+                  </button>
+                  
+                  {deferredPrompt && (
+                    <button 
+                      className="menu-item"
+                      onClick={() => {
+                        handleInstallClick();
+                        setShowMenuDropdown(false);
+                      }}
+                    >
+                      <Smartphone size={18}/>
+                      <span>Install as App</span>
+                    </button>
+                  )}
+                  
+                  <div className="menu-divider"></div>
+                  
+                  <button 
+                    className="menu-item"
+                    onClick={() => {
+                      setShowRoomSidebar(true);
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <Users size={18}/>
+                    <span>Conversations</span>
+                  </button>
+                  
+                  <div className="menu-footer">More features coming soon...</div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+        
         <div className="meta">
           <h3>{room} <span style={{ fontSize: '11px', opacity: 0.4, fontWeight: 'normal' }}>{APP_VERSION}</span></h3>
           <div className="room-info">
@@ -1117,16 +1185,6 @@ export default function App() {
           <Users size={16}/>
           <span className="users-count">{onlineUsers.length}</span>
         </div>
-        {deferredPrompt && (
-          <button 
-            className="install-app-btn"
-            onClick={handleInstallClick}
-            title="Install as App"
-          >
-            <Download size={18}/>
-            <span className="install-text">Install App</span>
-          </button>
-        )}
         <button 
           className="theme-toggle"
           onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
@@ -1141,7 +1199,6 @@ export default function App() {
         >
           🔔
         </button>
-        <button className="export-btn" onClick={exportChat} title="Export chat"><Download size={18}/></button>
         <button className="clear-btn" onClick={() => socketRef.current?.emit("clear_chat", roomRef.current)}><Trash2 size={18}/></button>
       </div>
 
