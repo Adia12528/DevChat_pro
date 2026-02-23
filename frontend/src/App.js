@@ -677,7 +677,35 @@ export default function App() {
     const x = e.clientX || e.touches?.[0]?.clientX || 0;
     const y = e.clientY || e.touches?.[0]?.clientY || 0;
     
-    setContextMenu({ x, y });
+    // Calculate menu dimensions (approximate)
+    const menuWidth = 280;
+    const menuHeight = 350;
+    
+    // Adjust position to keep menu within viewport
+    let adjustedX = x;
+    let adjustedY = y;
+    
+    // Check right boundary
+    if (x + menuWidth > window.innerWidth) {
+      adjustedX = window.innerWidth - menuWidth - 10;
+    }
+    
+    // Check bottom boundary
+    if (y + menuHeight > window.innerHeight) {
+      adjustedY = window.innerHeight - menuHeight - 10;
+    }
+    
+    // Check left boundary
+    if (adjustedX < 10) {
+      adjustedX = 10;
+    }
+    
+    // Check top boundary
+    if (adjustedY < 10) {
+      adjustedY = 10;
+    }
+    
+    setContextMenu({ x: adjustedX, y: adjustedY });
     setContextMenuMessage(message);
   }, []);
 

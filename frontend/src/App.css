@@ -242,9 +242,7 @@ body {
   flex: 1; 
   overflow-y: auto; 
   padding: 12px; 
-  background: #0b141a url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-  background-size: 412.5px 749.25px;
-  opacity: 0.95;
+  background: #0a1014;
   display: flex; 
   flex-direction: column; 
   gap: 4px;
@@ -1308,9 +1306,7 @@ body {
 }
 
 [data-theme="light"] .chat-body {
-  background: #e5ddd5 url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-  background-size: 412.5px 749.25px;
-  opacity: 0.95;
+  background: #efeae2;
 }
 
 [data-theme="light"] .msg-bubble.me {
