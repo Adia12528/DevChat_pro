@@ -275,16 +275,20 @@ io.on('connection', (socket) => {
         // Find target user's socket
         if (socket.room && roomUsers[socket.room]) {
             const targetSocket = findTargetSocketInRoom(socket.room, data.to);
+            console.log(`🔎 [DEBUG] Room: ${socket.room}, Target user: ${data.to}`);
+            console.log(`🔎 [DEBUG] roomUsers[${socket.room}]:`, roomUsers[socket.room]);
             console.log(`🔎 call:offer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
+                console.log(`📤 Emitting call:incoming to socket ID ${targetSocket}`);
                 io.to(targetSocket).emit('call:incoming', {
                     from: data.from,
                     callType: data.callType,
                     offer: data.offer
                 });
-                console.log(`✅ Call offer forwarded to ${data.to}`);
+                console.log(`✅ Call offer forwarded to ${data.to} (socket: ${targetSocket})`);
             } else {
+                console.log(`❌ Target user ${data.to} not found in room ${socket.room}`);
                 socket.emit('call:rejected', { reason: 'User not found or offline' });
                 console.log(`❌ Target user ${data.to} not found`);
             }
@@ -369,17 +373,34 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log("❌ Disconnected:", socket.id);
+        console.log("❌ Disconnected:", socket.id, "Username:", socket.username, "Room:", socket.room);
+        
+        // Ensure socket has proper username even if not set
+        const username = socket.username || 'User';
+        
         if (socket.room && roomUsers[socket.room]) {
             delete roomUsers[socket.room][socket.id];
             const count = Object.keys(roomUsers[socket.room]).length;
+            const remainingUsers = Object.values(roomUsers[socket.room]);
             
             // Clear typing indicator when user disconnects
-            io.to(socket.room).emit('user_stopped_typing', socket.username);
+            io.to(socket.room).emit('user_stopped_typing', username);
             
             // Notify others that user left with refreshed roster
-            io.to(socket.room).emit('user_left', { username: socket.username, users: Object.values(roomUsers[socket.room]), count });
-            if (count === 0) delete roomUsers[socket.room];
+            io.to(socket.room).emit('user_left', { username, users: remainingUsers, count });
+            
+            // Also emit explicit offline event for presence tracking
+            io.to(socket.room).emit('user_offline', { username });
+            
+            if (count === 0) {
+                delete roomUsers[socket.room];
+                console.log(`🗑️  Room ${socket.room} cleaned up (empty)`);
+            }
+        }
+        
+        // If user was closing browser without calling user_leaving, clean up typing
+        if (socket.username) {
+            console.log(`🔴 User ${socket.username} fully disconnected without explicit leave`);
         }
     });
 });

@@ -640,7 +640,8 @@ function App() {
 
     // WebRTC Signaling Events
     newSocket.on("call:incoming", async (data) => {
-      console.log("📞 Incoming call from:", data.from, "Type:", data.callType);
+      console.log("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
+      console.log("🔔 Setting incomingCall state and playing ringtone");
       setIncomingCall({ from: data.from, callType: data.callType, offer: data.offer });
       playRingtone();
     });
