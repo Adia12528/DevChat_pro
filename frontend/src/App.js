@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, MicOff, Camera, Volume2, VolumeX, Play, Pause, File, FileText, ChevronDown, Bell, BellOff, Check, Trash, Forward, ArrowDown, MessageSquare } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -59,11 +59,9 @@ function App() {
   const [slideDistance, setSlideDistance] = useState(0);
   const [startX, setStartX] = useState(0);
   
-  // Image preview states - Enhanced for WhatsApp-like experience
-  const [imagePreview, setImagePreview] = useState(null);
+  // Image preview states
   const [imageCaption, setImageCaption] = useState('');
   const [showImagePreview, setShowImagePreview] = useState(false);
-  const [previewFile, setPreviewFile] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]); // Multiple images: [{file, preview, id}]
   const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
   const [isDragging, setIsDragging] = useState(false); // Drag and drop state
@@ -73,10 +71,13 @@ function App() {
   const [rooms, setRooms] = useState([{ id: room, name: room, type: 'group' }]);
   const [activeRoom, setActiveRoom] = useState(null);
   
-  // Profile editing
-  const [editingOwnProfile, setEditingOwnProfile] = useState(false);
-  const [profileBio, setProfileBio] = useState('');
-  const [profileAvatar, setProfileAvatar] = useState('');
+  // Starred messages (localStorage-backed, per session)
+  const [starredMsgIds, setStarredMsgIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('devChatStarred') || '[]')); }
+    catch { return new Set(); }
+  });
+  const [showStarredPanel, setShowStarredPanel] = useState(false);
+
   
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -115,6 +116,7 @@ function App() {
   const lastTypingEmitRef = useRef(0);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null); // Separate ref for camera
+  const textareaRef = useRef(null);    // Auto-growing textarea
   const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -144,6 +146,7 @@ function App() {
       if (e.key !== 'Escape') return;
       if (showEmojiPicker) { setShowEmojiPicker(false); return; }
       if (showMenuDropdown) { setShowMenuDropdown(false); return; }
+      if (showStarredPanel) { setShowStarredPanel(false); return; }
       if (showPinnedPanel) { setShowPinnedPanel(false); return; }
       if (showClearConfirm) { setShowClearConfirm(false); return; }
       if (showLogoutConfirm) { setShowLogoutConfirm(false); return; }
@@ -157,72 +160,12 @@ function App() {
     };
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [showEmojiPicker, showMenuDropdown, showPinnedPanel, showClearConfirm, showLogoutConfirm, editingMsgId, showDeleteConfirm, replyingTo, contextMenu, imageViewer, voicePlayer, isRecording, cancelVoiceRecording]);
+  }, [showEmojiPicker, showMenuDropdown, showStarredPanel, showPinnedPanel, showClearConfirm, showLogoutConfirm, editingMsgId, showDeleteConfirm, replyingTo, contextMenu, imageViewer, voicePlayer, isRecording, cancelVoiceRecording]);
 
   // Version logging
   useEffect(() => {
     console.log(`%c🚀 DevChat Pro v${APP_VERSION}`, 'color: #00ff88; font-size: 16px; font-weight: bold;');
     console.log(`%cBuild Date: ${new Date(BUILD_DATE).toLocaleString()}`, 'color: #00ccff; font-size: 12px;');
-  }, []);
-
-  // Force cache clear and update check on every load
-  useEffect(() => {
-    const clearCachesAndUpdate = async () => {
-      try {
-        // Clear browser cache
-        if ('caches' in window) {
-          const cacheNames = await caches.keys();
-          console.log('%c🧹 Clearing all caches...', 'color: #ff9800; font-weight: bold;');
-          await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
-          console.log('%c✅ All caches cleared', 'color: #4caf50; font-weight: bold;');
-        }
-
-        // Check for service worker updates
-        if ('serviceWorker' in navigator) {
-          const registration = await navigator.serviceWorker.getRegistration();
-          if (registration) {
-            console.log('%c🔄 Checking for service worker updates...', 'color: #2196f3; font-weight: bold;');
-            
-            // Force update check
-            await registration.update();
-            
-            // Listen for updates
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('%c🆕 New version available! Reloading...', 'color: #00ff88; font-weight: bold;');
-                    // Skip waiting and reload
-                    newWorker.postMessage({ type: 'SKIP_WAITING' });
-                    window.location.reload();
-                  }
-                });
-              }
-            });
-            
-            // Clear service worker cache
-            if (navigator.serviceWorker.controller) {
-              navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_ALL_CACHES' });
-            }
-          }
-        }
-        
-        console.log(`%c✨ Running latest version: v${APP_VERSION}`, 'color: #00ff88; font-weight: bold;');
-        
-        // Show brief mobile notification
-        if ('serviceWorker' in navigator) {
-          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-          if (isMobile) {
-            console.log('%c📱 Mobile device detected - All features optimized for touch', 'color: #2196f3; font-weight: bold;');
-          }
-        }
-      } catch (error) {
-        console.error('Cache clearing error:', error);
-      }
-    };
-
-    clearCachesAndUpdate();
   }, []);
 
   // Theme effect
@@ -588,6 +531,11 @@ function App() {
     );
   }, [chat, debouncedSearchQuery]);
 
+  const searchResultCount = useMemo(() => {
+    if (!debouncedSearchQuery) return 0;
+    return filteredChat.length;
+  }, [debouncedSearchQuery, filteredChat]);
+
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -637,6 +585,9 @@ function App() {
 
   const handleMessageChange = useCallback((e) => {
     setMessage(e.target.value);
+    // Auto-grow textarea
+    const ta = textareaRef.current;
+    if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 120) + 'px'; }
     const socket = socketRef.current;
     if (!socket || !connected) return;
     const now = Date.now();
@@ -858,8 +809,6 @@ function App() {
         
         setSuccessMessage('File uploaded successfully!');
         setTimeout(() => setSuccessMessage(''), 3000);
-        setImagePreview(null);
-        setPreviewFile(null);
         setImageCaption('');
         break;
       } catch (error) {
@@ -951,8 +900,6 @@ function App() {
   
   const cancelImagePreview = useCallback(() => {
     setShowImagePreview(false);
-    setImagePreview(null);
-    setPreviewFile(null);
     setSelectedImages([]);
     setImageCaption('');
     setCurrentImageIndex(0);
@@ -1002,6 +949,15 @@ function App() {
       el.classList.add('msg-highlight');
       setTimeout(() => el.classList.remove('msg-highlight'), 1500);
     }
+  }, []);
+
+  const toggleStar = useCallback((msgId) => {
+    setStarredMsgIds(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId); else next.add(msgId);
+      try { localStorage.setItem('devChatStarred', JSON.stringify([...next])); } catch {}
+      return next;
+    });
   }, []);
 
   const handleCopyMessage = useCallback((text, msgId) => {
@@ -1198,6 +1154,9 @@ function App() {
     if (!contextMenuMessage) return;
     
     switch(action) {
+      case 'star':
+        toggleStar(contextMenuMessage._id);
+        break;
       case 'copy':
         handleCopyMessage(contextMenuMessage.text, contextMenuMessage._id);
         break;
@@ -1239,7 +1198,7 @@ function App() {
         break;
     }
     closeContextMenu();
-  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, closeContextMenu, openImageViewer, playVoiceMessage]);
+  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, toggleStar, closeContextMenu, openImageViewer, playVoiceMessage]);
 
   const renderMessageText = (msg) => {
     if (!showMarkdown) return <p>{msg.text}</p>;
@@ -1617,17 +1576,6 @@ function App() {
     setShowRoomSidebar(false);
   }, []);
 
-  const saveProfile = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.emit('update_profile', {
-        username: usernameRef.current,
-        avatar: profileAvatar,
-        bio: profileBio
-      });
-      setEditingOwnProfile(false);
-    }
-  }, [profileAvatar, profileBio]);
-
   const handleInstallClick = useCallback(async () => {
     if (!deferredPrompt) return;
     
@@ -1675,9 +1623,9 @@ function App() {
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
         <Zap color="#00a884" size={48} fill="#00a884" />
         <h2 className="brand">DevChat <span>Pro+</span></h2>
-        <div className="input-group"><User size={18}/><input placeholder="Name" onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
-        <div className="input-group"><Hash size={18}/><input placeholder="Room ID" onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
-        <button className="join-btn" onClick={joinRoom}>Enter Chat</button>
+        <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
+        <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
+        <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
       </motion.div>
     </div>
   );
@@ -1747,6 +1695,14 @@ function App() {
                   >
                     <FileDown size={18}/>
                     <span>Export Chat</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => { setShowStarredPanel(true); setShowMenuDropdown(false); }}
+                  >
+                    <Star size={18}/>
+                    <span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
                   </button>
                   
                   {deferredPrompt && (
@@ -1844,6 +1800,11 @@ function App() {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="search-input"
         />
+        {searchQuery && (
+          <span className={`search-result-count ${searchResultCount === 0 ? 'zero' : ''}`}>
+            {searchResultCount} result{searchResultCount !== 1 ? 's' : ''}
+          </span>
+        )}
         <button 
           className="markdown-toggle"
           onClick={() => setShowMarkdown(!showMarkdown)}
@@ -1932,6 +1893,10 @@ function App() {
             const reactions = m.reactions || {};
             const grouped = i > 0 && isGroupedMessage(m, filteredChat[i - 1]);
             const showDateSep = i === 0 || needsDateSeparator(m.time, filteredChat[i - 1]?.time);
+            const isGroupedBelow = i < filteredChat.length - 1 && isGroupedMessage(filteredChat[i + 1], m);
+            const clusterPos = !grouped && isGroupedBelow ? 'cluster-top'
+              : grouped && isGroupedBelow ? 'cluster-mid'
+              : grouped && !isGroupedBelow ? 'cluster-bottom' : '';
 
             const bubble = (
               <motion.div 
@@ -1941,7 +1906,7 @@ function App() {
                 key={`msg-${m._id || i}`}
                 id={`msg-${m._id}`}
                 ref={el => { if (el && m._id) msgRefsMap.current[m._id] = el; }}
-                className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""} ${grouped ? "grouped" : ""}`}
+                className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""} ${grouped ? "grouped" : ""} ${clusterPos}`}
                 onContextMenu={(e) => handleContextMenu(e, m)}
                 onTouchStart={(e) => handleLongPressStart(e, m)}
                 onTouchEnd={handleLongPressEnd}
@@ -1950,6 +1915,7 @@ function App() {
                 style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
               >
                 {m.isPinned && <Pin size={12} className="pin-icon" />}
+                {starredMsgIds.has(m._id) && <span className="msg-star-badge"><Star size={10} fill="#FFD700" color="#FFD700"/></span>}
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
                 
                 {m.replyTo && (() => {
@@ -2112,6 +2078,7 @@ function App() {
                         key={emoji}
                         className={`reaction-item ${users.includes(username) ? 'reacted' : ''}`}
                         onClick={() => handleReaction(m._id, emoji)}
+                        data-tooltip={users.length > 0 ? users.join(', ') : undefined}
                       >
                         {emoji} {users.length}
                       </button>
@@ -2170,9 +2137,9 @@ function App() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="unread-badge"
-          onClick={() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" })}
+          onClick={() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); setUnreadCount(0); }}
         >
-          {unreadCount} new message{unreadCount > 1 ? 's' : ''}
+          <ChevronDown size={16}/> {unreadCount} new message{unreadCount > 1 ? 's' : ''}
         </motion.button>
       )}
 
@@ -2244,14 +2211,19 @@ function App() {
             <Smile size={22} />
           </button>
           
-          <input 
+          <textarea 
+            ref={textareaRef}
             className="whatsapp-input"
             disabled={!connected}
             value={message} 
-            placeholder={connected ? "Type a message..." : "Connecting..."} 
-            onChange={handleMessageChange} 
-            onKeyPress={e => e.key === 'Enter' && sendMessage()} 
+            placeholder={connected ? "Type a message... (Shift+Enter for new line)" : "Connecting..."} 
+            onChange={handleMessageChange}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            rows={1}
           />
+          {message.length > 100 && (
+            <span className={`char-counter ${message.length > 450 ? 'warn' : ''}`}>{message.length}</span>
+          )}
         </div>
         
         {/* Right action button - transforms based on message */}
@@ -2734,6 +2706,13 @@ function App() {
               <Pin size={16} />
               <span>{contextMenuMessage.isPinned ? 'Unpin' : 'Pin'}</span>
             </button>
+            <button
+              className="context-menu-item"
+              onClick={() => handleContextMenuAction('star')}
+            >
+              <Star size={16} fill={starredMsgIds.has(contextMenuMessage?._id) ? '#FFD700' : 'none'} color="#FFD700" />
+              <span>{starredMsgIds.has(contextMenuMessage?._id) ? 'Unstar' : 'Star'}</span>
+            </button>
             
             {/* Media-specific actions */}
             {contextMenuMessage.type === 'image' && contextMenuMessage.fileUrl && (
@@ -2938,6 +2917,70 @@ function App() {
                 >
                   Clear All
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Starred Messages Panel */}
+      <AnimatePresence>
+        {showStarredPanel && (
+          <motion.div
+            className="starred-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowStarredPanel(false)}
+          >
+            <motion.div
+              className="starred-panel"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="starred-panel-header">
+                <Star size={18} fill="#FFD700" color="#FFD700" />
+                <h3>Starred Messages</h3>
+                <span className="starred-count-badge">{starredMsgIds.size}</span>
+                <button onClick={() => setShowStarredPanel(false)} className="starred-close-btn"><X size={20}/></button>
+              </div>
+              <div className="starred-panel-body">
+                {chat.filter(m => starredMsgIds.has(m._id)).length === 0 ? (
+                  <div className="starred-panel-empty">
+                    <Star size={40} color="var(--txt-muted, #8696a0)" />
+                    <p>No starred messages yet</p>
+                    <span>Long-press any message and tap Star</span>
+                  </div>
+                ) : (
+                  chat.filter(m => starredMsgIds.has(m._id)).map(m => (
+                    <div
+                      key={m._id}
+                      className="starred-panel-item"
+                      onClick={() => { scrollToMessage(m._id); setShowStarredPanel(false); }}
+                    >
+                      <div className="starred-item-meta">
+                        <span className="starred-item-sender">{m.sender}</span>
+                        <span className="starred-item-time">{formatRelativeTime(m.time)}</span>
+                        <button
+                          className="starred-item-remove"
+                          onClick={e => { e.stopPropagation(); toggleStar(m._id); }}
+                          title="Remove star"
+                        >
+                          <Star size={14} fill="#FFD700" color="#FFD700"/>
+                        </button>
+                      </div>
+                      <div className="starred-item-preview">
+                        {m.type === 'image' ? '📷 Photo' :
+                         m.type === 'voice' ? '🎤 Voice message' :
+                         m.type === 'file' ? `📎 ${m.fileName}` :
+                         (m.text || '').substring(0, 80) + ((m.text || '').length > 80 ? '…' : '')}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </motion.div>
