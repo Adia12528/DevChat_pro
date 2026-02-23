@@ -167,6 +167,14 @@ function App() {
         }
         
         console.log(`%c✨ Running latest version: v${APP_VERSION}`, 'color: #00ff88; font-weight: bold;');
+        
+        // Show brief mobile notification
+        if ('serviceWorker' in navigator) {
+          const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+          if (isMobile) {
+            console.log('%c📱 Mobile device detected - All features optimized for touch', 'color: #2196f3; font-weight: bold;');
+          }
+        }
       } catch (error) {
         console.error('Cache clearing error:', error);
       }
@@ -962,14 +970,31 @@ function App() {
   // Voice message functions
   const startVoiceRecording = useCallback(async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setErrorMessage('Voice recording not supported in this browser.');
+      setErrorMessage('Voice recording not supported in this browser. Please use Chrome, Safari, or Firefox.');
       setTimeout(() => setErrorMessage(''), 4000);
       return;
     }
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      // Determine best audio format for the device
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+        mimeType = 'audio/webm;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+        mimeType = 'audio/ogg;codecs=opus';
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
@@ -1697,6 +1722,7 @@ function App() {
           onChange={handleFileUpload}
           style={{ display: 'none' }}
           accept="image/*,application/pdf,.doc,.docx"
+          capture="environment"
         />
         
         {/* Left action buttons */}
