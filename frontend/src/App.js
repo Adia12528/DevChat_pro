@@ -36,6 +36,8 @@ export default function App() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [unreadCount, setUnreadCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
@@ -423,11 +425,13 @@ export default function App() {
     if (!file) return;
     
     setUploadingFile(true);
+    setUploadProgress('Preparing...');
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', 'devchat_uploads');
 
     try {
+      setUploadProgress('Uploading...');
       const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
         method: 'POST',
         body: formData
@@ -448,6 +452,7 @@ export default function App() {
       alert('File upload failed. Please try again.');
     } finally {
       setUploadingFile(false);
+      setUploadProgress('');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }, []);
@@ -992,6 +997,13 @@ export default function App() {
         </div>
       )}
 
+      {(uploadingFile || uploadProgress) && (
+        <div className="uploading-bar">
+          <div className="spinner-small"></div>
+          <span>{uploadProgress || 'Uploading file...'}</span>
+        </div>
+      )}
+
       <div className="chat-footer">
         <input
           type="file"
@@ -1029,7 +1041,9 @@ export default function App() {
           onChange={handleMessageChange} 
           onKeyPress={e => e.key === 'Enter' && sendMessage()} 
         />
-        <button className="send-btn" onClick={sendMessage} disabled={!connected}><Send size={20}/></button>
+        <button className="send-btn" onClick={sendMessage} disabled={!connected || sendingMessage}>
+          {sendingMessage ? <div className="spinner-small"></div> : <Send size={20}/>}
+        </button>
       </div>
 
       {showEmojiPicker && (

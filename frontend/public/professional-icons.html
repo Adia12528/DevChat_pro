@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional DevChat Icons</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        canvas { border: 2px solid #ddd; margin: 10px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .preview { display: flex; gap: 20px; flex-wrap: wrap; }
+        button { background: #00a884; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 16px; margin: 10px 5px; }
+        button:hover { background: #008669; }
+    </style>
+</head>
+<body>
+    <h1>🎨 DevChat Pro - Professional Icons</h1>
+    <p>Choose your favorite design:</p>
+    
+    <div class="preview">
+        <div>
+            <h3>Design 1: Chat Bubble</h3>
+            <canvas id="bubble192" width="192" height="192"></canvas>
+            <canvas id="bubble512" width="512" height="512"></canvas>
+        </div>
+        <div>
+            <h3>Design 2: Message Icon</h3>
+            <canvas id="message192" width="192" height="192"></canvas>
+            <canvas id="message512" width="512" height="512"></canvas>
+        </div>
+        <div>
+            <h3>Design 3: Modern Gradient</h3>
+            <canvas id="gradient192" width="192" height="192"></canvas>
+            <canvas id="gradient512" width="512" height="512"></canvas>
+        </div>
+    </div>
+
+    <button onclick="downloadDesign('bubble')">Download Design 1</button>
+    <button onclick="downloadDesign('message')">Download Design 2</button>
+    <button onclick="downloadDesign('gradient')">Download Design 3</button>
+
+    <script>
+        // Design 1: Chat Bubble with Lightning
+        function createBubbleIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#00a884');
+            gradient.addColorStop(1, '#008669');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Chat bubble
+            const bubbleSize = size * 0.55;
+            const bubbleX = size * 0.5;
+            const bubbleY = size * 0.42;
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.roundRect(bubbleX - bubbleSize/2, bubbleY - bubbleSize/2.5, bubbleSize, bubbleSize/1.5, size * 0.08);
+            ctx.fill();
+            
+            // Bubble tail
+            ctx.beginPath();
+            ctx.moveTo(bubbleX - bubbleSize/4, bubbleY + bubbleSize/4);
+            ctx.lineTo(bubbleX - bubbleSize/3, bubbleY + bubbleSize/2.5);
+            ctx.lineTo(bubbleX - bubbleSize/6, bubbleY + bubbleSize/4);
+            ctx.fill();
+            
+            // Lightning bolt (represents "Pro" speed)
+            ctx.fillStyle = '#00a884';
+            ctx.beginPath();
+            const boltX = bubbleX;
+            const boltY = bubbleY - size * 0.05;
+            const boltSize = size * 0.15;
+            ctx.moveTo(boltX, boltY - boltSize);
+            ctx.lineTo(boltX - boltSize/2, boltY);
+            ctx.lineTo(boltX + boltSize/5, boltY);
+            ctx.lineTo(boltX - boltSize/4, boltY + boltSize);
+            ctx.lineTo(boltX + boltSize/2, boltY);
+            ctx.lineTo(boltX - boltSize/5, boltY);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Design 2: Message Icon
+        function createMessageIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#00a884';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Envelope
+            const envSize = size * 0.6;
+            const envX = (size - envSize) / 2;
+            const envY = (size - envSize * 0.7) / 2;
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(envX, envY, envSize, envSize * 0.7);
+            
+            // Envelope flap
+            ctx.beginPath();
+            ctx.moveTo(envX, envY);
+            ctx.lineTo(size/2, envY + envSize * 0.4);
+            ctx.lineTo(envX + envSize, envY);
+            ctx.closePath();
+            ctx.strokeStyle = '#00a884';
+            ctx.lineWidth = size * 0.02;
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0, 168, 132, 0.1)';
+            ctx.fill();
+            
+            // Message lines
+            ctx.strokeStyle = '#00a884';
+            ctx.lineWidth = size * 0.015;
+            const lineY = envY + envSize * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(envX + envSize * 0.2, lineY);
+            ctx.lineTo(envX + envSize * 0.8, lineY);
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(envX + envSize * 0.2, lineY + envSize * 0.12);
+            ctx.lineTo(envX + envSize * 0.6, lineY + envSize * 0.12);
+            ctx.stroke();
+        }
+
+        // Design 3: Modern Gradient
+        function createGradientIcon(canvasId, size) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            
+            // Gradient background
+            const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/1.5);
+            gradient.addColorStop(0, '#00d4aa');
+            gradient.addColorStop(1, '#00a884');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Three chat dots
+            ctx.fillStyle = 'white';
+            const dotRadius = size * 0.08;
+            const spacing = size * 0.15;
+            const centerY = size * 0.5;
+            
+            // Animate-style dots (different sizes)
+            ctx.beginPath();
+            ctx.arc(size/2 - spacing, centerY, dotRadius * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(size/2, centerY, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(size/2 + spacing, centerY, dotRadius * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Circle frame
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = size * 0.03;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size * 0.38, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Generate all icons
+        createBubbleIcon('bubble192', 192);
+        createBubbleIcon('bubble512', 512);
+        createMessageIcon('message192', 192);
+        createMessageIcon('message512', 512);
+        createGradientIcon('gradient192', 192);
+        createGradientIcon('gradient512', 512);
+
+        function downloadDesign(design) {
+            ['192', '512'].forEach(size => {
+                const canvas = document.getElementById(design + size);
+                const link = document.createElement('a');
+                link.download = `logo${size}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+            alert('✅ Icons downloaded! Move logo192.png and logo512.png to frontend/public/ folder and rebuild.');
+        }
+    </script>
+</body>
+</html>

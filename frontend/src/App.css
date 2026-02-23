@@ -312,3 +312,143 @@ body { margin: 0; background: var(--bg); font-family: 'Inter', sans-serif; color
 .dismiss-btn:hover {
   background: rgba(255,255,255,0.3);
 }
+/* LOADING SPINNERS */
+.spinner-small {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* UPLOADING BAR */
+.uploading-bar {
+  background: var(--header);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #313d45;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* MOBILE IMPROVEMENTS */
+@media (max-width: 768px) {
+  .chat-header {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  
+  .meta h3 {
+    font-size: 15px;
+  }
+  
+  .chat-body {
+    padding: 12px 8px;
+  }
+  
+  .msg-bubble {
+    max-width: 90%;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  
+  .chat-footer {
+    padding: 8px;
+    gap: 6px;
+  }
+  
+  .chat-footer input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  .chat-footer button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 8px !important;
+  }
+  
+  .msg-actions {
+    opacity: 1 !important; /* Always visible on mobile */
+  }
+  
+  .quick-reactions {
+    position: fixed;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--header);
+    padding: 8px;
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 100;
+  }
+  
+  .profile-modal,
+  .edit-modal,
+  .delete-modal {
+    max-width: 90% !important;
+    margin: 20px;
+  }
+  
+  .emoji-picker-container {
+    bottom: 60px;
+    left: 8px;
+    right: 8px;
+  }
+  
+  .users-list {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .search-bar {
+    padding: 8px 12px;
+  }
+}
+
+/* TOUCH IMPROVEMENTS */
+@media (hover: none) {
+  .msg-actions button,
+  .chat-header button,
+  .chat-footer button {
+    min-width: 44px;
+    min-height: 44px; /* Apple HIG touch target size */
+  }
+  
+  .copy-btn,
+  .edit-btn,
+  .delete-btn,
+  .pin-btn,
+  .reply-btn {
+    padding: 10px !important;
+  }
+}
+
+/* LANDSCAPE MOBILE */
+@media (max-width: 900px) and (orientation: landscape) {
+  .chat-header {
+    padding: 8px 12px;
+  }
+  
+  .chat-body {
+    padding: 10px 12px;
+  }
+  
+  .login-screen {
+    padding: 10px;
+  }
+  
+  .login-card {
+    max-width: 400px;
+    padding: 30px 20px;
+  }
+}
