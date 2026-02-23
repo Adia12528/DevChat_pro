@@ -1585,6 +1585,9 @@ function App() {
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onClick={() => setEditingMsgId(null)}
+            role="dialog"
+            aria-labelledby="edit-modal-title"
+            aria-modal="true"
           >
             <motion.div 
               className="edit-modal"
@@ -1594,7 +1597,7 @@ function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="edit-modal-header">
-                <h3>Edit Message</h3>
+                <h3 id="edit-modal-title">Edit Message</h3>
                 <button 
                   className="modal-close-btn"
                   onClick={() => setEditingMsgId(null)}
@@ -1684,6 +1687,9 @@ function App() {
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
             onClick={() => setShowProfileModal(null)}
+            role="dialog"
+            aria-labelledby="profile-modal-title"
+            aria-modal="true"
           >
             <motion.div 
               className="profile-modal"
@@ -1696,7 +1702,7 @@ function App() {
                 <div className="profile-avatar-large" style={getAvatarStyle(showProfileModal)}>
                   {getInitials(showProfileModal)}
                 </div>
-                <h2>{showProfileModal}</h2>
+                <h2 id="profile-modal-title">{showProfileModal}</h2>
                 <span className={`profile-status status-${userStatus[showProfileModal] || 'online'}`}>
                   {userStatus[showProfileModal] || 'online'}
                 </span>
