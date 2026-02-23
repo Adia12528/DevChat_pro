@@ -981,7 +981,8 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showSuccessToast('Download started');
+    setSuccessMessage('Download started');
+    setTimeout(() => setSuccessMessage(''), 2000);
   }, []);
 
   // Open voice player modal
@@ -1156,9 +1157,9 @@ export default function App() {
 
       {onlineUsers.length > 0 && (
         <div className="users-list">
-          {onlineUsers.map((user, i) => (
+          {onlineUsers.map((user) => (
             <motion.div 
-              key={i} 
+              key={user} 
               className="user-tag" 
               initial={{ opacity: 0, x: -10 }} 
               animate={{ opacity: 1, x: 0 }}
