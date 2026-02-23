@@ -2607,6 +2607,11 @@ body {
   animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.menu-dropdown-dm {
+  left: auto;
+  right: 0;
+}
+
 .menu-header {
   padding: var(--space-2) var(--space-4);
   font-size: 11px;
@@ -4065,6 +4070,12 @@ body {
   .sound-toggle,
   .clear-btn {
     order: 3;
+  }
+
+  .call-buttons {
+    order: 3;
+    margin-left: 0;
+    margin-right: 0;
   }
   
   /* Menu dropdown */
@@ -6588,6 +6599,8 @@ textarea.whatsapp-input {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 16px;
   z-index: 20;
 }
@@ -6737,6 +6750,7 @@ textarea.whatsapp-input {
   .call-controls {
     bottom: 20px;
     gap: 12px;
+    width: min(92vw, 420px);
   }
 
   .call-control-btn {
@@ -6787,6 +6801,7 @@ textarea.whatsapp-input {
 
   .call-controls {
     gap: 8px;
+    width: min(94vw, 360px);
   }
 
   .call-control-btn {

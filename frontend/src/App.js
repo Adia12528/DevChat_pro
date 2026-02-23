@@ -26,9 +26,6 @@ import {
   switchBackToCamera,
   getQualityIndicator
 } from './callUtils';
-import CallPanel from './CallPanel';
-import CallHistoryPanel from './CallHistoryPanel';
-import './callStyles.css';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 
@@ -174,7 +171,6 @@ function App() {
   // PREMIUM: Advanced Call Features
   const [callStats, setCallStats] = useState(null);
   const [isCallRecording, setIsCallRecording] = useState(false);
-  const [showCallStats, setShowCallStats] = useState(false);
   const [showVideoEffects, setShowVideoEffects] = useState(false);
   const [videoEffectSettings, setVideoEffectSettings] = useState({
     backgroundBlur: 0,
@@ -215,6 +211,8 @@ function App() {
   const usernameRef = useRef("");
   const roomRef = useRef("");
   const soundEnabledRef = useRef(true);
+  const pendingIceCandidatesRef = useRef([]);
+  const endCallRef = useRef(() => {});
   const isAtBottomRef = useRef(true);
   const lastMessageIdRef = useRef(null);
   
@@ -700,10 +698,6 @@ function App() {
     });
 
     // WebRTC Signaling Events
-    newSocket.on("user_status_changed", (data) => {
-      console.log("🔄 User status changed:", data.username, "→", data.status);
-      setUserStatus(prev => ({ ...prev, [data.username]: data.status }));
-    });
 
     newSocket.on("call:incoming", async (data) => {
       console.log("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
@@ -718,6 +712,19 @@ function App() {
         if (peerConnectionRef.current && data.answer) {
           console.log("📋 [CALLER] Setting answer as remote description");
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+
+          if (pendingIceCandidatesRef.current.length > 0) {
+            console.log(`🧊 [CALLER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
+            for (const candidate of pendingIceCandidatesRef.current) {
+              try {
+                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (iceError) {
+                console.warn('⚠️ [CALLER] Failed to apply queued ICE candidate:', iceError?.message || iceError);
+              }
+            }
+            pendingIceCandidatesRef.current = [];
+          }
+
           console.log("✅ [CALLER] Remote description set from answer");
           setCallState('active');
           startCallTimer();
@@ -738,28 +745,35 @@ function App() {
       console.log("❌ Call rejected by:", data.from);
       stopRingtone();
       setCallError("Call was rejected");
-      endCall();
+      endCallRef.current(false);
     });
 
     newSocket.on("call:ended", (data) => {
       console.log("📴 Call ended by:", data.from);
-      endCall();
+      endCallRef.current(false);
     });
 
     newSocket.on("call:ice-candidate", async (data) => {
       console.log("🧊 [ICE-CANDIDATE] Received from:", data.from);
       try {
-        if (peerConnectionRef.current && data.candidate) {
+        const pc = peerConnectionRef.current;
+        if (!data.candidate) {
+          console.warn("⚠️ [ICE] Missing candidate payload");
+          return;
+        }
+
+        if (pc && pc.remoteDescription) {
           console.log("➕ [ICE] Adding ICE candidate", {
             candidate: data.candidate.candidate?.substring(0, 50),
             type: data.candidate.type
           });
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
           console.log("✅ [ICE] ICE candidate added");
         } else {
-          console.warn("⚠️ [ICE] Missing peerConnection or candidate", {
-            hasPeerConnection: !!peerConnectionRef.current,
-            hasCandidate: !!data.candidate
+          pendingIceCandidatesRef.current.push(data.candidate);
+          console.log("⏳ [ICE] Queued candidate until remote description is ready", {
+            hasPeerConnection: !!pc,
+            queueSize: pendingIceCandidatesRef.current.length
           });
         }
       } catch (err) {
@@ -770,7 +784,7 @@ function App() {
     newSocket.on("call:peer-disconnected", () => {
       console.log("⚠️ Peer disconnected");
       setCallError("Connection lost");
-      endCall();
+      endCallRef.current(false);
     });
 
     // Handle proper disconnect when user closes tab/browser
@@ -2196,7 +2210,6 @@ function App() {
       
       setCallType(incomingCall.callType);
       setCallPeer({ username: callerUsername, userId: callerUsername });
-      setCallState('active');
       
       // FORCE STOP RINGTONE
       console.log('🛑 [RECEIVER] Force-stopping ringtone');
@@ -2262,6 +2275,18 @@ function App() {
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
       console.log('✅ [RECEIVER] Remote description set');
 
+      if (pendingIceCandidatesRef.current.length > 0) {
+        console.log(`🧊 [RECEIVER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
+        for (const candidate of pendingIceCandidatesRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (iceError) {
+            console.warn('⚠️ [RECEIVER] Failed to apply queued ICE candidate:', iceError?.message || iceError);
+          }
+        }
+        pendingIceCandidatesRef.current = [];
+      }
+
       // Create answer
       console.log('🎤 [RECEIVER] Creating answer');
       const answer = await pc.createAnswer();
@@ -2279,17 +2304,19 @@ function App() {
       console.log('✅ [RECEIVER] Call:answer sent');
 
       // Start periodic stats update
-      const intervalId = setInterval(() => {
-        if (stats && stats.update) {
-          stats.update(pc);
-          setCallStats(stats.getStats());
-          setQualityIndicator(getQualityIndicator(stats.getStats().qualityScore));
-          setConnectionQuality(stats.getStats().qualityScore);
+      const intervalId = setInterval(async () => {
+        if (stats && typeof stats.updateStats === 'function') {
+          await stats.updateStats(pc);
+          const latestStats = stats.getStats();
+          setCallStats(latestStats);
+          setQualityIndicator(getQualityIndicator(stats));
+          setConnectionQuality(latestStats.qualityLabel);
         }
       }, 1000);
       statsUpdateIntervalRef.current = intervalId;
 
       setIncomingCall(null);
+      setCallState('active');
       console.log('⏱️ [RECEIVER] Starting call timer');
       startCallTimer();
 
@@ -2317,11 +2344,11 @@ function App() {
   }, [incomingCall, username, stopRingtone]);
 
   // End call with premium cleanup
-  const endCall = useCallback(() => {
+  const endCall = useCallback((notifyPeer = true) => {
     console.log('📴 Ending call');
 
     // Notify peer
-    if (socketRef.current && callPeer) {
+    if (notifyPeer && socketRef.current && callPeer) {
       socketRef.current.emit('call:end', {
         to: callPeer.username,
         from: username
@@ -2360,7 +2387,7 @@ function App() {
     // Stop quality controller
     if (qualityControllerRef.current) {
       console.log('⏸️ Stopping quality controller');
-      qualityControllerRef.current.destroy?.();
+      qualityControllerRef.current.stop?.();
       qualityControllerRef.current = null;
     }
 
@@ -2390,6 +2417,7 @@ function App() {
       screenStreamRef.current.getTracks().forEach(track => track.stop());
       screenStreamRef.current = null;
     }
+    pendingIceCandidatesRef.current = [];
 
     // Reset state
     setCallState('idle');
@@ -2404,12 +2432,15 @@ function App() {
     setCallDuration(0);
     setCallError(null);
     setCallStats(null);
-    setShowCallStats(false);
     setQualityIndicator(null);
-    setConnectionQuality(0);
+    setConnectionQuality('excellent');
     stopCallTimer();
     stopRingtone();
   }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone]);
+
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -2640,7 +2671,7 @@ function App() {
                   onClick={() => setShowMenuDropdown(false)}
                 />
                 <motion.div 
-                  className="menu-dropdown"
+                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -4263,146 +4294,6 @@ function App() {
           >
             <motion.div
               className="incoming-call-modal"
-              initial={{ scale: 0.8, opacity: 0, y: 50 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 50 }}
-            >
-              <div className="incoming-call-avatar">
-                {incomingCall.callType === 'video' ? <Video size={48}/> : <Phone size={48}/>}
-              </div>
-              <h3>Incoming {incomingCall.callType} call</h3>
-              <p className="incoming-call-name">{incomingCall.from}</p>
-              <div className="incoming-call-actions">
-                <button 
-                  className="incoming-call-btn reject-btn"
-                  onClick={rejectCall}
-                  title="Reject call"
-                >
-                  <PhoneOff size={24}/>
-                  <span>Decline</span>
-                </button>
-                <button 
-                  className="incoming-call-btn accept-btn"
-                  onClick={answerCall}
-                  title="Answer call"
-                >
-                  {incomingCall.callType === 'video' ? <Video size={24}/> : <Phone size={24}/>}
-                  <span>Answer</span>
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Premium Active Call Interface */}
-      <AnimatePresence>
-        {callState === 'active' && callPeer && (
-          <AnimatePresence mode="wait">
-            {!isCallMinimized ? (
-              <CallPanel
-                callType={callType}
-                callPeer={callPeer?.username}
-                callDuration={callDuration}
-                callStats={callStats}
-                isRecording={isCallRecording}
-                qualityIndicator={qualityIndicator}
-                connectionQuality={connectionQuality}
-                isMuted={isMuted}
-                isVideoOff={isVideoOff}
-                isScreenSharing={isScreenSharing}
-                isCallMinimized={isCallMinimized}
-                videoEffectSettings={videoEffectSettings}
-                onToggleMute={toggleMute}
-                onToggleVideo={() => callType === 'video' && toggleVideo()}
-                onToggleScreenShare={callType === 'video' ? toggleScreenShare : null}
-                onToggleRecording={toggleRecording}
-                onApplyEffect={applyVideoEffect}
-                onEndCall={endCall}
-                onToggleMinimize={toggleCallMinimize}
-                onShowStats={() => setShowCallStats(!showCallStats)}
-                localVideoRef={localVideoRef}
-                remoteVideoRef={remoteVideoRef}
-                formatDuration={formatDuration}
-                getQualityLabelStyle={getQualityLabelStyle}
-                localStream={localStream}
-                remoteStream={remoteStream}
-              />
-            ) : null}
-          </AnimatePresence>
-        )}
-      </AnimatePresence>
-
-      {/* Call History Panel */}
-      <AnimatePresence>
-        {showCallStats && callHistory && (
-          <motion.div
-            className="call-history-modal"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 1001
-            }}
-          >
-            <CallHistoryPanel
-              callHistory={callHistory}
-              onClose={() => setShowCallStats(false)}
-              formatDuration={formatDuration}
-              getQualityLabelStyle={getQualityLabelStyle}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Calling/Ringing State Overlay */}
-      <AnimatePresence>
-        {(callState === 'calling' || callState === 'ringing') && (
-          <motion.div
-            className="call-modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="calling-modal"
-              initial={{ scale: 0.8, opacity: 0, y: 50 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.8, opacity: 0, y: 50 }}
-            >
-              <div className="calling-avatar">
-                {callType === 'video' ? <Video size={48}/> : <Phone size={48}/>}
-              </div>
-              <h3>{callState === 'calling' ? 'Calling...' : 'Ringing...'}</h3>
-              <p className="calling-name">{callPeer?.username}</p>
-              <button 
-                className="calling-cancel-btn"
-                onClick={endCall}
-                title="Cancel call"
-              >
-                <PhoneOff size={24}/>
-                <span>Cancel</span>
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Incoming Call Modal */}
-      <AnimatePresence>
-        {incomingCall && (
-          <motion.div
-            className="call-modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="incoming-call-modal"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -4443,7 +4334,7 @@ function App() {
 
       {/* Calling/Ringing Modal */}
       <AnimatePresence>
-        {callState === 'calling' && callPeer && (
+        {(callState === 'calling' || callState === 'ringing') && callPeer && (
           <motion.div
             className="call-modal-overlay"
             initial={{ opacity: 0 }}
@@ -4460,7 +4351,9 @@ function App() {
                 <User size={40} />
               </div>
               <h3>
-                {callType === 'video' ? 'Video Calling...' : 'Calling...'}
+                {callState === 'ringing'
+                  ? (callType === 'video' ? 'Video Ringing...' : 'Ringing...')
+                  : (callType === 'video' ? 'Video Calling...' : 'Calling...')}
               </h3>
               <div className="calling-name">
                 {callPeer.username}

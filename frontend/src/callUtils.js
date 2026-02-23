@@ -64,6 +64,24 @@ export class CallStatistics {
     this.jitter = 0;
   }
 
+  getStats() {
+    const duration = Math.floor((Date.now() - this.startTime) / 1000);
+    const qualityScore = this.getQualityScore();
+
+    return {
+      audioLevel: this.audioLevel,
+      videoFrameRate: this.videoFrameRate,
+      connectionState: this.connectionState,
+      bandwidth: { ...this.bandwidth },
+      latency: this.latency,
+      packetLoss: this.packetLoss,
+      jitter: this.jitter,
+      duration,
+      qualityScore,
+      qualityLabel: this.getQualityLabel()
+    };
+  }
+
   async updateStats(peerConnection) {
     try {
       const stats = await peerConnection.getStats();
@@ -511,7 +529,11 @@ export class AdaptiveQualityController {
 
 // ==================== CALL QUALITY INDICATORS ====================
 export function getQualityIndicator(stats) {
-  const score = stats.getQualityScore();
+  const score = typeof stats === 'number'
+    ? stats
+    : typeof stats?.getQualityScore === 'function'
+      ? stats.getQualityScore()
+      : Number(stats?.qualityScore || 0);
 
   if (score >= 90) {
     return {
