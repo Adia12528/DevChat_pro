@@ -928,6 +928,64 @@ function App() {
     setContextMenuMessage(null);
   }, []);
 
+  // Playback and viewer functions (moved before handleContextMenuAction to avoid initialization error)
+  const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
+    console.log(`🎵 Play voice message requested: ${msgId}`);
+    
+    if (playingVoiceId === msgId) {
+      // Pause currently playing audio
+      audioRef.current?.pause();
+      console.log('⏸️ Voice paused');
+      setPlayingVoiceId(null);
+    } else {
+      try {
+        // Stop any currently playing audio
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        
+        console.log('🎧 Creating new audio:', audioUrl);
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        
+        // Set up event handlers before playing
+        audio.onended = () => {
+          console.log('✅ Voice playback ended');
+          setPlayingVoiceId(null);
+        };
+        
+        audio.onerror = (error) => {
+          console.error('❌ Audio playback error:', error);
+          setErrorMessage('Failed to play voice message. File may be corrupted.');
+          setTimeout(() => setErrorMessage(''), 4000);
+          setPlayingVoiceId(null);
+        };
+        
+        // Play returns a promise - handle it properly
+        setPlayingVoiceId(msgId);
+        await audio.play();
+        console.log('▶️ Voice playing');
+      } catch (error) {
+        console.error('❌ Failed to play voice:', error);
+        setErrorMessage('Unable to play voice message. Try again or check your browser settings.');
+        setTimeout(() => setErrorMessage(''), 4000);
+        setPlayingVoiceId(null);
+        audioRef.current = null;
+      }
+    }
+  }, [playingVoiceId]);
+
+  // Open image viewer
+  const openImageViewer = useCallback((imageData) => {
+    setImageViewer(imageData);
+  }, []);
+
+  // Close image viewer
+  const closeImageViewer = useCallback(() => {
+    setImageViewer(null);
+  }, []);
+
   const handleContextMenuAction = useCallback((action) => {
     if (!contextMenuMessage) return;
     
@@ -1292,63 +1350,6 @@ function App() {
       startVoiceRecording();
     }
   }, [isRecording, startVoiceRecording, stopVoiceRecording]);
-
-  const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
-    console.log(`🎵 Play voice message requested: ${msgId}`);
-    
-    if (playingVoiceId === msgId) {
-      // Pause currently playing audio
-      audioRef.current?.pause();
-      console.log('⏸️ Voice paused');
-      setPlayingVoiceId(null);
-    } else {
-      try {
-        // Stop any currently playing audio
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-        
-        console.log('🎧 Creating new audio:', audioUrl);
-        const audio = new Audio(audioUrl);
-        audioRef.current = audio;
-        
-        // Set up event handlers before playing
-        audio.onended = () => {
-          console.log('✅ Voice playback ended');
-          setPlayingVoiceId(null);
-        };
-        
-        audio.onerror = (error) => {
-          console.error('❌ Audio playback error:', error);
-          setErrorMessage('Failed to play voice message. File may be corrupted.');
-          setTimeout(() => setErrorMessage(''), 4000);
-          setPlayingVoiceId(null);
-        };
-        
-        // Play returns a promise - handle it properly
-        setPlayingVoiceId(msgId);
-        await audio.play();
-        console.log('▶️ Voice playing');
-      } catch (error) {
-        console.error('❌ Failed to play voice:', error);
-        setErrorMessage('Unable to play voice message. Try again or check your browser settings.');
-        setTimeout(() => setErrorMessage(''), 4000);
-        setPlayingVoiceId(null);
-        audioRef.current = null;
-      }
-    }
-  }, [playingVoiceId]);
-
-  // Open image viewer
-  const openImageViewer = useCallback((imageData) => {
-    setImageViewer(imageData);
-  }, []);
-
-  // Close image viewer
-  const closeImageViewer = useCallback(() => {
-    setImageViewer(null);
-  }, []);
 
   // Download media file
   const downloadMedia = useCallback((url, fileName) => {
