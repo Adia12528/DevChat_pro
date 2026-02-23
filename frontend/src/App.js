@@ -285,6 +285,26 @@ function App() {
     });
   }, [chat, username]);
 
+  // Real-time cleanup: Remove offline users periodically
+  useEffect(() => {
+    const cleanupOfflineUsers = setInterval(() => {
+      setOnlineUsers(prev => {
+        return prev.filter(u => {
+          const userLastSeenTime = userLastSeen[u];
+          // Remove user if they haven't sent any messages for 5 minutes (offline timeout)
+          if (userLastSeenTime && Date.now() - userLastSeenTime > 300000) {
+            console.log(`🔌 Auto-removing offline user: ${u}`);
+            return false;
+          }
+          // Also filter out anyone with offline status
+          return userStatus[u] !== 'offline';
+        });
+      });
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(cleanupOfflineUsers);
+  }, [userLastSeen, userStatus]);
+
   // Session management - restore from sessionStorage on mount
   useEffect(() => {
     const savedUsername = sessionStorage.getItem('chatUsername');
@@ -303,6 +323,14 @@ function App() {
         socketRef.current.emit('update_status', { 
           username: usernameRef.current, 
           status: 'offline' 
+        });
+        socketRef.current.emit('leave_room', {
+          room: roomRef.current,
+          username: usernameRef.current
+        });
+        socketRef.current.emit('user_logout', {
+          username: usernameRef.current,
+          room: roomRef.current
         });
       }
     };
@@ -475,6 +503,27 @@ function App() {
       removeTypingUser(data.username);
     });
 
+    // Handle user list updates from server
+    newSocket.on("user_list_updated", (data) => {
+      console.log("📋 User list updated:", data.users);
+      const activeUsers = Array.isArray(data.users) ? data.users.filter(u => u) : [];
+      setOnlineUsers(activeUsers);
+    });
+
+    // Handle when user goes offline/disconnects
+    newSocket.on("user_offline", (data) => {
+      console.log("🔌 User went offline:", data.username);
+      setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      removeTypingUser(data.username);
+    });
+
+    // Handle logout event
+    newSocket.on("user_logout", (data) => {
+      console.log("🚪 User logged out:", data.username);
+      setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      removeTypingUser(data.username);
+    });
+
     const startTypingTimer = (user) => {
       const timers = typingTimersRef.current;
       if (timers.has(user)) clearTimeout(timers.get(user));
@@ -642,9 +691,11 @@ function App() {
 
   // Sorted & filtered users list
   const sortedUsers = useMemo(() => {
-    let filtered = onlineUsers.filter(u => 
-      u.toLowerCase().includes(userSearchFilter.toLowerCase())
-    );
+    // Only include valid, online users
+    let filtered = onlineUsers
+      .filter(u => u && typeof u === 'string' && u.trim().length > 0)
+      .filter(u => !userStatus[u] || userStatus[u] !== 'offline')
+      .filter(u => u.toLowerCase().includes(userSearchFilter.toLowerCase()));
     
     filtered.sort((a, b) => {
       const profileA = userProfiles[a] || {};
@@ -663,7 +714,7 @@ function App() {
     });
     
     return filtered;
-  }, [onlineUsers, userSearchFilter, userListSortBy, userProfiles]);
+  }, [onlineUsers, userSearchFilter, userListSortBy, userProfiles, userStatus]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -1723,6 +1774,7 @@ function App() {
     console.log('🚪 Logging out...');
     if (socketRef.current) {
       socketRef.current.emit('update_status', { username: usernameRef.current, status: 'offline' });
+      socketRef.current.emit('user_logout', { username: usernameRef.current, room: roomRef.current });
       socketRef.current.emit('leave_room', { room: roomRef.current, username: usernameRef.current });
       socketRef.current.disconnect();
     }
