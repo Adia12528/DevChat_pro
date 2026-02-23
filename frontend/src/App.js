@@ -1,4 +1,4 @@
-// DevChat Pro v2.9.0 - Fixed Service Worker cache versioning
+// DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { APP_VERSION, BUILD_DATE } from './version';
 import './App.css';
 import { formatRelativeTime, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 
@@ -111,6 +112,12 @@ function App() {
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
+
+  // Version logging
+  useEffect(() => {
+    console.log(`%c🚀 DevChat Pro v${APP_VERSION}`, 'color: #00ff88; font-size: 16px; font-weight: bold;');
+    console.log(`%cBuild Date: ${new Date(BUILD_DATE).toLocaleString()}`, 'color: #00ccff; font-size: 12px;');
+  }, []);
 
   // Theme effect
   useEffect(() => {
@@ -1236,7 +1243,12 @@ function App() {
                     <span>Logout</span>
                   </button>
                   
-                  <div className="menu-footer">Session ends when browser closes</div>
+                  <div className="menu-footer">
+                    <div>Session ends when browser closes</div>
+                    <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
+                      v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}
+                    </div>
+                  </div>
                 </motion.div>
               </>
             )}

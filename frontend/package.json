@@ -19,8 +19,11 @@
     "zustand": "^4.4.1"
   },
   "scripts": {
+    "prestart": "node update-version.js",
     "start": "react-scripts start",
-    "build": "react-scripts build"
+    "prebuild": "node update-version.js",
+    "build": "react-scripts build",
+    "version:bump": "npm version patch --no-git-tag-version && node update-version.js"
   },
   "browserslist": {
     "production": [
