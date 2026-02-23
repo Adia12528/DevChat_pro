@@ -1,6 +1,8 @@
 // This optional code is used to register a service worker.
 // register() is not called by default.
 
+let refreshing = false;
+
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     window.location.hostname === '[::1]' ||
@@ -33,6 +35,12 @@ function registerValidSW(swUrl, config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+
       // Check for updates every 30 seconds
       setInterval(() => {
         registration.update();
@@ -46,15 +54,11 @@ function registerValidSW(swUrl, config) {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              console.log('%c🔄 New content is available! Auto-reloading...', 'color: #ff9800; font-weight: bold;');
-              
-              // Automatically skip waiting and reload
-              installingWorker.postMessage({ type: 'SKIP_WAITING' });
-              
-              // Reload after a short delay
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+              console.log('%c🔄 New content is available! Applying update...', 'color: #ff9800; font-weight: bold;');
+
+              if (registration.waiting) {
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              }
               
               if (config && config.onUpdate) {
                 config.onUpdate(registration);

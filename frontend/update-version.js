@@ -9,6 +9,7 @@ const packageJson = JSON.parse(
 
 const version = packageJson.version;
 const buildDate = new Date().toISOString();
+const buildId = Date.now();
 
 // Generate version.js
 const versionContent = `// Auto-generated version file - DO NOT EDIT MANUALLY
@@ -34,7 +35,7 @@ let swContent = fs.readFileSync(swPath, 'utf8');
 // Replace CACHE_NAME with new version
 swContent = swContent.replace(
   /const CACHE_NAME = ['"]devchat-pro-v[^'"]+['"]/,
-  `const CACHE_NAME = 'devchat-pro-v${version}'`
+  `const CACHE_NAME = 'devchat-pro-v${version}-b${buildId}'`
 );
 
 fs.writeFileSync(swPath, swContent, 'utf8');

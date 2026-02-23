@@ -19,11 +19,8 @@ if (process.env.NODE_ENV === 'production') {
   serviceWorkerRegistration.register({
     onSuccess: () => console.log('✅ App is ready for offline use'),
     onUpdate: (registration) => {
-      console.log('🔄 New version available. Please refresh.');
-      if (window.confirm('New version available! Reload to update?')) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-        window.location.reload();
-      }
+      console.log('🔄 New version available. Applying update...');
+      registration?.waiting?.postMessage({ type: 'SKIP_WAITING' });
     }
   });
 } else {
