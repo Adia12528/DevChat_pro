@@ -655,15 +655,23 @@ function App() {
     });
 
     newSocket.on("call:answered", async (data) => {
-      console.log("✅ Call answered by:", data.from);
+      console.log("✅ [CALLER] Call answered by:", data.from);
       try {
         if (peerConnectionRef.current && data.answer) {
+          console.log("📋 [CALLER] Setting answer as remote description");
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log("✅ [CALLER] Remote description set from answer");
           setCallState('active');
           startCallTimer();
+          console.log("🎉 [CALLER] Call state set to ACTIVE");
+        } else {
+          console.warn("⚠️ [CALLER] Missing peerConnection or answer:", { 
+            hasPeerConnection: !!peerConnectionRef.current,
+            hasAnswer: !!data.answer 
+          });
         }
       } catch (err) {
-        console.error("Error setting remote description:", err);
+        console.error("❌ [CALLER] Error setting remote description:", err);
         setCallError("Failed to establish connection");
       }
     });
@@ -681,13 +689,23 @@ function App() {
     });
 
     newSocket.on("call:ice-candidate", async (data) => {
-      console.log("🧊 ICE candidate received");
+      console.log("🧊 [ICE-CANDIDATE] Received from:", data.from);
       try {
         if (peerConnectionRef.current && data.candidate) {
+          console.log("➕ [ICE] Adding ICE candidate", {
+            candidate: data.candidate.candidate?.substring(0, 50),
+            type: data.candidate.type
+          });
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log("✅ [ICE] ICE candidate added");
+        } else {
+          console.warn("⚠️ [ICE] Missing peerConnection or candidate", {
+            hasPeerConnection: !!peerConnectionRef.current,
+            hasCandidate: !!data.candidate
+          });
         }
       } catch (err) {
-        console.error("Error adding ICE candidate:", err);
+        console.error("⚠️ [ICE] Error adding ICE candidate (may be normal):", err.message);
       }
     });
 
@@ -1951,35 +1969,71 @@ function App() {
   }, []);
 
   // Initialize peer connection
-  const createPeerConnection = useCallback(() => {
+  const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServers);
+    console.log('🔧 Creating peer connection for:', targetUsername);
 
-    // Handle ICE candidates
+    // Handle ICE candidates - use passed targetUsername to avoid stale closure
     pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current && callPeer) {
-        console.log('🧊 Sending ICE candidate');
+      if (event.candidate && socketRef.current && targetUsername) {
+        console.log('🧊 Sending ICE candidate to:', targetUsername);
         socketRef.current.emit('call:ice-candidate', {
-          to: callPeer.username,
+          to: targetUsername,
           candidate: event.candidate
         });
+      } else if (event.candidate) {
+        console.log('⚠️ Can\'t send ICE candidate - no target or socket');
       }
     };
 
     // Handle remote stream
     pc.ontrack = (event) => {
-      console.log('🎥 Remote track received:', event.streams[0]);
-      setRemoteStream(event.streams[0]);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+      console.log('🎥 [ONTRACK] Remote track received!', {
+        kind: event.track.kind,
+        id: event.track.id,
+        enabled: event.track.enabled,
+        streams: event.streams.length,
+        state: event.track.readyState
+      });
+      
+      if (event.streams && event.streams.length > 0) {
+        const remoteStream = event.streams[0];
+        console.log('📊 [ONTRACK] Remote stream details:', {
+          audioTracks: remoteStream.getAudioTracks().length,
+          videoTracks: remoteStream.getVideoTracks().length,
+          id: remoteStream.id
+        });
+        
+        setRemoteStream(remoteStream);
+        
+        // Set video source
+        if (remoteVideoRef.current) {
+          console.log('📹 [ONTRACK] Setting remoteVideoRef.srcObject');
+          remoteVideoRef.current.srcObject = remoteStream;
+        } else {
+          console.warn('⚠️ [ONTRACK] remoteVideoRef.current is null!');
+        }
       }
     };
 
     // Handle connection state changes
     pc.onconnectionstatechange = () => {
-      console.log('Connection state:', pc.connectionState);
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      const state = pc.connectionState;
+      console.log('🔗 Connection state changed to:', state);
+      if (state === 'connecting') {
+        console.log('🔄 [CONNECTION] Attempting to connect...');
+      } else if (state === 'connected') {
+        console.log('✅ [CONNECTION] Connected!');
+      } else if (state === 'disconnected') {
+        console.log('⚠️ [CONNECTION] Disconnected');
         setCallError('Connection lost');
         endCall();
+      } else if (state === 'failed') {
+        console.log('❌ [CONNECTION] Connection failed!');
+        setCallError('Connection failed');
+        endCall();
+      } else if (state === 'closed') {
+        console.log('🔴 [CONNECTION] Connection closed');
       }
     };
 
@@ -1992,6 +2046,7 @@ function App() {
     if (!targetUser ||!socketRef.current) return;
 
     try {
+      console.log('📞 [CALLER] Starting', type, 'call to:', targetUser);
       setCallType(type);
       setCallPeer({ username: targetUser, userId: targetUser });
       setCallState('calling');
@@ -2003,14 +2058,15 @@ function App() {
         : { audio: true, video: false };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('📹 [CALLER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
       setLocalStream(stream);
 
       if (localVideoRef.current && type === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
-      const pc = createPeerConnection();
+      // Create peer connection - pass targetUser to avoid stale closure
+      const pc = createPeerConnection(targetUser);
 
       // Add local stream tracks
       stream.getTracks().forEach(track => {
@@ -2019,10 +2075,12 @@ function App() {
 
       //Create offer
       const offer = await pc.createOffer();
+      console.log('🎤 [CALLER] Created offer');
       await pc.setLocalDescription(offer);
+      console.log('🎤 [CALLER] Set local description');
 
       // Send call offer via socket
-      console.log('📞 Initiating call to:', targetUser);
+      console.log('📤 [CALLER] Sending call:offer to:', targetUser);
       socketRef.current.emit('call:offer', {
         to: targetUser,
         from: username,
@@ -2030,6 +2088,7 @@ function App() {
         offer: offer
       });
 
+      console.log('🔔 [CALLER] Playing ringtone');
       playRingtone();
 
     } catch (err) {
@@ -2047,47 +2106,70 @@ function App() {
     if (!incomingCall || !socketRef.current) return;
 
     try {
+      const callerUsername = incomingCall.from;
+      console.log('📞 [RECEIVER] Answering', incomingCall.callType, 'call from:', callerUsername);
+      
       setCallType(incomingCall.callType);
-      setCallPeer({ username: incomingCall.from, userId: incomingCall.from });
+      setCallPeer({ username: callerUsername, userId: callerUsername });
       setCallState('active');
+      
+      // FORCE STOP RINGTONE - make absolutely sure
+      console.log('🛑 [RECEIVER] Force-stopping ringtone');
       stopRingtone();
+      if (ringtoneRef.current) {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      }
 
       // Get media stream
       const constraints = incomingCall.callType === 'video'
         ? { audio: true, video: { width: 1280, height: 720 } }
         : { audio: true, video: false };
 
+      console.log('📹 [RECEIVER] Requesting media with constraints:', constraints);
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
       setLocalStream(stream);
 
       if (localVideoRef.current && incomingCall.callType === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
-      const pc = createPeerConnection();
+      // Create peer connection - pass caller username to avoid stale closure
+      console.log('🔧 [RECEIVER] Creating peer connection for caller:', callerUsername);
+      const pc = createPeerConnection(callerUsername);
+      peerConnectionRef.current = pc; // Ensure it's stored
 
       // Add local stream tracks
+      console.log('➕ [RECEIVER] Adding local tracks to peer connection');
       stream.getTracks().forEach(track => {
+        console.log('📌 [RECEIVER] Adding track:', track.kind, track.id);
         pc.addTrack(track, stream);
       });
 
       // Set remote description from offer
+      console.log('🎧 [RECEIVER] Setting remote description from offer');
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      console.log('✅ [RECEIVER] Remote description set');
 
       // Create answer
+      console.log('🎤 [RECEIVER] Creating answer');
       const answer = await pc.createAnswer();
+      console.log('🎤 [RECEIVER] Setting local description with answer');
       await pc.setLocalDescription(answer);
+      console.log('✅ [RECEIVER] Local description set');
 
-      // Send answer
-      console.log('✅ Answering call from:', incomingCall.from);
+      // Send answer back to caller
+      console.log('📤 [RECEIVER] Sending call:answer to:', callerUsername);
       socketRef.current.emit('call:answer', {
-        to: incomingCall.from,
+        to: callerUsername,
         from: username,
         answer: answer
       });
+      console.log('✅ [RECEIVER] Call:answer sent');
 
       setIncomingCall(null);
+      console.log('⏱️ [RECEIVER] Starting call timer');
       startCallTimer();
 
     } catch (err) {
