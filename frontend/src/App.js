@@ -425,10 +425,10 @@ export default function App() {
     setUploadingFile(true);
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', 'devchat_uploads'); // You'll need to configure Cloudinary
-    
+    formData.append('upload_preset', 'devchat_uploads');
+
     try {
-      const res = await fetch('https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/auto/upload', {
+      const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
         method: 'POST',
         body: formData
       });
@@ -591,7 +591,7 @@ export default function App() {
         formData.append('upload_preset', 'devchat_uploads');
         
         try {
-          const res = await fetch('https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/auto/upload', {
+          const res = await fetch('https://api.cloudinary.com/v1_1/da03qqo5g/auto/upload', {
             method: 'POST',
             body: formData
           });
