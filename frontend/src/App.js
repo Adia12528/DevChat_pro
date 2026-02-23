@@ -105,6 +105,11 @@ function App() {
     avgMessageLength: 0,
     mostActiveMember: null
   });
+
+  // Enhanced user list
+  const [userSearchFilter, setUserSearchFilter] = useState("");
+  const [userListSortBy, setUserListSortBy] = useState("activity"); // activity, name, last-seen
+  const [showUsersModal, setShowUsersModal] = useState(false);
   
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -256,6 +261,26 @@ function App() {
         }
       });
       return updated;
+    });
+
+    // Build user profiles with message counts
+    setUserProfiles(prev => {
+      const profiles = { ...prev };
+      Object.entries(senderCounts).forEach(([sender, count]) => {
+        if (!profiles[sender]) {
+          profiles[sender] = {
+            joinedAt: chat.find(m => m.sender === sender)?.time || now,
+            messageCount: count,
+            lastSeen: now,
+            role: sender === username ? 'you' : 'member',
+            isBot: sender.toLowerCase().includes('bot') ? true : false
+          };
+        } else {
+          profiles[sender].messageCount = count;
+          profiles[sender].lastSeen = now;
+        }
+      });
+      return profiles;
     });
   }, [chat, username]);
 
@@ -613,6 +638,31 @@ function App() {
     if (!debouncedSearchQuery) return 0;
     return filteredChat.length;
   }, [debouncedSearchQuery, filteredChat]);
+
+  // Sorted & filtered users list
+  const sortedUsers = useMemo(() => {
+    let filtered = onlineUsers.filter(u => 
+      u.toLowerCase().includes(userSearchFilter.toLowerCase())
+    );
+    
+    filtered.sort((a, b) => {
+      const profileA = userProfiles[a] || {};
+      const profileB = userProfiles[b] || {};
+      
+      switch(userListSortBy) {
+        case 'name':
+          return a.localeCompare(b);
+        case 'last-seen':
+          return (profileB.lastSeen || 0) - (profileA.lastSeen || 0);
+        case 'activity':
+          return (profileB.messageCount || 0) - (profileA.messageCount || 0);
+        default:
+          return 0;
+      }
+    });
+    
+    return filtered;
+  }, [onlineUsers, userSearchFilter, userListSortBy, userProfiles]);
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -1966,25 +2016,182 @@ function App() {
       </AnimatePresence>
 
       {onlineUsers.length > 0 && (
-        <div className="users-list">
-          {onlineUsers.map((user) => (
-            <motion.div 
-              key={user} 
-              className="user-tag" 
-              initial={{ opacity: 0, x: -10 }} 
-              animate={{ opacity: 1, x: 0 }}
-              onClick={() => setShowProfileModal(user)}
-            >
-              <div style={getAvatarStyle(user)}>
-                {getInitials(user)}
-              </div>
-              <span className="user-tag-name">{user}</span>
-              {typingUsers.has(user) && <span className="user-typing-dot"></span>}
-              <span className={`user-status-dot status-${userStatus[user] || 'online'}`}></span>
-            </motion.div>
-          ))}
+        <div className="users-section">
+          <div className="users-header">
+            <div className="users-title">
+              <Users size={16}/>
+              <span>{sortedUsers.length} member{sortedUsers.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="users-controls">
+              <input 
+                type="text"
+                placeholder="Search users..."
+                className="user-search-input"
+                value={userSearchFilter}
+                onChange={(e) => setUserSearchFilter(e.target.value)}
+              />
+              <select 
+                className="user-sort-select"
+                value={userListSortBy}
+                onChange={(e) => setUserListSortBy(e.target.value)}
+              >
+                <option value="activity">Activity</option>
+                <option value="name">Name</option>
+                <option value="last-seen">Last Seen</option>
+              </select>
+              <button 
+                className="view-all-users-btn"
+                onClick={() => setShowUsersModal(true)}
+                title="View all members"
+              >
+                <Users size={16}/>
+              </button>
+            </div>
+          </div>
+          <div className="users-list">
+            {sortedUsers.length > 0 ? (
+              sortedUsers.map((user) => {
+                const profile = userProfiles[user] || {};
+                const lastSeenTime = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'never';
+                return (
+                  <motion.div 
+                    key={user} 
+                    className="user-tag-enhanced" 
+                    initial={{ opacity: 0, x: -10 }} 
+                    animate={{ opacity: 1, x: 0 }}
+                    whileHover={{ x: 5 }}
+                  >
+                    <div 
+                      className="user-avatar-wrapper"
+                      onClick={() => setShowUsersModal(true)}
+                      title={`View ${user}'s profile`}
+                    >
+                      <div style={getAvatarStyle(user)} className="user-avatar">
+                        {getInitials(user)}
+                      </div>
+                      <span className={`user-status-dot status-${userStatus[user] || 'online'}`}></span>
+                    </div>
+                    <div className="user-info">
+                      <div className="user-name-wrapper">
+                        <span className="user-tag-name">{user}</span>
+                        <span className={`user-role-badge role-${profile.role || 'member'}`}>
+                          {profile.isBot ? '🤖' : profile.role === 'you' ? 'You' : 'Member'}
+                        </span>
+                      </div>
+                      <div className="user-meta">
+                        <span className="user-message-count" title="Messages sent">
+                          {profile.messageCount || 0} msg{(profile.messageCount || 0) !== 1 ? 's' : ''}
+                        </span>
+                        <span className="user-last-seen" title="Last active">
+                          {lastSeenTime}
+                        </span>
+                      </div>
+                    </div>
+                    {typingUsers.has(user) && <span className="user-typing-dot" title="Typing..."></span>}
+                    <button 
+                      className="user-mention-btn"
+                      onClick={() => {
+                        setMessageText(messageText + `@${user} `);
+                        textareaRef.current?.focus();
+                      }}
+                      title="Mention this user"
+                    >
+                      @
+                    </button>
+                  </motion.div>
+                );
+              })
+            ) : (
+              <div className="no-users-found">No users found</div>
+            )}
+          </div>
         </div>
       )}
+
+      {/* Users Modal */}
+      <AnimatePresence>
+        {showUsersModal && (
+          <motion.div 
+            className="users-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowUsersModal(false)}
+          >
+            <motion.div 
+              className="users-modal"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="users-modal-header">
+                <h2>Members ({onlineUsers.length})</h2>
+                <button 
+                  className="modal-close-btn"
+                  onClick={() => setShowUsersModal(false)}
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="users-modal-content">
+                <table className="users-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Role</th>
+                      <th>Messages</th>
+                      <th>Joined</th>
+                      <th>Last Seen</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {onlineUsers.map((user) => {
+                      const profile = userProfiles[user] || {};
+                      const joinedDate = profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString() : 'Unknown';
+                      const lastSeenDate = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'Never';
+                      return (
+                        <tr key={user} className="user-table-row">
+                          <td className="user-cell">
+                            <div className="user-cell-avatar">
+                              <div style={getAvatarStyle(user)}>
+                                {getInitials(user)}
+                              </div>
+                              <span className={`user-cell-status status-${userStatus[user] || 'online'}`}></span>
+                            </div>
+                            <span>{user}</span>
+                          </td>
+                          <td className={`role-cell role-${profile.role || 'member'}`}>
+                            {profile.isBot ? '🤖 Bot' : profile.role === 'you' ? 'You' : 'Member'}
+                          </td>
+                          <td className="messages-cell">{profile.messageCount || 0}</td>
+                          <td className="joined-cell">{joinedDate}</td>
+                          <td className="last-seen-cell">{lastSeenDate}</td>
+                          <td className="action-cell">
+                            <button 
+                              className="mention-cell-btn"
+                              onClick={() => {
+                                setMessageText(messageText + `@${user} `);
+                                textareaRef.current?.focus();
+                                setShowUsersModal(false);
+                              }}
+                              title="Mention this user"
+                            >
+                              @mention
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div 
         className="chat-body" 
