@@ -68,6 +68,11 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenuMessage, setContextMenuMessage] = useState(null);
+  const [longPressTimer, setLongPressTimer] = useState(null);
+  
   // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
@@ -78,6 +83,7 @@ export default function App() {
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
   const fileInputRef = useRef(null);
+  const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingIntervalRef = useRef(null);
@@ -422,6 +428,26 @@ export default function App() {
     );
   }, [chat, debouncedSearchQuery]);
 
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+        setContextMenu(null);
+        setContextMenuMessage(null);
+      }
+    };
+    
+    if (contextMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [contextMenu]);
+
   const typingDisplay = useMemo(() => {
     const arr = Array.from(typingUsers);
     if (arr.length === 0) return "";
@@ -629,6 +655,70 @@ export default function App() {
     setShowDeleteConfirm(false);
     setDeletingMsgId(null);
   }, [deletingMsgId]);
+
+  // Context menu handlers
+  const handleContextMenu = useCallback((e, message) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX || e.touches?.[0]?.clientX,
+      y: e.clientY || e.touches?.[0]?.clientY,
+    });
+    setContextMenuMessage(message);
+  }, []);
+
+  const handleLongPressStart = useCallback((e, message) => {
+    const timer = setTimeout(() => {
+      const touch = e.touches?.[0];
+      if (touch) {
+        handleContextMenu({ 
+          preventDefault: () => {}, 
+          clientX: touch.clientX, 
+          clientY: touch.clientY 
+        }, message);
+      }
+    }, 500); // 500ms for long press
+    setLongPressTimer(timer);
+  }, [handleContextMenu]);
+
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+  }, [longPressTimer]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+    setContextMenuMessage(null);
+  }, []);
+
+  const handleContextMenuAction = useCallback((action) => {
+    if (!contextMenuMessage) return;
+    
+    switch(action) {
+      case 'copy':
+        handleCopyMessage(contextMenuMessage.text, contextMenuMessage._id);
+        break;
+      case 'reply':
+        setReplyingTo(contextMenuMessage);
+        break;
+      case 'pin':
+        togglePin(contextMenuMessage._id, contextMenuMessage.isPinned);
+        break;
+      case 'edit':
+        startEditMessage(contextMenuMessage._id, contextMenuMessage.text);
+        break;
+      case 'delete':
+        deleteMessage(contextMenuMessage._id);
+        break;
+      case 'react':
+        // Handle reactions
+        break;
+      default:
+        break;
+    }
+    closeContextMenu();
+  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, closeContextMenu]);
 
   const renderMessageText = (msg) => {
     if (!showMarkdown) return <p>{msg.text}</p>;
@@ -913,9 +1003,19 @@ export default function App() {
         </button>
         <div className="meta">
           <h3>{room}</h3>
-          <span className={connected ? "status-on" : "status-off"}>
-            {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
-          </span>
+          <div className="room-info">
+            <span className={connected ? "status-on" : "status-off"}>
+              {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
+            </span>
+            <span className="meta-divider">·</span>
+            <span className="message-count">{chat.length} messages</span>
+            {chat.length > 0 && (
+              <>
+                <span className="meta-divider">·</span>
+                <span className="last-activity">Last: {formatRelativeTime(chat[chat.length - 1]?.time)}</span>
+              </>
+            )}
+          </div>
         </div>
         <div className="users-info">
           <Users size={16}/>
@@ -999,6 +1099,10 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 key={i} 
                 className={`msg-bubble ${isOwn ? "me" : "other"} ${m.isPinned ? "pinned" : ""}`}
+                onContextMenu={(e) => handleContextMenu(e, m)}
+                onTouchStart={(e) => handleLongPressStart(e, m)}
+                onTouchEnd={handleLongPressEnd}
+                onTouchMove={handleLongPressEnd}
               >
                 {m.isPinned && <Pin size={12} className="pin-icon" />}
                 {m.sender !== username && <span className="sender-tag">{m.sender}</span>}
@@ -1055,63 +1159,6 @@ export default function App() {
                       <CheckCircle size={10} /> {m.readBy.length}
                     </span>
                   )}
-                  <div className="msg-actions">
-                    <div className="quick-reactions">
-                      {QUICK_REACTIONS.map(emoji => (
-                        <button
-                          key={emoji}
-                          className="quick-reaction-btn"
-                          onClick={() => handleReaction(m._id, emoji)}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                    <button 
-                      className={`copy-btn ${copiedMsgId === msgId ? 'copied' : ''} ${isMobile ? 'mobile-visible' : ''}`}
-                      onClick={() => handleCopyMessage(m.text, msgId)}
-                      title="Copy message"
-                      type="button"
-                    >
-                      {copiedMsgId === msgId ? <CheckCircle size={isMobile ? 16 : 14}/> : <Copy size={isMobile ? 16 : 14}/>}
-                    </button>
-                    <button
-                      className="reply-btn"
-                      onClick={() => setReplyingTo(m)}
-                      title="Reply"
-                      type="button"
-                    >
-                      <Reply size={14}/>
-                    </button>
-                    <button
-                      className="pin-btn"
-                      onClick={() => togglePin(m._id, m.isPinned)}
-                      title={m.isPinned ? "Unpin" : "Pin"}
-                      type="button"
-                    >
-                      <Pin size={14}/>
-                    </button>
-                    {isOwn && (
-                      <>
-                        <button 
-                          className="edit-btn"
-                          onClick={() => startEditMessage(m._id, m.text)}
-                          title="Edit message"
-                          type="button"
-                        >
-                          <Edit2 size={14}/>
-                        </button>
-                        <button 
-                          className="delete-btn"
-                          onClick={() => deleteMessage(m._id)}
-                          title="Delete message"
-                          type="button"
-                        >
-                          <X size={14}/>
-                        </button>
-                      </>
-                    )}
-                  </div>
                 </div>
               </motion.div>
             );
@@ -1448,6 +1495,83 @@ export default function App() {
           >
             <CheckCircle size={20} />
             <span>{successMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu && contextMenuMessage && (
+          <motion.div 
+            ref={contextMenuRef}
+            className="context-menu"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            style={{
+              position: 'fixed',
+              left: `${contextMenu.x}px`,
+              top: `${contextMenu.y}px`,
+            }}
+          >
+            <div className="context-menu-header">
+              Message Actions
+            </div>
+            <button
+              className="context-menu-item"
+              onClick={() => handleContextMenuAction('reply')}
+            >
+              <Reply size={16} />
+              <span>Reply</span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() => handleContextMenuAction('copy')}
+            >
+              <Copy size={16} />
+              <span>Copy</span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() => handleContextMenuAction('pin')}
+            >
+              <Pin size={16} />
+              <span>{contextMenuMessage.isPinned ? 'Unpin' : 'Pin'}</span>
+            </button>
+            <div className="context-menu-divider"></div>
+            <div className="context-menu-reactions">
+              {QUICK_REACTIONS.map(emoji => (
+                <button
+                  key={emoji}
+                  className="context-menu-emoji"
+                  onClick={() => {
+                    handleReaction(contextMenuMessage._id, emoji);
+                    closeContextMenu();
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            {contextMenuMessage.sender === username && (
+              <>
+                <div className="context-menu-divider"></div>
+                <button
+                  className="context-menu-item"
+                  onClick={() => handleContextMenuAction('edit')}
+                >
+                  <Edit2 size={16} />
+                  <span>Edit</span>
+                </button>
+                <button
+                  className="context-menu-item danger"
+                  onClick={() => handleContextMenuAction('delete')}
+                >
+                  <X size={16} />
+                  <span>Delete</span>
+                </button>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
