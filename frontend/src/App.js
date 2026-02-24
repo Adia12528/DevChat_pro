@@ -12,6 +12,7 @@ import { APP_VERSION, BUILD_DATE } from './version';
 import './App.css';
 import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 import {
+  ICE_SERVERS,
   OPTIMAL_AUDIO_CONSTRAINTS,
   OPTIMAL_VIDEO_CONSTRAINTS,
   OPTIMAL_AUDIO_ONLY_CONSTRAINTS,
@@ -28,6 +29,16 @@ import {
 } from './callUtils';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+
+const CALL_EVENTS = Object.freeze({
+  OFFER: 'call:offer',
+  ANSWER: 'call:answer',
+  ICE_CANDIDATE: 'call:ice-candidate',
+  REJECT: 'call:reject',
+  REJECTED: 'call:rejected',
+  END: 'call:end',
+  ENDED: 'call:ended'
+});
 
 function App() {
   // Existing state
@@ -215,6 +226,10 @@ function App() {
   const endCallRef = useRef(() => {});
   const isAtBottomRef = useRef(true);
   const lastMessageIdRef = useRef(null);
+  const callTimeoutRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
+  const callStateRef = useRef(null);
   
   // PREMIUM: Advanced call features refs
   const callRecorderRef = useRef(null);
@@ -229,6 +244,9 @@ function App() {
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
+  useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
+  useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
 
   // Update tab title with unread count
   useEffect(() => {
@@ -699,14 +717,16 @@ function App() {
 
     // WebRTC Signaling Events
 
-    newSocket.on("call:incoming", async (data) => {
+    const handleIncomingCall = async (data) => {
       console.log("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
       console.log("🔔 Setting incomingCall state and playing ringtone");
       setIncomingCall({ from: data.from, callType: data.callType, offer: data.offer });
       playRingtone();
-    });
+    };
 
-    newSocket.on("call:answered", async (data) => {
+    newSocket.on(CALL_EVENTS.OFFER, handleIncomingCall);
+
+    const handleCallAnswered = async (data) => {
       console.log("✅ [CALLER] Call answered by:", data.from);
       try {
         if (peerConnectionRef.current && data.answer) {
@@ -726,6 +746,10 @@ function App() {
           }
 
           console.log("✅ [CALLER] Remote description set from answer");
+          if (callTimeoutRef.current) {
+            clearTimeout(callTimeoutRef.current);
+            callTimeoutRef.current = null;
+          }
           setCallState('active');
           startCallTimer();
           console.log("🎉 [CALLER] Call state set to ACTIVE");
@@ -739,21 +763,31 @@ function App() {
         console.error("❌ [CALLER] Error setting remote description:", err);
         setCallError("Failed to establish connection");
       }
-    });
+    };
 
-    newSocket.on("call:rejected", (data) => {
+    newSocket.on(CALL_EVENTS.ANSWER, handleCallAnswered);
+
+    newSocket.on(CALL_EVENTS.REJECTED, (data) => {
       console.log("❌ Call rejected by:", data.from);
       stopRingtone();
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
       setCallError("Call was rejected");
       endCallRef.current(false);
     });
 
-    newSocket.on("call:ended", (data) => {
+    newSocket.on(CALL_EVENTS.ENDED, (data) => {
       console.log("📴 Call ended by:", data.from);
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
       endCallRef.current(false);
     });
 
-    newSocket.on("call:ice-candidate", async (data) => {
+    newSocket.on(CALL_EVENTS.ICE_CANDIDATE, async (data) => {
       console.log("🧊 [ICE-CANDIDATE] Received from:", data.from);
       try {
         const pc = peerConnectionRef.current;
@@ -819,6 +853,23 @@ function App() {
         newSocket.emit('user_leaving', { username: usernameRef.current, room: roomRef.current });
       }
       newSocket.disconnect();
+
+      if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+        endCallRef.current(false);
+      }
+      stopRingtone();
+
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (remoteStreamRef.current) {
+        remoteStreamRef.current.getTracks().forEach(track => track.stop());
+      }
       
       typingTimersRef.current.forEach(id => clearTimeout(id));
       typingTimersRef.current.clear();
@@ -1989,18 +2040,45 @@ function App() {
   // WebRTC Video/Voice Calling Functions
   // ==========================
 
-  // ICE servers configuration (FREE STUN servers)
-  // Use optimized ICE servers from callUtils
-  const iceServersConfig = {
+  // ICE servers configuration
+  const iceServersConfig = useMemo(() => ({
     iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-      { urls: 'stun:stun.services.mozilla.com' }
-    ]
-  };
+      ...ICE_SERVERS,
+      { urls: 'stun:stun.services.mozilla.com' },
+      {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ],
+    iceCandidatePoolSize: 10
+  }), []);
+
+  const clearCallTimeout = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+  }, []);
+
+  const checkPermissions = useCallback(async (type) => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return false;
+      }
+
+      const constraints = type === 'video'
+        ? { video: true, audio: true }
+        : { audio: true, video: false };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (err) {
+      console.error('Permission check failed:', err);
+      return false;
+    }
+  }, []);
 
   // Play ringtone
   const playRingtone = useCallback(() => {
@@ -2062,7 +2140,7 @@ function App() {
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
         console.log('🧊 Sending ICE candidate to:', targetUsername);
-        socketRef.current.emit('call:ice-candidate', {
+        socketRef.current.emit(CALL_EVENTS.ICE_CANDIDATE, {
           to: targetUsername,
           candidate: event.candidate
         });
@@ -2123,11 +2201,16 @@ function App() {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, []);
+  }, [iceServersConfig]);
 
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
     if (!targetUser || !socketRef.current) return;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCallError('Your browser does not support audio/video calls');
+      return;
+    }
 
     try {
       console.log('📞 [CALLER] Starting PREMIUM', type, 'call to:', targetUser);
@@ -2135,6 +2218,13 @@ function App() {
       setCallPeer({ username: targetUser, userId: targetUser });
       setCallState('calling');
       setCallError(null);
+
+      const hasPermission = await checkPermissions(type);
+      if (!hasPermission) {
+        setCallError(`Please grant ${type} call permissions`);
+        setCallState('idle');
+        return;
+      }
 
       // PREMIUM: Use optimal constraints for better quality
       const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
@@ -2169,7 +2259,7 @@ function App() {
       if (shouldRecord && type === 'voice') {
         callRecorderRef.current = new CallRecorder();
         callRecorderRef.current.start(stream);
-        setIsRecording(true);
+        setIsCallRecording(true);
       }
 
       // Create offer
@@ -2180,25 +2270,56 @@ function App() {
 
       // Send call offer via socket
       console.log('📤 [CALLER] Sending call:offer to:', targetUser);
-      socketRef.current.emit('call:offer', {
+      socketRef.current.emit(CALL_EVENTS.OFFER, {
         to: targetUser,
         from: username,
         callType: type,
         offer: offer
       });
 
+      clearCallTimeout();
+      callTimeoutRef.current = setTimeout(() => {
+        if (callStateRef.current === 'calling') {
+          console.log('⏰ Call connection timeout');
+          setCallError('Call timed out. The user may be unavailable.');
+          endCallRef.current(true);
+        }
+      }, 30000);
+
       console.log('🔔 [CALLER] Playing ringtone');
       playRingtone();
 
     } catch (err) {
       console.error('❌ Error starting call:', err);
-      setCallError(err.message === 'Permission denied'
-        ? 'Camera/microphone access denied'
-        : 'Failed to start call');
+      if (err.name === 'NotAllowedError') {
+        setCallError('Please allow camera/microphone access');
+      } else if (err.name === 'NotFoundError') {
+        setCallError('No camera or microphone found');
+      } else if (err.name === 'NotReadableError') {
+        setCallError('Camera/microphone is busy');
+      } else {
+        setCallError(`Failed to start call: ${err.message || 'Unknown error'}`);
+      }
       setCallState('idle');
       stopRingtone();
+      clearCallTimeout();
     }
-  }, [username, createPeerConnection, playRingtone, stopRingtone]);
+  }, [username, createPeerConnection, playRingtone, stopRingtone, checkPermissions, clearCallTimeout]);
+
+  // Reject incoming call
+  const rejectCall = useCallback(() => {
+    if (!incomingCall || !socketRef.current) return;
+
+    console.log('❌ Rejecting call from:', incomingCall.from);
+    socketRef.current.emit(CALL_EVENTS.REJECT, {
+      to: incomingCall.from,
+      from: username
+    });
+
+    stopRingtone();
+    clearCallTimeout();
+    setIncomingCall(null);
+  }, [incomingCall, username, stopRingtone, clearCallTimeout]);
 
   // Answer incoming call with premium features
   const answerCall = useCallback(async () => {
@@ -2207,6 +2328,7 @@ function App() {
     try {
       const callerUsername = incomingCall.from;
       console.log('📞 [RECEIVER] Answering', incomingCall.callType, 'call from:', callerUsername);
+      clearCallTimeout();
       
       setCallType(incomingCall.callType);
       setCallPeer({ username: callerUsername, userId: callerUsername });
@@ -2267,7 +2389,7 @@ function App() {
         console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
         callRecorderRef.current = new CallRecorder();
         callRecorderRef.current.start(stream);
-        setIsRecording(true);
+        setIsCallRecording(true);
       }
 
       // Set remote description from offer
@@ -2296,7 +2418,7 @@ function App() {
 
       // Send answer back to caller
       console.log('📤 [RECEIVER] Sending call:answer to:', callerUsername);
-      socketRef.current.emit('call:answer', {
+      socketRef.current.emit(CALL_EVENTS.ANSWER, {
         to: callerUsername,
         from: username,
         answer: answer
@@ -2322,34 +2444,27 @@ function App() {
 
     } catch (err) {
       console.error('❌ Error answering call:', err);
-      setCallError(err.message === 'Permission denied'
-        ? 'Camera/microphone access denied'
-        : 'Failed to answer call');
+      if (err.name === 'NotAllowedError') {
+        setCallError('Please allow camera/microphone access');
+      } else if (err.name === 'NotFoundError') {
+        setCallError('No camera or microphone found');
+      } else if (err.name === 'NotReadableError') {
+        setCallError('Camera/microphone is busy');
+      } else {
+        setCallError(`Failed to answer call: ${err.message || 'Unknown error'}`);
+      }
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone]);
-
-  // Reject incoming call
-  const rejectCall = useCallback(() => {
-    if (!incomingCall || !socketRef.current) return;
-
-    console.log('❌ Rejecting call from:', incomingCall.from);
-    socketRef.current.emit('call:reject', {
-      to: incomingCall.from,
-      from: username
-    });
-
-    stopRingtone();
-    setIncomingCall(null);
-  }, [incomingCall, username, stopRingtone]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
     console.log('📴 Ending call');
+    clearCallTimeout();
 
     // Notify peer
     if (notifyPeer && socketRef.current && callPeer) {
-      socketRef.current.emit('call:end', {
+      socketRef.current.emit(CALL_EVENTS.END, {
         to: callPeer.username,
         from: username
       });
@@ -2370,7 +2485,7 @@ function App() {
     }
 
     // Stop and save call recording
-    if (callRecorderRef.current && isCallRecording) {
+    if (callRecorderRef.current) {
       console.log('💾 Saving recording');
       callRecorderRef.current.stop();
       callRecorderRef.current = null;
@@ -2436,7 +2551,7 @@ function App() {
     setConnectionQuality('excellent');
     stopCallTimer();
     stopRingtone();
-  }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone]);
+  }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone, clearCallTimeout]);
 
   useEffect(() => {
     endCallRef.current = endCall;
@@ -2466,53 +2581,57 @@ function App() {
 
   // Toggle screen share
   const toggleScreenShare = useCallback(async () => {
-    if (!peerConnectionRef.current) return;
+    if (!peerConnectionRef.current || callType !== 'video') return;
 
     try {
       if (isScreenSharing) {
-        // Stop screen sharing, switch back to camera
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: true 
-        });
-        
-        const videoTrack = stream.getVideoTracks()[0];
-        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
-        
-        if (sender) {
-          sender.replaceTrack(videoTrack);
+        if (screenStreamRef.current) {
+          screenStreamRef.current.getTracks().forEach(track => track.stop());
+          screenStreamRef.current = null;
         }
-        
-        setLocalStream(stream);
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
+
+        await switchBackToCamera(peerConnectionRef.current, localStream);
+
+        if (localVideoRef.current && localStream) {
+          localVideoRef.current.srcObject = localStream;
         }
+
         setIsScreenSharing(false);
       } else {
-        // Start screen sharing
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-          video: true 
-        });
-        
-        const screenTrack = screenStream.getVideoTracks()[0];
-        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
-        
-        if (sender) {
-          sender.replaceTrack(screenTrack);
+        const screenStream = await getScreenStream();
+        const screenTrack = await switchToScreenShare(peerConnectionRef.current, screenStream, localStream);
+        screenStreamRef.current = screenStream;
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
         }
-        
+
         // Stop screen share when user stops it from browser
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-        
+        if (screenTrack) {
+          screenTrack.onended = async () => {
+            try {
+              if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach(track => track.stop());
+                screenStreamRef.current = null;
+              }
+              await switchBackToCamera(peerConnectionRef.current, localStream);
+              if (localVideoRef.current && localStream) {
+                localVideoRef.current.srcObject = localStream;
+              }
+              setIsScreenSharing(false);
+            } catch (error) {
+              console.warn('⚠️ Failed to restore camera after screen-share end:', error);
+            }
+          };
+        }
+
         setIsScreenSharing(true);
       }
     } catch (err) {
       console.error('Screen share error:', err);
       setCallError('Screen sharing failed');
     }
-  }, [isScreenSharing]);
+  }, [isScreenSharing, localStream, callType]);
 
   // Toggle call minimize
   const toggleCallMinimize = useCallback(() => {
@@ -4408,6 +4527,7 @@ function App() {
                   autoPlay
                   playsInline
                   className="remote-video"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
 
                 {/* Local Video (only for video calls) */}
@@ -4418,6 +4538,7 @@ function App() {
                     playsInline
                     muted
                     className="local-video"
+                    style={{ objectFit: 'cover' }}
                   />
                 )}
 

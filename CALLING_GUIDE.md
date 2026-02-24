@@ -111,6 +111,20 @@ DevChat Pro now includes **FREE peer-to-peer video and voice calling** powered b
   - `call:reject` - Handle call rejections
   - `call:end` - Handle call termination
 
+### Signaling Event Contract (Canonical)
+
+Use these canonical events for all new client code:
+
+| Direction | Event | Payload |
+|-----------|-------|---------|
+| Caller → Server → Callee | `call:offer` | `{ to, from, callType, offer }` |
+| Callee → Server → Caller | `call:answer` | `{ to, from, answer }` |
+| Either peer → Other peer | `call:ice-candidate` | `{ to, candidate }` |
+| Callee → Caller | `call:rejected` | `{ from }` |
+| Either peer → Other peer | `call:ended` | `{ from }` |
+
+Canonical-only signaling is now enforced; legacy aliases are removed from active client/server signaling paths.
+
 **STUN Servers** (FREE):
 - `stun:stun.l.google.com:19302`
 - `stun:stun1.l.google.com:19302`
@@ -146,6 +160,14 @@ DevChat Pro now includes **FREE peer-to-peer video and voice calling** powered b
 - 🖥️ Screen recording permission
 
 *Permissions are requested only when initiating/answering a call*
+
+### Reliability Improvements
+
+- ✅ Pre-call capability check for `navigator.mediaDevices.getUserMedia`
+- ✅ Permission preflight before call placement
+- ✅ Explicit handling for `NotAllowedError`, `NotFoundError`, and `NotReadableError`
+- ✅ 30-second outbound call timeout with automatic cleanup
+- ✅ Unmount cleanup for active call, ringtone, timeout, and media tracks
 
 ## 🛡️ Privacy & Security
 

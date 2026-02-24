@@ -7,6 +7,16 @@ require('dotenv').config();
 
 const app = express();
 
+const CALL_EVENTS = Object.freeze({
+    OFFER: 'call:offer',
+    ANSWER: 'call:answer',
+    ICE_CANDIDATE: 'call:ice-candidate',
+    REJECT: 'call:reject',
+    REJECTED: 'call:rejected',
+    END: 'call:end',
+    ENDED: 'call:ended'
+});
+
 // CORS Configuration - Allow all Vercel deployments and localhost
 const frontendOrigin = process.env.FRONTEND_ORIGIN;
 const allowedOrigins = [
@@ -269,7 +279,7 @@ io.on('connection', (socket) => {
     // ==========================
 
     // Forward call offer to target user
-    socket.on('call:offer', (data) => {
+    socket.on(CALL_EVENTS.OFFER, (data) => {
         console.log(`📞 Call offer from ${data.from} to ${data.to} (${data.callType})`);
         
         // Find target user's socket
@@ -280,23 +290,24 @@ io.on('connection', (socket) => {
             console.log(`🔎 call:offer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
-                console.log(`📤 Emitting call:incoming to socket ID ${targetSocket}`);
-                io.to(targetSocket).emit('call:incoming', {
+                console.log(`📤 Emitting call:offer to socket ID ${targetSocket}`);
+                const payload = {
                     from: data.from,
                     callType: data.callType,
                     offer: data.offer
-                });
+                };
+                io.to(targetSocket).emit(CALL_EVENTS.OFFER, payload);
                 console.log(`✅ Call offer forwarded to ${data.to} (socket: ${targetSocket})`);
             } else {
                 console.log(`❌ Target user ${data.to} not found in room ${socket.room}`);
-                socket.emit('call:rejected', { reason: 'User not found or offline' });
+                socket.emit(CALL_EVENTS.REJECTED, { reason: 'User not found or offline' });
                 console.log(`❌ Target user ${data.to} not found`);
             }
         }
     });
 
     // Forward call answer to caller
-    socket.on('call:answer', (data) => {
+    socket.on(CALL_EVENTS.ANSWER, (data) => {
         console.log(`✅ Call answered: ${data.from} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
@@ -304,17 +315,18 @@ io.on('connection', (socket) => {
             console.log(`🔎 call:answer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
-                io.to(targetSocket).emit('call:answered', {
+                const payload = {
                     from: data.from,
                     answer: data.answer
-                });
+                };
+                io.to(targetSocket).emit(CALL_EVENTS.ANSWER, payload);
                 console.log(`✅ Call answer forwarded to ${data.to}`);
             }
         }
     });
 
     // Forward ICE candidate to peer
-    socket.on('call:ice-candidate', (data) => {
+    socket.on(CALL_EVENTS.ICE_CANDIDATE, (data) => {
         console.log(`🧊 ICE candidate: ${socket.username} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
@@ -322,7 +334,7 @@ io.on('connection', (socket) => {
             console.log(`🔎 call:ice-candidate target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
-                io.to(targetSocket).emit('call:ice-candidate', {
+                io.to(targetSocket).emit(CALL_EVENTS.ICE_CANDIDATE, {
                     from: socket.username,
                     candidate: data.candidate
                 });
@@ -331,7 +343,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle call rejection
-    socket.on('call:reject', (data) => {
+    socket.on(CALL_EVENTS.REJECT, (data) => {
         console.log(`❌ Call rejected: ${data.from} declined call from ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
@@ -339,7 +351,7 @@ io.on('connection', (socket) => {
             console.log(`🔎 call:reject target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
-                io.to(targetSocket).emit('call:rejected', {
+                io.to(targetSocket).emit(CALL_EVENTS.REJECTED, {
                     from: data.from
                 });
             }
@@ -347,7 +359,7 @@ io.on('connection', (socket) => {
     });
 
     // Handle call end
-    socket.on('call:end', (data) => {
+    socket.on(CALL_EVENTS.END, (data) => {
         console.log(`📴 Call ended: ${data.from} → ${data.to}`);
         
         if (socket.room && roomUsers[socket.room]) {
@@ -355,7 +367,7 @@ io.on('connection', (socket) => {
             console.log(`🔎 call:end target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
             
             if (targetSocket) {
-                io.to(targetSocket).emit('call:ended', {
+                io.to(targetSocket).emit(CALL_EVENTS.ENDED, {
                     from: data.from
                 });
             }
