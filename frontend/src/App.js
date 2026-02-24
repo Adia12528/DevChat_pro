@@ -94,6 +94,10 @@ function App() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
   const [isDragging, setIsDragging] = useState(false); // Drag and drop state
   
+  // Navigation & UI State (Breadcrumb/Back button system)
+  const [navigationStack, setNavigationStack] = useState([]); // Track navigation history
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'settings'
+  
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
   const [rooms, setRooms] = useState([{ id: room, name: room, type: 'group' }]);
@@ -250,6 +254,38 @@ function App() {
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
   useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
+
+  // Navigation helper functions
+  const navigateTo = useCallback((view, params = {}) => {
+    setNavigationStack(prev => [...prev, { view: currentView, params: {} }]);
+    setCurrentView(view);
+  }, [currentView]);
+
+  const goBack = useCallback(() => {
+    if (navigationStack.length > 0) {
+      const newStack = [...navigationStack];
+      const previous = newStack.pop();
+      setNavigationStack(newStack);
+      setCurrentView(previous.view);
+    } else {
+      setCurrentView('chat');
+      setShowStarredPanel(false);
+      setShowPinnedPanel(false);
+      setShowCallHistory(false);
+      setShowRoomSidebar(false);
+    }
+    setShowMenuDropdown(false);
+  }, [navigationStack]);
+
+  const goToDashboard = useCallback(() => {
+    setNavigationStack([]);
+    setCurrentView('chat');
+    setShowMenuDropdown(false);
+    setShowStarredPanel(false);
+    setShowPinnedPanel(false);
+    setShowCallHistory(false);
+    setShowRoomSidebar(false);
+  }, []);
 
   // Update tab title with unread count
   useEffect(() => {
@@ -3120,7 +3156,7 @@ function App() {
 
                   <button
                     className="menu-item"
-                    onClick={() => { setShowStarredPanel(true); setShowMenuDropdown(false); }}
+                    onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}
                   >
                     <Star size={18}/>
                     <span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
@@ -3317,14 +3353,14 @@ function App() {
       </div>
 
       {pinnedMessages.length > 0 && (
-        <div className="pinned-messages-bar" onClick={() => setShowPinnedPanel(p => !p)} style={{cursor:'pointer'}}>
+        <div className="pinned-messages-bar" onClick={() => navigateTo('pinned')} style={{cursor:'pointer'}}>
           <Pin size={14} />
           <span>{pinnedMessages.length} pinned message{pinnedMessages.length > 1 ? 's' : ''}</span>
-          <ChevronDown size={14} style={{marginLeft:'auto', transform: showPinnedPanel ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}} />
+          <ChevronDown size={14} style={{marginLeft:'auto', transform: currentView === 'pinned' ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}} />
         </div>
       )}
       <AnimatePresence>
-        {showPinnedPanel && pinnedMessages.length > 0 && (
+        {currentView === 'pinned' && pinnedMessages.length > 0 && (
           <motion.div
             className="pinned-panel"
             initial={{ height: 0, opacity: 0 }}
@@ -3336,7 +3372,7 @@ function App() {
               <div
                 key={pm._id || idx}
                 className="pinned-panel-item"
-                onClick={() => { scrollToMessage(pm._id); setShowPinnedPanel(false); }}
+                onClick={() => { scrollToMessage(pm._id); goBack(); }}
               >
                 <Pin size={12} />
                 <span className="pinned-panel-text">
@@ -4649,13 +4685,13 @@ function App() {
 
       {/* Starred Messages Panel */}
       <AnimatePresence>
-        {showStarredPanel && (
+        {currentView === 'starred' && (
           <motion.div
             className="starred-panel-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setShowStarredPanel(false)}
+            onClick={() => goBack()}
           >
             <motion.div
               className="starred-panel"
@@ -4665,13 +4701,14 @@ function App() {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="starred-panel-header">
-                <Star size={18} fill="#FFD700" color="#FFD700" />
-                <h3>Starred Messages</h3>
-                <span className="starred-count-badge">{starredMsgIds.size}</span>
-                <button onClick={() => setShowStarredPanel(false)} className="starred-close-btn"><X size={20}/></button>
+              <div className="panel-header-nav">
+                <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
+                <h3 className="panel-header-title">⭐ Starred Messages</h3>
+                <div className="panel-header-actions">
+                  <span className="starred-count-badge">{starredMsgIds.size}</span>
+                </div>
               </div>
-              <div className="starred-panel-body">
+              <div className="panel-content">
                 {chat.filter(m => starredMsgIds.has(m._id)).length === 0 ? (
                   <div className="starred-panel-empty">
                     <Star size={40} color="var(--txt-muted, #8696a0)" />
@@ -4683,7 +4720,7 @@ function App() {
                     <div
                       key={m._id}
                       className="starred-panel-item"
-                      onClick={() => { scrollToMessage(m._id); setShowStarredPanel(false); }}
+                      onClick={() => { scrollToMessage(m._id); goBack(); }}
                     >
                       <div className="starred-item-meta">
                         <span className="starred-item-sender">{m.sender}</span>

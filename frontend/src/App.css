@@ -528,6 +528,91 @@ body {
   font-size: 13px;
 }
 
+/* ============================================
+   NAVIGATION HEADER - Back Button & Title
+   Unified component for all panels
+   ============================================ */
+
+.panel-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: var(--space-4) var(--space-4);
+  background: var(--header);
+  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.panel-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--txt);
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  font-family: var(--font-sans);
+}
+
+.panel-back-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.panel-back-btn:active {
+  transform: scale(0.95);
+}
+
+.panel-header-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--txt);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Panel Container Adjustments */
+.starred-messages-panel,
+.pinned-messages-panel,
+.call-history-panel,
+.room-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Panel Content Container */
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 /* TABLET OPTIMIZATION (601px - 1024px) */
 @media (max-width: 1024px) and (min-width: 601px) {
   .chat-container {
@@ -545,13 +630,35 @@ body {
   .users-list {
     padding: 8px 12px;
   }
+
+  .panel-header-nav {
+    height: 52px;
+    padding: var(--space-3) var(--space-3);
+  }
+
+  .panel-back-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .panel-header-title {
+    font-size: 15px;
+  }
+
+  /* Simplified panel layout on tablets */
+  .starred-panel,
+  .pinned-panel,
+  .call-history-panel,
+  .room-sidebar {
+    max-height: 90vh;
+    border-radius: 12px 12px 0 0;
+  }
 }
 
 /* MOBILE OPTIMIZATION (max-width: 768px) */
 @media (max-width: 768px) {
-  .install-text {
-    display: none;
-  }
   
   .install-app-btn {
     padding: 8px;
@@ -724,12 +831,126 @@ body {
     max-height: 300px;
     min-height: 120px;
   }
+
+  /* Mobile Navigation Header Styles */
+  .panel-header-nav {
+    height: 52px;
+    padding: var(--space-3) var(--space-3);
+  }
+
+  .panel-back-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .panel-header-title {
+    font-size: 15px;
+  }
 }
 
 @media (max-width: 480px) {
   .chat-img {
     max-height: 250px;
     min-height: 100px;
+  }
+
+  /* Mobile Navigation Header - 480px and below */
+  .panel-header-nav {
+    height: 48px;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .panel-back-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    touch-action: manipulation;
+  }
+
+  .panel-header-title {
+    font-size: 14px;
+  }
+
+  .panel-header-actions {
+    gap: var(--space-1);
+  }
+
+  /* Full screen panels on tiny screens */
+  .starred-panel,
+  .pinned-panel,
+  .call-history-panel,
+  .room-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    z-index: 1000 !important;
+    border-radius: 0 !important;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Ensure panel header and content are properly layered */
+  .panel-header-nav {
+    position: relative;
+    z-index: 2;
+  }
+
+  .panel-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Optimize overlay for mobile fullscreen */
+  .starred-panel-overlay,
+  .pinned-panel-overlay {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+  }
+}
+
+/* EXTRA SMALL DEVICES: Smart phone optimization */
+@media (max-width: 360px) {
+  .panel-header-nav {
+    height: 44px;
+    padding: var(--space-1) var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .panel-back-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  .panel-header-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .panel-header-actions {
+    gap: 0;
+  }
+
+  /* Hide count badges on extra small screens if needed */
+  .starred-count-badge {
+    font-size: 11px;
+    padding: 2px 6px;
   }
 }
 
