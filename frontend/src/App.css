@@ -2602,14 +2602,17 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   min-width: 220px;
+  width: clamp(220px, 32vw, 320px);
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 520px);
   z-index: 1000;
-  overflow: hidden;
+  overflow: auto;
   animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .menu-dropdown-dm {
-  left: auto;
-  right: 0;
+  left: 0;
+  right: auto;
 }
 
 .menu-header {
