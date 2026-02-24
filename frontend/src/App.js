@@ -37,7 +37,9 @@ const CALL_EVENTS = Object.freeze({
   REJECT: 'call:reject',
   REJECTED: 'call:rejected',
   END: 'call:end',
-  ENDED: 'call:ended'
+  ENDED: 'call:ended',
+  SCREEN_SHARE_START: 'call:screen-share-start',
+  SCREEN_SHARE_END: 'call:screen-share-end'
 });
 
 function App() {
@@ -175,6 +177,7 @@ function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [remoteIsScreenSharing, setRemoteIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
@@ -730,6 +733,14 @@ function App() {
       console.log("✅ [CALLER] Call answered by:", data.from);
       try {
         if (peerConnectionRef.current && data.answer) {
+          // CRITICAL FIX: Stop ringtone when call is answered
+          console.log("🛑 [CALLER] STOPPING RINGTONE - call answered");
+          stopRingtone();
+          if (ringtoneRef.current) {
+            ringtoneRef.current.pause();
+            ringtoneRef.current.currentTime = 0;
+          }
+
           console.log("📋 [CALLER] Setting answer as remote description");
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
 
@@ -819,6 +830,17 @@ function App() {
       console.log("⚠️ Peer disconnected");
       setCallError("Connection lost");
       endCallRef.current(false);
+    });
+
+    // Handle screen share state notifications
+    newSocket.on(CALL_EVENTS.SCREEN_SHARE_START, (data) => {
+      console.log("📺 [SCREEN_SHARE] Remote peer started screen sharing:", data.from);
+      setRemoteIsScreenSharing(true);
+    });
+
+    newSocket.on(CALL_EVENTS.SCREEN_SHARE_END, (data) => {
+      console.log("📹 [SCREEN_SHARE] Remote peer stopped screen sharing:", data.from);
+      setRemoteIsScreenSharing(false);
     });
 
     // Handle proper disconnect when user closes tab/browser
@@ -2154,17 +2176,40 @@ function App() {
       console.log('🎥 [ONTRACK] Remote track received!', {
         kind: event.track.kind,
         enabled: event.track.enabled,
-        state: event.track.readyState
+        state: event.track.readyState,
+        streamId: event.streams?.length > 0 ? event.streams[0].id : 'NO_STREAM'
       });
       
-      if (event.streams && event.streams.length > 0) {
-        const remoteStream = event.streams[0];
-        setRemoteStream(remoteStream);
-        
-        if (remoteVideoRef.current) {
-          console.log('📹 [ONTRACK] Setting remote video');
-          remoteVideoRef.current.srcObject = remoteStream;
+      try {
+        if (event.streams && event.streams.length > 0) {
+          const remoteStream = event.streams[0];
+          console.log('📡 [ONTRACK] Stream received with', remoteStream.getTracks().length, 'tracks');
+          setRemoteStream(remoteStream);
+          
+          // Set remote stream for BOTH video and audio display
+          if (remoteVideoRef.current) {
+            console.log('📹 [ONTRACK] Setting remote video element srcObject');
+            remoteVideoRef.current.srcObject = remoteStream;
+            // Ensure video element is not muted so we get audio
+            remoteVideoRef.current.muted = false;
+          } else {
+            console.warn('⚠️ [ONTRACK] remoteVideoRef.current is null!');
+          }
+          
+          // Log track details
+          remoteStream.getTracks().forEach((track, idx) => {
+            console.log(`🎵 [ONTRACK] Track ${idx}:`, {
+              kind: track.kind,
+              enabled: track.enabled,
+              id: track.id,
+              readyState: track.readyState
+            });
+          });
+        } else {
+          console.warn('⚠️ [ONTRACK] No streams in event:', { event });
         }
+      } catch (err) {
+        console.error('❌ [ONTRACK] Error handling track:', err);
       }
     };
 
@@ -2376,27 +2421,19 @@ function App() {
       const qualityController = new AdaptiveQualityController(pc);
       qualityControllerRef.current = qualityController;
 
-      // Add local stream tracks
+      // CRITICAL: Set remote description FIRST (before adding local tracks)
+      console.log('🎧 [RECEIVER] Setting remote description from offer');
+      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      console.log('✅ [RECEIVER] Remote description set');
+
+      // THEN add local stream tracks (after remote description is set)
       console.log('➕ [RECEIVER] Adding local tracks to peer connection');
       stream.getTracks().forEach(track => {
         console.log('📌 [RECEIVER] Adding track:', track.kind, track.id);
         pc.addTrack(track, stream);
       });
 
-      // Initialize call recorder if auto-record is enabled
-      const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
-      if (shouldRecord && incomingCall.callType === 'voice') {
-        console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
-        callRecorderRef.current = new CallRecorder();
-        callRecorderRef.current.start(stream);
-        setIsCallRecording(true);
-      }
-
-      // Set remote description from offer
-      console.log('🎧 [RECEIVER] Setting remote description from offer');
-      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-      console.log('✅ [RECEIVER] Remote description set');
-
+      // Handle pending ICE candidates
       if (pendingIceCandidatesRef.current.length > 0) {
         console.log(`🧊 [RECEIVER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
         for (const candidate of pendingIceCandidatesRef.current) {
@@ -2415,6 +2452,15 @@ function App() {
       console.log('🎤 [RECEIVER] Setting local description with answer');
       await pc.setLocalDescription(answer);
       console.log('✅ [RECEIVER] Local description set');
+
+      // Initialize call recorder if auto-record is enabled
+      const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
+      if (shouldRecord && incomingCall.callType === 'video') {
+        console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
+        callRecorderRef.current = new CallRecorder();
+        callRecorderRef.current.start(stream);
+        setIsCallRecording(true);
+      }
 
       // Send answer back to caller
       console.log('📤 [RECEIVER] Sending call:answer to:', callerUsername);
@@ -2543,6 +2589,7 @@ function App() {
     setIsMuted(false);
     setIsVideoOff(false);
     setIsScreenSharing(false);
+    setRemoteIsScreenSharing(false);
     setIsCallMinimized(false);
     setCallDuration(0);
     setCallError(null);
@@ -2581,7 +2628,7 @@ function App() {
 
   // Toggle screen share
   const toggleScreenShare = useCallback(async () => {
-    if (!peerConnectionRef.current || callType !== 'video') return;
+    if (!peerConnectionRef.current || callType !== 'video' || !callPeer) return;
 
     try {
       if (isScreenSharing) {
@@ -2597,6 +2644,15 @@ function App() {
         }
 
         setIsScreenSharing(false);
+        
+        // Notify peer that screen sharing stopped
+        if (socketRef.current) {
+          console.log('📤 [SCREEN_SHARE] Notifying peer - screen share STOPPED');
+          socketRef.current.emit(CALL_EVENTS.SCREEN_SHARE_END, {
+            to: callPeer.username,
+            from: username
+          });
+        }
       } else {
         const screenStream = await getScreenStream();
         const screenTrack = await switchToScreenShare(peerConnectionRef.current, screenStream, localStream);
@@ -2604,6 +2660,17 @@ function App() {
 
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
+        }
+
+        setIsScreenSharing(true);
+
+        // Notify peer that screen sharing started
+        if (socketRef.current) {
+          console.log('📤 [SCREEN_SHARE] Notifying peer - screen share STARTED');
+          socketRef.current.emit(CALL_EVENTS.SCREEN_SHARE_START, {
+            to: callPeer.username,
+            from: username
+          });
         }
 
         // Stop screen share when user stops it from browser
@@ -2619,19 +2686,26 @@ function App() {
                 localVideoRef.current.srcObject = localStream;
               }
               setIsScreenSharing(false);
+              
+              // Notify peer that screen sharing stopped (via browser stop button)
+              if (socketRef.current) {
+                console.log('📤 [SCREEN_SHARE] Browser stopped screen share, notifying peer');
+                socketRef.current.emit(CALL_EVENTS.SCREEN_SHARE_END, {
+                  to: callPeer.username,
+                  from: username
+                });
+              }
             } catch (error) {
               console.warn('⚠️ Failed to restore camera after screen-share end:', error);
             }
           };
         }
-
-        setIsScreenSharing(true);
       }
     } catch (err) {
       console.error('Screen share error:', err);
       setCallError('Screen sharing failed');
     }
-  }, [isScreenSharing, localStream, callType]);
+  }, [isScreenSharing, localStream, callType, callPeer, username]);
 
   // Toggle call minimize
   const toggleCallMinimize = useCallback(() => {
@@ -4544,9 +4618,29 @@ function App() {
 
                 {/* Call Info Overlay */}
                 <div className="call-info-overlay">
-                  <div className="call-peer-name">{callPeer.username}</div>
+                  <div className="call-info-top">
+                    <div className="call-peer-name">
+                      {callPeer.username}
+                      {remoteIsScreenSharing && (
+                        <span className="screen-share-badge">📺 Sharing Screen</span>
+                      )}
+                    </div>
+                    {isScreenSharing && (
+                      <div className="local-screen-share-indicator">
+                        <span className="screen-share-pulse"></span>
+                        You are sharing your screen
+                      </div>
+                    )}
+                  </div>
                   <div className="call-duration">{formatCallDuration(callDuration)}</div>
-                  <div className="call-status-badge">Connected</div>
+                  <div className="call-status-badges">
+                    <span className="call-status-badge">Connected</span>
+                    {connectionQuality && (
+                      <span className={`quality-badge quality-${connectionQuality.toLowerCase()}`}>
+                        {connectionQuality}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Call Controls */}
