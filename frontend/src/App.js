@@ -871,47 +871,164 @@ function App() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       
+      // Cleanup socket connection
       if (newSocket.connected) {
-        newSocket.emit('user_leaving', { username: usernameRef.current, room: roomRef.current });
+        try {
+          newSocket.emit('user_leaving', { username: usernameRef.current, room: roomRef.current });
+          newSocket.disconnect();
+        } catch (err) {
+          console.warn('⚠️ Error during socket cleanup:', err);
+        }
       }
-      newSocket.disconnect();
 
+      // End active calls
       if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
         endCallRef.current(false);
       }
+      
+      // Stop ringtone
       stopRingtone();
 
+      // Clear call timeout
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
         callTimeoutRef.current = null;
       }
 
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (remoteStreamRef.current) {
-        remoteStreamRef.current.getTracks().forEach(track => track.stop());
-      }
+      // Comprehensive media cleanup
+      console.log('🧹 [CLEANUP] Starting comprehensive media cleanup');
       
-      typingTimersRef.current.forEach(id => clearTimeout(id));
-      typingTimersRef.current.clear();
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {});
-        audioContextRef.current = null;
+      // Stop local stream tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          try {
+            console.log('🛑 [CLEANUP] Stopping local track:', track.kind);
+            track.stop();
+          } catch (err) {
+            console.warn('⚠️ [CLEANUP] Error stopping local track:', err);
+          }
+        });
+        localStreamRef.current = null;
       }
+
+      // Stop remote stream tracks
+      if (remoteStreamRef.current) {
+        remoteStreamRef.current.getTracks().forEach(track => {
+          try {
+            console.log('🛑 [CLEANUP] Stopping remote track:', track.kind);
+            track.stop();
+          } catch (err) {
+            console.warn('⚠️ [CLEANUP] Error stopping remote track:', err);
+          }
+        });
+        remoteStreamRef.current = null;
+      }
+
+      // Close peer connection
+      if (peerConnectionRef.current) {
+        try {
+          console.log('🔌 [CLEANUP] Closing peer connection');
+          peerConnectionRef.current.close();
+          peerConnectionRef.current = null;
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error closing peer connection:', err);
+        }
+      }
+
+      // Stop quality controller
+      if (qualityControllerRef.current) {
+        try {
+          qualityControllerRef.current.stop();
+          qualityControllerRef.current = null;
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error stopping quality controller:', err);
+        }
+      }
+
+      // Stop call recorder
+      if (callRecorderRef.current) {
+        try {
+          callRecorderRef.current.stop();
+          callRecorderRef.current = null;
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error stopping call recorder:', err);
+        }
+      }
+
+      // Clear intervals
+      if (statsUpdateIntervalRef.current) {
+        clearInterval(statsUpdateIntervalRef.current);
+        statsUpdateIntervalRef.current = null;
+      }
+
+      // Clear typing timers
+      typingTimersRef.current.forEach(id => {
+        try {
+          clearTimeout(id);
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error clearing typing timer:', err);
+        }
+      });
+      typingTimersRef.current.clear();
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      // Clear recording interval
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+
+      // Close audio context
+      if (audioContextRef.current) {
+        try {
+          audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error closing audio context:', err);
+        }
+      }
+
+      // Stop media recorder
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
+          console.log('⏹️ [CLEANUP] Stopping media recorder');
           mediaRecorderRef.current.stop();
           const stream = mediaRecorderRef.current.stream;
           if (stream) {
-            stream.getTracks().forEach(track => track.stop());
+            stream.getTracks().forEach(track => {
+              try {
+                track.stop();
+              } catch (err) {
+                console.warn('⚠️ [CLEANUP] Error stopping recorder track:', err);
+              }
+            });
           }
-        } catch (e) {
-          console.log('Cleanup error:', e);
+          mediaRecorderRef.current = null;
+        } catch (err) {
+          console.warn('⚠️ [CLEANUP] Error stopping media recorder:', err);
         }
       }
+
+      // Clear screen sharing
+      if (screenShareStreamRef.current) {
+        screenShareStreamRef.current.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (err) {
+            console.warn('⚠️ [CLEANUP] Error stopping screen share track:', err);
+          }
+        });
+        screenShareStreamRef.current = null;
+      }
+
+      // Clear pending ICE candidates
+      pendingIceCandidatesRef.current = [];
+
+      console.log('✅ [CLEANUP] Cleanup completed');
     };
   }, []);
 
@@ -2158,6 +2275,10 @@ function App() {
     qualityControllerRef.current = qualityController;
     qualityController.start();
 
+    // Track reconnection attempts
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 3;
+
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
@@ -2213,13 +2334,14 @@ function App() {
       }
     };
 
-    // Handle connection state with detailed monitoring
+    // Handle connection state with error recovery and reconnection logic
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
       console.log('🔗 Connection state:', state);
       
       if (state === 'connected') {
         console.log('✅ [CONNECTION] Connected - Starting quality monitoring');
+        reconnectAttempts = 0; // Reset reconnect attempts on success
         
         // Start periodic stats updates
         if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
@@ -2231,17 +2353,57 @@ function App() {
             setConnectionQuality(callStatsRef.current.getQualityLabel());
           }
         }, 1000);
-      } else if (state === 'failed' || state === 'disconnected') {
-        console.log('❌ Connection issue:', state);
+      } else if (state === 'failed') {
+        console.log('❌ [CONNECTION] Connection FAILED - Attempting recovery');
         if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
-        setCallError(`Connection ${state}`);
-        endCall();
+        
+        // Attempt reconnection with ICE restart
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttempts++;
+          console.log(`🔄 [RECONNECT] Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
+          try {
+            // Restart ICE gathering
+            pc.restartIce();
+            setCallError(`Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+          } catch (err) {
+            console.error('❌ [RECONNECT] Failed to restart ICE:', err);
+            setCallError('Connection failed. Unable to recover.');
+            endCall();
+          }
+        } else {
+          console.log('❌ [RECONNECT] Max reconnection attempts exceeded');
+          setCallError('Connection lost. Call ended.');
+          endCall();
+        }
+      } else if (state === 'disconnected') {
+        console.log('⚠️ [CONNECTION] Disconnected - Waiting for automatic reconnection');
+        if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+        setCallError('Connection interrupted...');
+      } else if (state === 'closed') {
+        console.log('🛑 [CONNECTION] Connection closed');
+        if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+        if (qualityController) qualityController.stop();
       }
     };
 
-    // Monitor ICE connection state
+    // Monitor ICE connection state with detailed logging
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE Connection state:', pc.iceConnectionState);
+      const iceState = pc.iceConnectionState;
+      console.log('🧊 ICE Connection state:', iceState);
+      
+      if (iceState === 'failed') {
+        console.warn('🧊 ICE connection FAILED - NAT/firewall traversal issue');
+        setCallError('Network connectivity issue - trying to reconnect...');
+      } else if (iceState === 'disconnected') {
+        console.warn('🧊 ICE connection DISCONNECTED');
+        setCallError('Connection interrupted...');
+      }
+    };
+
+    // Handle errors
+    pc.onerror = (err) => {
+      console.error('❌ [PEER_CONNECTION] Error:', err);
+      setCallError(`Connection error: ${err.message || 'Unknown error'}`);
     };
 
     peerConnectionRef.current = pc;
@@ -2250,7 +2412,10 @@ function App() {
 
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
-    if (!targetUser || !socketRef.current) return;
+    if (!targetUser || !socketRef.current) {
+      setCallError('Unable to initiate call - missing user or connection');
+      return;
+    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCallError('Your browser does not support audio/video calls');
@@ -2266,7 +2431,7 @@ function App() {
 
       const hasPermission = await checkPermissions(type);
       if (!hasPermission) {
-        setCallError(`Please grant ${type} call permissions`);
+        setCallError(`Please grant ${type} call permissions in your browser settings`);
         setCallState('idle');
         return;
       }
@@ -2278,7 +2443,18 @@ function App() {
         : OPTIMAL_AUDIO_ONLY_CONSTRAINTS;
 
       console.log('🎙️ [CALLER] Requesting media with optimal constraints');
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (mediaErr) {
+        // Fallback to lower quality if optimal fails
+        console.warn('⚠️ [CALLER] Optimal constraints failed, trying fallback...');
+        const fallbackConstraints = type === 'video'
+          ? { video: { width: 320, height: 240, frameRate: 15 }, audio: true }
+          : { audio: true, video: false };
+        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+      }
+
       console.log('📹 [CALLER] Got media stream:', {
         audio: stream.getAudioTracks().length,
         video: stream.getVideoTracks().length
@@ -2302,16 +2478,25 @@ function App() {
       // PREMIUM: Start recording if enabled
       const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
       if (shouldRecord && type === 'voice') {
-        callRecorderRef.current = new CallRecorder();
-        callRecorderRef.current.start(stream);
-        setIsCallRecording(true);
+        try {
+          callRecorderRef.current = new CallRecorder();
+          callRecorderRef.current.start(stream);
+          setIsCallRecording(true);
+        } catch (recErr) {
+          console.warn('⚠️ Recording initialization failed:', recErr);
+        }
       }
 
-      // Create offer
-      const offer = await pc.createOffer();
-      console.log('🎤 [CALLER] Created offer');
-      await pc.setLocalDescription(offer);
-      console.log('🎤 [CALLER] Set local description');
+      // Create offer with error handling
+      let offer;
+      try {
+        offer = await pc.createOffer();
+        console.log('🎤 [CALLER] Created offer');
+        await pc.setLocalDescription(offer);
+        console.log('🎤 [CALLER] Set local description');
+      } catch (offerErr) {
+        throw new Error(`Failed to create call offer: ${offerErr.message}`);
+      }
 
       // Send call offer via socket
       console.log('📤 [CALLER] Sending call:offer to:', targetUser);
@@ -2326,7 +2511,7 @@ function App() {
       callTimeoutRef.current = setTimeout(() => {
         if (callStateRef.current === 'calling') {
           console.log('⏰ Call connection timeout');
-          setCallError('Call timed out. The user may be unavailable.');
+          setCallError('No answer from this user. They may be offline or busy.');
           endCallRef.current(true);
         }
       }, 30000);
@@ -2336,15 +2521,21 @@ function App() {
 
     } catch (err) {
       console.error('❌ Error starting call:', err);
+      let errorMsg = `Failed to start ${type} call`;
+      
       if (err.name === 'NotAllowedError') {
-        setCallError('Please allow camera/microphone access');
+        errorMsg = `Please allow ${type} access in browser settings`;
       } else if (err.name === 'NotFoundError') {
-        setCallError('No camera or microphone found');
+        errorMsg = `No ${type === 'video' ? 'camera' : 'microphone'} found on this device`;
       } else if (err.name === 'NotReadableError') {
-        setCallError('Camera/microphone is busy');
+        errorMsg = `${type === 'video' ? 'Camera' : 'Microphone'} is already in use by another app`;
+      } else if (err.name === 'SecurityError') {
+        errorMsg = 'Call is not allowed in insecure context (HTTPS required)';
       } else {
-        setCallError(`Failed to start call: ${err.message || 'Unknown error'}`);
+        errorMsg = err.message || errorMsg;
       }
+      
+      setCallError(errorMsg);
       setCallState('idle');
       stopRingtone();
       clearCallTimeout();
@@ -2366,7 +2557,7 @@ function App() {
     setIncomingCall(null);
   }, [incomingCall, username, stopRingtone, clearCallTimeout]);
 
-  // Answer incoming call with premium features
+  // Answer incoming call with premium features and robust error handling
   const answerCall = useCallback(async () => {
     if (!incomingCall || !socketRef.current) return;
 
@@ -2386,7 +2577,7 @@ function App() {
         ringtoneRef.current.currentTime = 0;
       }
 
-      // Get media stream with optimal constraints
+      // Get media stream with optimal constraints and fallback
       const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
       let constraints;
       
@@ -2396,8 +2587,19 @@ function App() {
         constraints = { audio: OPTIMAL_AUDIO_CONSTRAINTS, video: false };
       }
 
-      console.log('📹 [RECEIVER] Device:', isMobile ? 'Mobile' : 'Desktop', '| Requesting media with constraints:', constraints);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('📹 [RECEIVER] Device:', isMobile ? 'Mobile' : 'Desktop', '| Requesting media with constraints');
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (mediaErr) {
+        // Fallback to lower quality if optimal fails
+        console.warn('⚠️ [RECEIVER] Optimal constraints failed, trying fallback...');
+        const fallbackConstraints = incomingCall.callType === 'video'
+          ? { video: { width: 320, height: 240, frameRate: 15 }, audio: true }
+          : { audio: true, video: false };
+        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+      }
+
       console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
       setLocalStream(stream);
 
@@ -2420,11 +2622,16 @@ function App() {
       console.log('⚙️ [RECEIVER] Initializing adaptive quality controller');
       const qualityController = new AdaptiveQualityController(pc);
       qualityControllerRef.current = qualityController;
+      qualityController.start();
 
       // CRITICAL: Set remote description FIRST (before adding local tracks)
       console.log('🎧 [RECEIVER] Setting remote description from offer');
-      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-      console.log('✅ [RECEIVER] Remote description set');
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        console.log('✅ [RECEIVER] Remote description set');
+      } catch (descErr) {
+        throw new Error(`Failed to set remote description: ${descErr.message}`);
+      }
 
       // THEN add local stream tracks (after remote description is set)
       console.log('➕ [RECEIVER] Adding local tracks to peer connection');
@@ -2436,49 +2643,71 @@ function App() {
       // Handle pending ICE candidates
       if (pendingIceCandidatesRef.current.length > 0) {
         console.log(`🧊 [RECEIVER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
+        const failedCandidates = [];
         for (const candidate of pendingIceCandidatesRef.current) {
           try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
           } catch (iceError) {
             console.warn('⚠️ [RECEIVER] Failed to apply queued ICE candidate:', iceError?.message || iceError);
+            failedCandidates.push(candidate);
           }
         }
-        pendingIceCandidatesRef.current = [];
+        // Keep failed candidates for retry
+        pendingIceCandidatesRef.current = failedCandidates;
       }
 
-      // Create answer
+      // Create answer with error handling
       console.log('🎤 [RECEIVER] Creating answer');
-      const answer = await pc.createAnswer();
-      console.log('🎤 [RECEIVER] Setting local description with answer');
-      await pc.setLocalDescription(answer);
-      console.log('✅ [RECEIVER] Local description set');
+      let answer;
+      try {
+        answer = await pc.createAnswer();
+        console.log('🎤 [RECEIVER] Setting local description with answer');
+        await pc.setLocalDescription(answer);
+        console.log('✅ [RECEIVER] Local description set');
+      } catch (answerErr) {
+        throw new Error(`Failed to create answer: ${answerErr.message}`);
+      }
 
       // Initialize call recorder if auto-record is enabled
       const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
       if (shouldRecord && incomingCall.callType === 'video') {
-        console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
-        callRecorderRef.current = new CallRecorder();
-        callRecorderRef.current.start(stream);
-        setIsCallRecording(true);
+        try {
+          console.log('🎙️ [RECEIVER] Auto-record enabled, initializing recorder');
+          callRecorderRef.current = new CallRecorder();
+          callRecorderRef.current.start(stream);
+          setIsCallRecording(true);
+        } catch (recErr) {
+          console.warn('⚠️ [RECEIVER] Recording initialization failed:', recErr);
+        }
       }
 
       // Send answer back to caller
       console.log('📤 [RECEIVER] Sending call:answer to:', callerUsername);
-      socketRef.current.emit(CALL_EVENTS.ANSWER, {
-        to: callerUsername,
-        from: username,
-        answer: answer
-      });
-      console.log('✅ [RECEIVER] Call:answer sent');
+      try {
+        socketRef.current.emit(CALL_EVENTS.ANSWER, {
+          to: callerUsername,
+          from: username,
+          answer: answer
+        });
+        console.log('✅ [RECEIVER] Call:answer sent');
+      } catch (sendErr) {
+        console.error('❌ [RECEIVER] Failed to send answer:', sendErr);
+        throw new Error('Failed to send call answer');
+      }
 
       // Start periodic stats update
+      if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
       const intervalId = setInterval(async () => {
-        if (stats && typeof stats.updateStats === 'function') {
-          await stats.updateStats(pc);
-          const latestStats = stats.getStats();
-          setCallStats(latestStats);
-          setQualityIndicator(getQualityIndicator(stats));
-          setConnectionQuality(latestStats.qualityLabel);
+        if (stats && typeof stats.updateStats === 'function' && pc && pc.connectionState === 'connected') {
+          try {
+            await stats.updateStats(pc);
+            const latestStats = stats.getStats();
+            setCallStats(latestStats);
+            setQualityIndicator(getQualityIndicator(stats));
+            setConnectionQuality(latestStats.qualityLabel);
+          } catch (statsErr) {
+            console.warn('⚠️ [RECEIVER] Stats update failed:', statsErr);
+          }
         }
       }, 1000);
       statsUpdateIntervalRef.current = intervalId;
@@ -2490,15 +2719,21 @@ function App() {
 
     } catch (err) {
       console.error('❌ Error answering call:', err);
+      let errorMsg = 'Failed to answer call';
+      
       if (err.name === 'NotAllowedError') {
-        setCallError('Please allow camera/microphone access');
+        errorMsg = 'Please allow camera/microphone access in browser settings';
       } else if (err.name === 'NotFoundError') {
-        setCallError('No camera or microphone found');
+        errorMsg = `No ${incomingCall?.callType === 'video' ? 'camera' : 'microphone'} found on this device`;
       } else if (err.name === 'NotReadableError') {
-        setCallError('Camera/microphone is busy');
+        errorMsg = `${incomingCall?.callType === 'video' ? 'Camera' : 'Microphone'} is already in use by another app`;
+      } else if (err.name === 'SecurityError') {
+        errorMsg = 'Call is not allowed in insecure context (HTTPS required)';
       } else {
-        setCallError(`Failed to answer call: ${err.message || 'Unknown error'}`);
+        errorMsg = err.message || errorMsg;
       }
+      
+      setCallError(errorMsg);
       rejectCall();
     }
   }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout]);
