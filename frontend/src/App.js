@@ -240,6 +240,7 @@ function App() {
   const callTimeoutRef = useRef(null);
   const reconnectCountdownRef = useRef(null);
   const reconnectRetryTimeoutRef = useRef(null);
+  const remoteTrackTimeoutRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const callStateRef = useRef(null);
@@ -371,6 +372,27 @@ function App() {
   useEffect(() => {
     attachRemoteStreamToElement();
   }, [remoteStream, callState, isCallMinimized, attachRemoteStreamToElement]);
+
+  useEffect(() => {
+    const videoEl = remoteVideoRef.current;
+    if (!videoEl || !remoteStream) return;
+
+    if (videoEl.srcObject !== remoteStream) {
+      videoEl.srcObject = remoteStream;
+    }
+    videoEl.muted = false;
+    videoEl.play().catch((e) => console.log('⚠️ Remote video play failed:', e));
+
+    const audioEl = remoteAudioRef.current;
+    if (audioEl && audioEl.srcObject !== remoteStream) {
+      audioEl.srcObject = remoteStream;
+      audioEl.play().catch((e) => console.log('⚠️ Remote audio play failed:', e));
+    }
+
+    if (videoEl.srcObject) {
+      console.log('📹 Remote video element now has stream');
+    }
+  }, [remoteStream]);
 
   // Attach local stream whenever stream changes or local video element mounts
   useEffect(() => {
@@ -990,6 +1012,10 @@ function App() {
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
         callTimeoutRef.current = null;
+      }
+      if (remoteTrackTimeoutRef.current) {
+        clearTimeout(remoteTrackTimeoutRef.current);
+        remoteTrackTimeoutRef.current = null;
       }
       setCallError("Call was rejected");
       endCallRef.current(false);
@@ -2554,12 +2580,18 @@ function App() {
 
     // Handle remote stream with premium audio processing
     pc.ontrack = (event) => {
+      console.log('🎥 ONTRACK fired:', event.track.kind, 'streams:', event.streams?.length || 0);
       debugLog('🎥 [ONTRACK] Remote track received!', {
         kind: event.track.kind,
         enabled: event.track.enabled,
         state: event.track.readyState,
         streamId: event.streams?.length > 0 ? event.streams[0].id : 'NO_STREAM'
       });
+
+      if (remoteTrackTimeoutRef.current) {
+        clearTimeout(remoteTrackTimeoutRef.current);
+        remoteTrackTimeoutRef.current = null;
+      }
       
       try {
         let stream = inboundRemoteStreamRef.current;
@@ -2793,6 +2825,9 @@ function App() {
         audio: stream.getAudioTracks().length,
         video: stream.getVideoTracks().length
       });
+      stream.getTracks().forEach((track) => {
+        track.enabled = true;
+      });
       
       setLocalStream(stream);
 
@@ -2943,6 +2978,9 @@ function App() {
       }
 
       console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
+      stream.getTracks().forEach((track) => {
+        track.enabled = true;
+      });
       setLocalStream(stream);
 
       if (localVideoRef.current && incomingCall.callType === 'video') {
@@ -2981,6 +3019,10 @@ function App() {
         console.log('📌 [RECEIVER] Adding track:', track.kind, track.id);
         pc.addTrack(track, stream);
       });
+
+      if (stream.getTracks().length === 0) {
+        throw new Error('No media tracks available');
+      }
 
       await optimizeRtpSenders(pc, {
         callType: incomingCall.callType,
@@ -3046,6 +3088,21 @@ function App() {
         console.error('❌ [RECEIVER] Failed to send answer:', sendErr);
         throw new Error('Failed to send call answer');
       }
+
+      if (remoteTrackTimeoutRef.current) {
+        clearTimeout(remoteTrackTimeoutRef.current);
+      }
+      remoteTrackTimeoutRef.current = setTimeout(() => {
+        const remoteTrackCount = remoteStreamRef.current?.getTracks?.().length || 0;
+        if (remoteTrackCount === 0 && peerConnectionRef.current) {
+          console.warn('⚠️ No remote tracks after 10s, restarting ICE');
+          try {
+            peerConnectionRef.current.restartIce();
+          } catch (restartErr) {
+            console.warn('⚠️ restartIce failed after remote track timeout:', restartErr);
+          }
+        }
+      }, 10000);
 
       // Start periodic stats update
       if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
@@ -3174,6 +3231,10 @@ function App() {
     if (reconnectRetryTimeoutRef.current) {
       clearTimeout(reconnectRetryTimeoutRef.current);
       reconnectRetryTimeoutRef.current = null;
+    }
+    if (remoteTrackTimeoutRef.current) {
+      clearTimeout(remoteTrackTimeoutRef.current);
+      remoteTrackTimeoutRef.current = null;
     }
     setReconnectInfo(null);
     setPeerConnectionState('new');

@@ -50,19 +50,11 @@ export const ICE_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
-  { urls: 'stun:openrelay.metered.ca:80' },
   {
-    urls: 'turn:openrelay.metered.ca:80?transport=udp',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:80?transport=tcp',
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  },
-  {
-    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    urls: [
+      'turn:openrelay.metered.ca:80?transport=udp',
+      'turn:openrelay.metered.ca:443?transport=tcp'
+    ],
     username: 'openrelayproject',
     credential: 'openrelayproject'
   },
@@ -114,6 +106,16 @@ export function detectDeviceProfile(userAgent = '', connectionInfo = {}) {
 
 export function getAdaptiveMediaConstraints({ callType, userAgent, connectionInfo } = {}) {
   const profile = detectDeviceProfile(userAgent, connectionInfo);
+
+  if (profile.isIOS) {
+    return callType === 'video'
+      ? {
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: { width: 640, height: 480, frameRate: 15 }
+        }
+      : { audio: true, video: false };
+  }
+
   const baseAudio = {
     echoCancellation: true,
     noiseSuppression: true,
