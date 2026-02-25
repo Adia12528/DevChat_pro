@@ -100,8 +100,9 @@ function App() {
   
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
-  const [rooms, setRooms] = useState([{ id: room, name: room, type: 'group' }]);
+  const [rooms, setRooms] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
+  const [groupRoomId, setGroupRoomId] = useState('');
   
   // Starred messages (localStorage-backed, per session)
   const [starredMsgIds, setStarredMsgIds] = useState(() => {
@@ -138,12 +139,6 @@ function App() {
     mostActiveMember: null
   });
 
-  // Enhanced user list
-  const [userSearchFilter, setUserSearchFilter] = useState("");
-  const [userListSortBy, setUserListSortBy] = useState("activity"); // activity, name, last-seen
-  const [showUsersDropdown, setShowUsersDropdown] = useState(false);
-  const [showUsersModal, setShowUsersModal] = useState(false);
-  
   // PWA Install prompt
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
@@ -185,6 +180,10 @@ function App() {
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
+  const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
+  const [peerConnectionState, setPeerConnectionState] = useState('new');
+  const [iceConnectionState, setIceConnectionState] = useState('new');
+  const [signalingState, setSignalingState] = useState('stable');
   
   // PREMIUM: Advanced Call Features
   const [callStats, setCallStats] = useState(null);
@@ -214,6 +213,7 @@ function App() {
   const cameraInputRef = useRef(null); // Separate ref for camera
   const textareaRef = useRef(null);    // Auto-growing textarea
   const contextMenuRef = useRef(null);
+  const menuContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   
@@ -230,10 +230,13 @@ function App() {
   const roomRef = useRef("");
   const soundEnabledRef = useRef(true);
   const pendingIceCandidatesRef = useRef([]);
+  const seenIceCandidateKeysRef = useRef(new Set());
   const endCallRef = useRef(() => {});
   const isAtBottomRef = useRef(true);
   const lastMessageIdRef = useRef(null);
   const callTimeoutRef = useRef(null);
+  const reconnectCountdownRef = useRef(null);
+  const reconnectRetryTimeoutRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const callStateRef = useRef(null);
@@ -246,6 +249,13 @@ function App() {
   const videoEffectsCanvasRef = useRef(null);
   const callHistoryRef = useRef(null);
   const screenStreamRef = useRef(null);
+  const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
+  const configuredLogLevel = (process.env.REACT_APP_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'debug')).toLowerCase();
+  const activeLogLevel = LOG_LEVELS[configuredLogLevel] != null ? configuredLogLevel : (process.env.NODE_ENV === 'production' ? 'error' : 'debug');
+  const shouldLog = (level) => LOG_LEVELS[level] <= LOG_LEVELS[activeLogLevel];
+  const debugLog = (...args) => {
+    if (shouldLog('debug')) console.log(...args);
+  };
 
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
@@ -254,6 +264,24 @@ function App() {
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
   useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
+
+  // Attach remote stream to video element when available
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      console.log('📹 Attaching remote stream to video element');
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.muted = false;
+      remoteVideoRef.current.play().catch((e) => console.log('⚠️ Autoplay blocked:', e));
+    }
+  }, [remoteStream]);
+
+  // Attach local stream to video element when available (video calls only)
+  useEffect(() => {
+    if (localVideoRef.current && localStream && callType === 'video') {
+      console.log('📹 Attaching local stream to video element');
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream, callType]);
 
   // Navigation helper functions
   const navigateTo = useCallback((view, params = {}) => {
@@ -757,8 +785,8 @@ function App() {
     // WebRTC Signaling Events
 
     const handleIncomingCall = async (data) => {
-      console.log("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
-      console.log("🔔 Setting incomingCall state and playing ringtone");
+      debugLog("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
+      debugLog("🔔 Setting incomingCall state and playing ringtone");
       setIncomingCall({ from: data.from, callType: data.callType, offer: data.offer });
       playRingtone();
     };
@@ -766,40 +794,46 @@ function App() {
     newSocket.on(CALL_EVENTS.OFFER, handleIncomingCall);
 
     const handleCallAnswered = async (data) => {
-      console.log("✅ [CALLER] Call answered by:", data.from);
+      debugLog("✅ [CALLER] Call answered by:", data.from);
+      stopRingtone();
       try {
         if (peerConnectionRef.current && data.answer) {
           // CRITICAL FIX: Stop ringtone when call is answered
-          console.log("🛑 [CALLER] STOPPING RINGTONE - call answered");
-          stopRingtone();
+          debugLog("🛑 [CALLER] STOPPING RINGTONE - call answered");
           if (ringtoneRef.current) {
             ringtoneRef.current.pause();
             ringtoneRef.current.currentTime = 0;
           }
 
-          console.log("📋 [CALLER] Setting answer as remote description");
+          debugLog("📋 [CALLER] Setting answer as remote description");
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
 
           if (pendingIceCandidatesRef.current.length > 0) {
-            console.log(`🧊 [CALLER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
+            debugLog(`🧊 [CALLER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
+            const stillPending = [];
             for (const candidate of pendingIceCandidatesRef.current) {
+              if (!candidate || !candidate.candidate) {
+                console.warn('⚠️ [CALLER] Skipping invalid ICE candidate payload');
+                continue;
+              }
               try {
                 await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
               } catch (iceError) {
-                console.warn('⚠️ [CALLER] Failed to apply queued ICE candidate:', iceError?.message || iceError);
+                console.warn('⚠️ [CALLER] Failed to apply queued ICE candidate, keeping for retry:', iceError?.message || iceError);
+                stillPending.push(candidate);
               }
             }
-            pendingIceCandidatesRef.current = [];
+            pendingIceCandidatesRef.current = stillPending;
           }
 
-          console.log("✅ [CALLER] Remote description set from answer");
+          debugLog("✅ [CALLER] Remote description set from answer");
           if (callTimeoutRef.current) {
             clearTimeout(callTimeoutRef.current);
             callTimeoutRef.current = null;
           }
           setCallState('active');
           startCallTimer();
-          console.log("🎉 [CALLER] Call state set to ACTIVE");
+          debugLog("🎉 [CALLER] Call state set to ACTIVE");
         } else {
           console.warn("⚠️ [CALLER] Missing peerConnection or answer:", { 
             hasPeerConnection: !!peerConnectionRef.current,
@@ -815,7 +849,7 @@ function App() {
     newSocket.on(CALL_EVENTS.ANSWER, handleCallAnswered);
 
     newSocket.on(CALL_EVENTS.REJECTED, (data) => {
-      console.log("❌ Call rejected by:", data.from);
+      debugLog("❌ Call rejected by:", data.from);
       stopRingtone();
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
@@ -826,7 +860,7 @@ function App() {
     });
 
     newSocket.on(CALL_EVENTS.ENDED, (data) => {
-      console.log("📴 Call ended by:", data.from);
+      debugLog("📴 Call ended by:", data.from);
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
         callTimeoutRef.current = null;
@@ -835,24 +869,31 @@ function App() {
     });
 
     newSocket.on(CALL_EVENTS.ICE_CANDIDATE, async (data) => {
-      console.log("🧊 [ICE-CANDIDATE] Received from:", data.from);
+      debugLog("🧊 [ICE-CANDIDATE] Received from:", data.from);
       try {
         const pc = peerConnectionRef.current;
-        if (!data.candidate) {
+        if (!data.candidate || !data.candidate.candidate) {
           console.warn("⚠️ [ICE] Missing candidate payload");
           return;
         }
 
+        const candidateKey = `${data.candidate.sdpMid ?? ''}|${data.candidate.sdpMLineIndex ?? ''}|${data.candidate.candidate}`;
+        if (seenIceCandidateKeysRef.current.has(candidateKey)) {
+          debugLog('↩️ [ICE] Duplicate candidate ignored');
+          return;
+        }
+        seenIceCandidateKeysRef.current.add(candidateKey);
+
         if (pc && pc.remoteDescription) {
-          console.log("➕ [ICE] Adding ICE candidate", {
+          debugLog("➕ [ICE] Adding ICE candidate", {
             candidate: data.candidate.candidate?.substring(0, 50),
             type: data.candidate.type
           });
           await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log("✅ [ICE] ICE candidate added");
+          debugLog("✅ [ICE] ICE candidate added");
         } else {
           pendingIceCandidatesRef.current.push(data.candidate);
-          console.log("⏳ [ICE] Queued candidate until remote description is ready", {
+          debugLog("⏳ [ICE] Queued candidate until remote description is ready", {
             hasPeerConnection: !!pc,
             queueSize: pendingIceCandidatesRef.current.length
           });
@@ -863,7 +904,7 @@ function App() {
     });
 
     newSocket.on("call:peer-disconnected", () => {
-      console.log("⚠️ Peer disconnected");
+      debugLog("⚠️ Peer disconnected");
       setCallError("Connection lost");
       endCallRef.current(false);
     });
@@ -1063,6 +1104,17 @@ function App() {
 
       // Clear pending ICE candidates
       pendingIceCandidatesRef.current = [];
+      seenIceCandidateKeysRef.current.clear();
+
+      // Clear reconnect timers
+      if (reconnectCountdownRef.current) {
+        clearInterval(reconnectCountdownRef.current);
+        reconnectCountdownRef.current = null;
+      }
+      if (reconnectRetryTimeoutRef.current) {
+        clearTimeout(reconnectRetryTimeoutRef.current);
+        reconnectRetryTimeoutRef.current = null;
+      }
 
       console.log('✅ [CLEANUP] Cleanup completed');
     };
@@ -1095,33 +1147,6 @@ function App() {
     return filteredChat.length;
   }, [debouncedSearchQuery, filteredChat]);
 
-  // Sorted & filtered users list
-  const sortedUsers = useMemo(() => {
-    // Only include valid, online users
-    let filtered = onlineUsers
-      .filter(u => u && typeof u === 'string' && u.trim().length > 0)
-      .filter(u => !userStatus[u] || userStatus[u] !== 'offline')
-      .filter(u => u.toLowerCase().includes(userSearchFilter.toLowerCase()));
-    
-    filtered.sort((a, b) => {
-      const profileA = userProfiles[a] || {};
-      const profileB = userProfiles[b] || {};
-      
-      switch(userListSortBy) {
-        case 'name':
-          return a.localeCompare(b);
-        case 'last-seen':
-          return (profileB.lastSeen || 0) - (profileA.lastSeen || 0);
-        case 'activity':
-          return (profileB.messageCount || 0) - (profileA.messageCount || 0);
-        default:
-          return 0;
-      }
-    });
-    
-    return filtered;
-  }, [onlineUsers, userSearchFilter, userListSortBy, userProfiles, userStatus]);
-
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -1141,6 +1166,39 @@ function App() {
       document.removeEventListener('touchstart', handleClickOutside);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    const handleClickOutsideMenu = (e) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target)) {
+        setShowMenuDropdown(false);
+      }
+    };
+
+    if (showMenuDropdown) {
+      document.addEventListener('mousedown', handleClickOutsideMenu);
+      document.addEventListener('touchstart', handleClickOutsideMenu);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideMenu);
+      document.removeEventListener('touchstart', handleClickOutsideMenu);
+    };
+  }, [showMenuDropdown]);
+
+  useEffect(() => {
+    if (!showChat || !room) return;
+    if (!room.includes('_dm_')) {
+      setGroupRoomId(room);
+      setRooms(prev => {
+        const hasGroup = prev.some(r => r.id === room);
+        if (hasGroup) return prev;
+        return [{ id: room, name: room, type: 'group' }, ...prev];
+      });
+      if (!activeRoom) {
+        setActiveRoom(room);
+      }
+    }
+  }, [room, showChat, activeRoom]);
 
   const typingDisplay = useMemo(() => {
     const arr = Array.from(typingUsers);
@@ -1163,6 +1221,9 @@ function App() {
       setTypingUsers(new Set());
       setSearchQuery("");
       setDebouncedSearchQuery("");
+      setGroupRoomId(room);
+      setRooms([{ id: room, name: room, type: 'group' }]);
+      setActiveRoom(room);
       socketRef.current.emit("join_room", { room, username }); 
       socketRef.current.emit("update_status", { username, status: 'online' });
       setShowChat(true); 
@@ -1201,7 +1262,12 @@ function App() {
       replyTo: replyingTo?._id || null
     };
     
-    socketRef.current.emit("send_message", messageData);
+    socketRef.current.emit("send_message", messageData, (ack) => {
+      if (ack && ack.error) {
+        setErrorMessage('Message failed to send');
+        setTimeout(() => setErrorMessage(''), 3000);
+      }
+    });
     setMessage("");
     setReplyingTo(null);
     if (typingTimeoutRef.current) { 
@@ -2156,6 +2222,8 @@ function App() {
     setActiveRoom(dmRoom);
     socketRef.current.emit("join_room", { room: dmRoom, username: usernameRef.current });
     setRoom(dmRoom);
+    setShowRoomSidebar(false);
+    setShowMenuDropdown(false);
     setShowProfileModal(null);
   }, [username, rooms]);
 
@@ -2165,6 +2233,7 @@ function App() {
     socketRef.current.emit("join_room", { room: roomId, username: usernameRef.current });
     setChat([]);
     setShowRoomSidebar(false);
+    setShowMenuDropdown(false);
   }, []);
 
   const handleInstallClick = useCallback(async () => {
@@ -2298,7 +2367,7 @@ function App() {
 
   // Initialize peer connection with premium features
   const createPeerConnection = useCallback((targetUsername) => {
-    console.log('🔧 Creating PREMIUM peer connection for:', targetUsername);
+    debugLog('🔧 Creating PREMIUM peer connection for:', targetUsername);
     
     const pc = new RTCPeerConnection(iceServersConfig);
     
@@ -2314,23 +2383,35 @@ function App() {
     // Track reconnection attempts
     let reconnectAttempts = 0;
     const MAX_RECONNECT_ATTEMPTS = 3;
+    const RECONNECT_DELAY_SECONDS = 2;
+
+    const clearReconnectTimers = () => {
+      if (reconnectCountdownRef.current) {
+        clearInterval(reconnectCountdownRef.current);
+        reconnectCountdownRef.current = null;
+      }
+      if (reconnectRetryTimeoutRef.current) {
+        clearTimeout(reconnectRetryTimeoutRef.current);
+        reconnectRetryTimeoutRef.current = null;
+      }
+    };
 
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
-        console.log('🧊 Sending ICE candidate to:', targetUsername);
+        debugLog('🧊 Sending ICE candidate to:', targetUsername);
         socketRef.current.emit(CALL_EVENTS.ICE_CANDIDATE, {
           to: targetUsername,
           candidate: event.candidate
         });
       } else if (event.candidate) {
-        console.log('⚠️ Can\'t send ICE candidate - no target or socket');
+        debugLog('⚠️ Can\'t send ICE candidate - no target or socket');
       }
     };
 
     // Handle remote stream with premium audio processing
     pc.ontrack = (event) => {
-      console.log('🎥 [ONTRACK] Remote track received!', {
+      debugLog('🎥 [ONTRACK] Remote track received!', {
         kind: event.track.kind,
         enabled: event.track.enabled,
         state: event.track.readyState,
@@ -2340,12 +2421,12 @@ function App() {
       try {
         if (event.streams && event.streams.length > 0) {
           const remoteStream = event.streams[0];
-          console.log('📡 [ONTRACK] Stream received with', remoteStream.getTracks().length, 'tracks');
+          debugLog('📡 [ONTRACK] Stream received with', remoteStream.getTracks().length, 'tracks');
           setRemoteStream(remoteStream);
           
           // Set remote stream for BOTH video and audio display
           if (remoteVideoRef.current) {
-            console.log('📹 [ONTRACK] Setting remote video element srcObject');
+            debugLog('📹 [ONTRACK] Setting remote video element srcObject');
             remoteVideoRef.current.srcObject = remoteStream;
             // Ensure video element is not muted so we get audio
             remoteVideoRef.current.muted = false;
@@ -2355,7 +2436,7 @@ function App() {
           
           // Log track details
           remoteStream.getTracks().forEach((track, idx) => {
-            console.log(`🎵 [ONTRACK] Track ${idx}:`, {
+            debugLog(`🎵 [ONTRACK] Track ${idx}:`, {
               kind: track.kind,
               enabled: track.enabled,
               id: track.id,
@@ -2373,11 +2454,15 @@ function App() {
     // Handle connection state with error recovery and reconnection logic
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      console.log('🔗 Connection state:', state);
+      debugLog('🔗 Connection state:', state);
+      setPeerConnectionState(state || 'new');
       
       if (state === 'connected') {
-        console.log('✅ [CONNECTION] Connected - Starting quality monitoring');
+        debugLog('✅ [CONNECTION] Connected - Starting quality monitoring');
         reconnectAttempts = 0; // Reset reconnect attempts on success
+        clearReconnectTimers();
+        setReconnectInfo(null);
+        setCallError(null);
         
         // Start periodic stats updates
         if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
@@ -2389,35 +2474,69 @@ function App() {
             setConnectionQuality(callStatsRef.current.getQualityLabel());
           }
         }, 1000);
-      } else if (state === 'failed') {
-        console.log('❌ [CONNECTION] Connection FAILED - Attempting recovery');
+      } else if (state === 'failed' || state === 'disconnected') {
+        debugLog(`❌ [CONNECTION] Connection ${state.toUpperCase()} - Attempting recovery`);
         if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+
+        if (reconnectRetryTimeoutRef.current) {
+          debugLog('⏳ [RECONNECT] Retry already scheduled, waiting...');
+          return;
+        }
         
         // Attempt reconnection with ICE restart
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts++;
-          console.log(`🔄 [RECONNECT] Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
+          debugLog(`🔄 [RECONNECT] Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
           try {
-            // Restart ICE gathering
-            pc.restartIce();
+            let secondsLeft = RECONNECT_DELAY_SECONDS;
+            setReconnectInfo({
+              attempt: reconnectAttempts,
+              max: MAX_RECONNECT_ATTEMPTS,
+              secondsLeft
+            });
             setCallError(`Reconnecting (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+
+            reconnectCountdownRef.current = setInterval(() => {
+              secondsLeft -= 1;
+              setReconnectInfo(prev => prev ? {
+                ...prev,
+                secondsLeft: Math.max(secondsLeft, 0)
+              } : prev);
+
+              if (secondsLeft <= 0 && reconnectCountdownRef.current) {
+                clearInterval(reconnectCountdownRef.current);
+                reconnectCountdownRef.current = null;
+              }
+            }, 1000);
+
+            reconnectRetryTimeoutRef.current = setTimeout(() => {
+              try {
+                pc.restartIce();
+              } catch (err) {
+                console.error('❌ [RECONNECT] Failed to restart ICE:', err);
+                setCallError('Connection failed. Unable to recover.');
+                endCall();
+              } finally {
+                reconnectRetryTimeoutRef.current = null;
+              }
+            }, RECONNECT_DELAY_SECONDS * 1000);
           } catch (err) {
             console.error('❌ [RECONNECT] Failed to restart ICE:', err);
             setCallError('Connection failed. Unable to recover.');
             endCall();
           }
         } else {
-          console.log('❌ [RECONNECT] Max reconnection attempts exceeded');
+          debugLog('❌ [RECONNECT] Max reconnection attempts exceeded');
+          clearReconnectTimers();
+          setReconnectInfo(null);
           setCallError('Connection lost. Call ended.');
           endCall();
         }
-      } else if (state === 'disconnected') {
-        console.log('⚠️ [CONNECTION] Disconnected - Waiting for automatic reconnection');
-        if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
-        setCallError('Connection interrupted...');
       } else if (state === 'closed') {
-        console.log('🛑 [CONNECTION] Connection closed');
+        debugLog('🛑 [CONNECTION] Connection closed');
         if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
+        clearReconnectTimers();
+        setReconnectInfo(null);
         if (qualityController) qualityController.stop();
       }
     };
@@ -2425,15 +2544,18 @@ function App() {
     // Monitor ICE connection state with detailed logging
     pc.oniceconnectionstatechange = () => {
       const iceState = pc.iceConnectionState;
-      console.log('🧊 ICE Connection state:', iceState);
+      debugLog('🧊 ICE state:', iceState);
+      setIceConnectionState(iceState || 'new');
       
       if (iceState === 'failed') {
-        console.warn('🧊 ICE connection FAILED - NAT/firewall traversal issue');
-        setCallError('Network connectivity issue - trying to reconnect...');
-      } else if (iceState === 'disconnected') {
-        console.warn('🧊 ICE connection DISCONNECTED');
-        setCallError('Connection interrupted...');
+        console.error('❌ ICE failed – check STUN/TURN servers or firewall');
+        setCallError('Network connection failed. Please check your firewall and try again.');
       }
+    };
+
+    pc.onsignalingstatechange = () => {
+      debugLog('🚦 Signaling state:', pc.signalingState);
+      setSignalingState(pc.signalingState || 'stable');
     };
 
     // Handle errors
@@ -2459,7 +2581,9 @@ function App() {
     }
 
     try {
-      console.log('📞 [CALLER] Starting PREMIUM', type, 'call to:', targetUser);
+      debugLog('📞 [CALLER] Starting PREMIUM', type, 'call to:', targetUser);
+      pendingIceCandidatesRef.current = [];
+      seenIceCandidateKeysRef.current.clear();
       setCallType(type);
       setCallPeer({ username: targetUser, userId: targetUser });
       setCallState('calling');
@@ -2478,7 +2602,7 @@ function App() {
         ? (isMobile ? MOBILE_VIDEO_CONSTRAINTS : OPTIMAL_VIDEO_CONSTRAINTS)
         : OPTIMAL_AUDIO_ONLY_CONSTRAINTS;
 
-      console.log('🎙️ [CALLER] Requesting media with optimal constraints');
+      debugLog('🎙️ [CALLER] Requesting media with optimal constraints');
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -2491,7 +2615,7 @@ function App() {
         stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       }
 
-      console.log('📹 [CALLER] Got media stream:', {
+      debugLog('📹 [CALLER] Got media stream:', {
         audio: stream.getAudioTracks().length,
         video: stream.getVideoTracks().length
       });
@@ -2507,7 +2631,7 @@ function App() {
 
       // Add local stream tracks
       stream.getTracks().forEach(track => {
-        console.log('🎚️ [CALLER] Adding track:', track.kind);
+        debugLog('🎚️ [CALLER] Adding track:', track.kind);
         pc.addTrack(track, stream);
       });
 
@@ -2527,15 +2651,15 @@ function App() {
       let offer;
       try {
         offer = await pc.createOffer();
-        console.log('🎤 [CALLER] Created offer');
+        debugLog('🎤 [CALLER] Created offer');
         await pc.setLocalDescription(offer);
-        console.log('🎤 [CALLER] Set local description');
+        debugLog('🎤 [CALLER] Set local description');
       } catch (offerErr) {
         throw new Error(`Failed to create call offer: ${offerErr.message}`);
       }
 
       // Send call offer via socket
-      console.log('📤 [CALLER] Sending call:offer to:', targetUser);
+      debugLog('📤 [CALLER] Sending call:offer to:', targetUser);
       socketRef.current.emit(CALL_EVENTS.OFFER, {
         to: targetUser,
         from: username,
@@ -2546,14 +2670,18 @@ function App() {
       clearCallTimeout();
       callTimeoutRef.current = setTimeout(() => {
         if (callStateRef.current === 'calling') {
-          console.log('⏰ Call connection timeout');
+          debugLog('⏰ Call connection timeout');
           setCallError('No answer from this user. They may be offline or busy.');
           endCallRef.current(true);
         }
       }, 30000);
 
-      console.log('🔔 [CALLER] Playing ringtone');
-      playRingtone();
+      setTimeout(() => {
+        if (callStateRef.current === 'calling') {
+          debugLog('🔔 [CALLER] Playing ringtone');
+          playRingtone();
+        }
+      }, 200);
 
     } catch (err) {
       console.error('❌ Error starting call:', err);
@@ -2597,9 +2725,13 @@ function App() {
   const answerCall = useCallback(async () => {
     if (!incomingCall || !socketRef.current) return;
 
+    stopRingtone();
+
     try {
       const callerUsername = incomingCall.from;
       console.log('📞 [RECEIVER] Answering', incomingCall.callType, 'call from:', callerUsername);
+      pendingIceCandidatesRef.current = [];
+      seenIceCandidateKeysRef.current.clear();
       clearCallTimeout();
       
       setCallType(incomingCall.callType);
@@ -2681,6 +2813,10 @@ function App() {
         console.log(`🧊 [RECEIVER] Flushing ${pendingIceCandidatesRef.current.length} queued ICE candidate(s)`);
         const failedCandidates = [];
         for (const candidate of pendingIceCandidatesRef.current) {
+          if (!candidate || !candidate.candidate) {
+            console.warn('⚠️ [RECEIVER] Skipping invalid ICE candidate payload');
+            continue;
+          }
           try {
             await pc.addIceCandidate(new RTCIceCandidate(candidate));
           } catch (iceError) {
@@ -2850,6 +2986,19 @@ function App() {
       screenStreamRef.current = null;
     }
     pendingIceCandidatesRef.current = [];
+    seenIceCandidateKeysRef.current.clear();
+    if (reconnectCountdownRef.current) {
+      clearInterval(reconnectCountdownRef.current);
+      reconnectCountdownRef.current = null;
+    }
+    if (reconnectRetryTimeoutRef.current) {
+      clearTimeout(reconnectRetryTimeoutRef.current);
+      reconnectRetryTimeoutRef.current = null;
+    }
+    setReconnectInfo(null);
+    setPeerConnectionState('new');
+    setIceConnectionState('new');
+    setSignalingState('stable');
 
     // Reset state
     setCallState('idle');
@@ -3067,6 +3216,17 @@ function App() {
     return null;
   }, [activeRoom, room, rooms, username]);
 
+  const currentRoomId = activeRoom || room;
+  const currentRoomInfo = useMemo(() => {
+    return rooms.find(r => r.id === currentRoomId) || null;
+  }, [rooms, currentRoomId]);
+
+  const mediaMessages = useMemo(() => {
+    return [...chat]
+      .filter(m => ['image', 'voice', 'file'].includes(m.type) && (m.fileUrl || m.text))
+      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [chat]);
+
   const isSelectedUserOnline = useMemo(() => {
     if (!selectedUser) return false;
     return onlineUsers.some((user) => {
@@ -3074,6 +3234,12 @@ function App() {
       return user?.username === selectedUser;
     });
   }, [onlineUsers, selectedUser]);
+
+  const normalizedOnlineUsers = useMemo(() => {
+    return onlineUsers
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
+      .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
+  }, [onlineUsers]);
 
   if (!showChat) return (
     <div className="login-screen">
@@ -3115,7 +3281,7 @@ function App() {
       </AnimatePresence>
 
       <div className="chat-header">
-        <div className="menu-container">
+        <div className="menu-container" ref={menuContainerRef}>
           <button 
             className="menu-toggle"
             onClick={() => setShowMenuDropdown(!showMenuDropdown)}
@@ -3196,7 +3362,18 @@ function App() {
                     }}
                   >
                     <Users size={18}/>
-                    <span>Conversations</span>
+                    <span>Conversations {onlineUsers.length > 0 && <span className="menu-badge">{onlineUsers.length}</span>}</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      navigateTo('media');
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <ImageIcon size={18}/>
+                    <span>Media {mediaMessages.length > 0 && <span className="menu-badge">{mediaMessages.length}</span>}</span>
                   </button>
 
                   <button 
@@ -3262,8 +3439,19 @@ function App() {
           </AnimatePresence>
         </div>
         
+        {currentRoomInfo?.type === 'dm' && groupRoomId && (
+          <button
+            className="dm-back-btn"
+            onClick={() => switchRoom(groupRoomId)}
+            title="Back to group chat"
+          >
+            <ChevronLeft size={16} />
+            <span>Group</span>
+          </button>
+        )}
+
         <div className="meta">
-          <h3>{room} <span style={{ fontSize: '11px', opacity: 0.4, fontWeight: 'normal' }}>{APP_VERSION}</span></h3>
+          <h3>{currentRoomInfo?.name || room} <span style={{ fontSize: '11px', opacity: 0.4, fontWeight: 'normal' }}>{APP_VERSION}</span></h3>
           <div className="room-info">
             <span className={connected ? "status-on" : "status-off"}>
               {connected ? <Wifi size={12}/> : <WifiOff size={12}/>} {connected ? "Online" : "Disconnected"}
@@ -3301,16 +3489,9 @@ function App() {
           </div>
         )}
         
-        <div className="users-info">
-          <button 
-            className={`users-dropdown-btn ${showUsersDropdown ? 'active' : ''}`}
-            onClick={() => setShowUsersDropdown(!showUsersDropdown)}
-            title={`${onlineUsers.length} member${onlineUsers.length !== 1 ? 's' : ''} online`}
-          >
-            <Users size={16}/>
-            <span className="users-count">{onlineUsers.length}</span>
-            <ChevronDown size={14} style={{transform: showUsersDropdown ? 'rotate(180deg)' : 'none', transition:'transform 0.2s'}}/>
-          </button>
+        <div className="users-info" title={`${onlineUsers.length} member${onlineUsers.length !== 1 ? 's' : ''} online`}>
+          <Users size={16}/>
+          <span className="users-count">{onlineUsers.length}</span>
         </div>
         <button 
           className="theme-toggle"
@@ -3381,205 +3562,6 @@ function App() {
                 <span className="pinned-panel-sender">{pm.sender}</span>
               </div>
             ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Users Dropdown */}
-      <AnimatePresence>
-        {onlineUsers.length > 0 && showUsersDropdown && (
-          <motion.div
-            className="users-dropdown"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div className="users-dropdown-header">
-              <div className="users-dropdown-controls">
-                <input 
-                  type="text"
-                  placeholder="Search users..."
-                  className="user-search-input-dropdown"
-                  value={userSearchFilter}
-                  onChange={(e) => setUserSearchFilter(e.target.value)}
-                />
-                <select 
-                  className="user-sort-select-dropdown"
-                  value={userListSortBy}
-                  onChange={(e) => setUserListSortBy(e.target.value)}
-                >
-                  <option value="activity">Activity</option>
-                  <option value="name">Name</option>
-                  <option value="last-seen">Last Seen</option>
-                </select>
-                <button 
-                  className="view-all-users-btn-dropdown"
-                  onClick={() => setShowUsersModal(true)}
-                  title="View detailed members list"
-                >
-                  👁️
-                </button>
-              </div>
-            </div>
-            <div className="users-dropdown-list">
-              {sortedUsers.length > 0 ? (
-                sortedUsers.map((user) => {
-                  const profile = userProfiles[user] || {};
-                  const lastSeenTime = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'never';
-                  return (
-                    <motion.div 
-                      key={user} 
-                      className="user-dropdown-item" 
-                      initial={{ opacity: 0, x: -10 }} 
-                      animate={{ opacity: 1, x: 0 }}
-                      whileHover={{ x: 3 }}
-                    >
-                      <div 
-                        className="user-dropdown-avatar"
-                        onClick={() => setShowUsersModal(true)}
-                        title={`View ${user}'s profile`}
-                      >
-                        <div style={getAvatarStyle(user)}>
-                          {getInitials(user)}
-                        </div>
-                        <span className={`user-dropdown-status status-${userStatus[user] || 'online'}`}></span>
-                      </div>
-                      <div className="user-dropdown-info">
-                        <div className="user-dropdown-name">
-                          <span>{user}</span>
-                          <span className={`user-dropdown-badge role-${profile.role || 'member'}`}>
-                            {profile.isBot ? '🤖' : profile.role === 'you' ? 'You' : ''}
-                          </span>
-                        </div>
-                        <div className="user-dropdown-meta">
-                          <span>{profile.messageCount || 0} msg</span>
-                          {typingUsers.has(user) && <span className="typing-indicator">Typing...</span>}
-                        </div>
-                      </div>
-                      <button 
-                        className="user-dropdown-mention"
-                        onClick={() => {
-                          setMessageText(messageText + `@${user} `);
-                          textareaRef.current?.focus();
-                        }}
-                        title="Mention this user"
-                      >
-                        @
-                      </button>
-                      {user !== username && (
-                        <button
-                          className="user-dropdown-mention"
-                          onClick={() => createDM(user)}
-                          title={`Start DM with ${user}`}
-                        >
-                          DM
-                        </button>
-                      )}
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="no-users-found-dropdown">No users found</div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Users Modal */}
-      <AnimatePresence>
-        {showUsersModal && (
-          <motion.div 
-            className="users-modal-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowUsersModal(false)}
-          >
-            <motion.div 
-              className="users-modal"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="users-modal-header">
-                <h2>Members ({onlineUsers.length})</h2>
-                <button 
-                  className="modal-close-btn"
-                  onClick={() => setShowUsersModal(false)}
-                  title="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="users-modal-content">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th>Member</th>
-                      <th>Role</th>
-                      <th>Messages</th>
-                      <th>Joined</th>
-                      <th>Last Seen</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {onlineUsers.map((user) => {
-                      const profile = userProfiles[user] || {};
-                      const joinedDate = profile.joinedAt ? new Date(profile.joinedAt).toLocaleDateString() : 'Unknown';
-                      const lastSeenDate = profile.lastSeen ? new Date(profile.lastSeen).toLocaleDateString() : 'Never';
-                      return (
-                        <tr key={user} className="user-table-row">
-                          <td className="user-cell">
-                            <div className="user-cell-avatar">
-                              <div style={getAvatarStyle(user)}>
-                                {getInitials(user)}
-                              </div>
-                              <span className={`user-cell-status status-${userStatus[user] || 'online'}`}></span>
-                            </div>
-                            <span>{user}</span>
-                          </td>
-                          <td className={`role-cell role-${profile.role || 'member'}`}>
-                            {profile.isBot ? '🤖 Bot' : profile.role === 'you' ? 'You' : 'Member'}
-                          </td>
-                          <td className="messages-cell">{profile.messageCount || 0}</td>
-                          <td className="joined-cell">{joinedDate}</td>
-                          <td className="last-seen-cell">{lastSeenDate}</td>
-                          <td className="action-cell">
-                            {user !== username && (
-                              <button
-                                className="mention-cell-btn"
-                                onClick={() => {
-                                  createDM(user);
-                                  setShowUsersModal(false);
-                                }}
-                                title={`Start DM with ${user}`}
-                              >
-                                DM
-                              </button>
-                            )}
-                            <button 
-                              className="mention-cell-btn"
-                              onClick={() => {
-                                setMessageText(messageText + `@${user} `);
-                                textareaRef.current?.focus();
-                                setShowUsersModal(false);
-                              }}
-                              title="Mention this user"
-                            >
-                              @mention
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -4376,6 +4358,21 @@ function App() {
                 </button>
               </div>
               <div className="sidebar-rooms">
+                {groupRoomId && (
+                  <div className="sidebar-section">
+                    <div className="sidebar-section-title">Group Chat</div>
+                    <button
+                      className={`room-item ${(activeRoom || room) === groupRoomId ? 'active' : ''}`}
+                      onClick={() => switchRoom(groupRoomId)}
+                    >
+                      <div className="room-icon">#</div>
+                      <span>{groupRoomId}</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="sidebar-section">
+                  <div className="sidebar-section-title">Your Conversations</div>
                 {rooms.map(r => (
                   <button
                     key={r.id}
@@ -4388,6 +4385,28 @@ function App() {
                     <span>{r.name}</span>
                   </button>
                 ))}
+                </div>
+
+                <div className="sidebar-section">
+                  <div className="sidebar-section-title">Online Members</div>
+                  {normalizedOnlineUsers.filter(u => u !== username).length === 0 ? (
+                    <div className="sidebar-empty">No other members online</div>
+                  ) : (
+                    normalizedOnlineUsers
+                      .filter(u => u !== username)
+                      .map((user) => (
+                        <div className="sidebar-user-row" key={`online-${user}`}>
+                          <div className="sidebar-user-meta">
+                            <span className="sidebar-user-dot"></span>
+                            <span>{user}</span>
+                          </div>
+                          <button className="sidebar-dm-btn" onClick={() => createDM(user)}>
+                            DM
+                          </button>
+                        </div>
+                      ))
+                  )}
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -4748,6 +4767,101 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Media Panel */}
+      <AnimatePresence>
+        {currentView === 'media' && (
+          <motion.div
+            className="starred-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => goBack()}
+          >
+            <motion.div
+              className="starred-panel"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="panel-header-nav">
+                <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
+                <h3 className="panel-header-title">🖼️ Shared Media</h3>
+                <div className="panel-header-actions">
+                  <span className="starred-count-badge">{mediaMessages.length}</span>
+                </div>
+              </div>
+              <div className="panel-content media-panel-content">
+                {mediaMessages.length === 0 ? (
+                  <div className="starred-panel-empty">
+                    <ImageIcon size={40} color="var(--txt-muted, #8696a0)" />
+                    <p>No shared media yet</p>
+                    <span>Images, voice notes and files will appear here</span>
+                  </div>
+                ) : (
+                  mediaMessages.map((m) => (
+                    <div key={`media-${m._id}`} className="media-panel-item">
+                      <div className="media-panel-meta">
+                        <span className="media-type-badge">{m.type.toUpperCase()}</span>
+                        <span className="media-panel-sender">{m.sender}</span>
+                        <span className="media-panel-time">{formatRelativeTime(m.time)}</span>
+                      </div>
+
+                      <div className="media-panel-preview">
+                        {m.type === 'image' ? (
+                          <img src={m.fileUrl || m.text} alt="shared media" className="media-panel-thumb" />
+                        ) : (
+                          <div className="media-panel-generic">
+                            {m.type === 'voice' ? '🎤 Voice message' : `📎 ${m.fileName || 'File attachment'}`}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="media-panel-actions">
+                        {m.type === 'image' && (
+                          <button
+                            className="media-panel-btn"
+                            onClick={() => openImageViewer({
+                              url: m.fileUrl || m.text,
+                              fileName: m.fileName || `image-${new Date(m.time).getTime()}.jpg`,
+                              sender: m.sender,
+                              time: m.time
+                            })}
+                          >
+                            View
+                          </button>
+                        )}
+                        {m.type === 'voice' && (
+                          <button
+                            className="media-panel-btn"
+                            onClick={() => openVoicePlayer({
+                              url: m.fileUrl,
+                              fileName: m.fileName || `voice-${new Date(m.time).getTime()}.webm`,
+                              sender: m.sender,
+                              time: m.time,
+                              duration: m.duration || 0
+                            })}
+                          >
+                            Play
+                          </button>
+                        )}
+                        <button
+                          className="media-panel-btn"
+                          onClick={() => downloadMedia(m.fileUrl || m.text, m.fileName || `${m.type}-${new Date(m.time).getTime()}`)}
+                        >
+                          Download
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Incoming Call Modal */}
       <AnimatePresence>
         {incomingCall && (
@@ -4884,7 +4998,16 @@ function App() {
                     playsInline
                     muted
                     className="local-video"
-                    style={{ objectFit: 'cover' }}
+                    style={{
+                      position: 'absolute',
+                      bottom: '20px',
+                      right: '20px',
+                      width: '200px',
+                      height: '150px',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                      border: '2px solid rgba(255,255,255,0.3)'
+                    }}
                   />
                 )}
 
@@ -4906,7 +5029,19 @@ function App() {
                   </div>
                   <div className="call-duration">{formatCallDuration(callDuration)}</div>
                   <div className="call-status-badges">
-                    <span className="call-status-badge">Connected</span>
+                    <span className={`call-status-badge ${reconnectInfo ? 'warning' : ''}`}>
+                      {reconnectInfo
+                        ? `Reconnecting (${reconnectInfo.attempt}/${reconnectInfo.max})`
+                        : (callState === 'active' ? 'Connected' : 'Connecting')}
+                    </span>
+                    {reconnectInfo && Number.isFinite(reconnectInfo.secondsLeft) && (
+                      <span className="reconnect-countdown-badge">
+                        Retry in {reconnectInfo.secondsLeft}s
+                      </span>
+                    )}
+                    <span className="network-state-badge">Peer: {peerConnectionState}</span>
+                    <span className="network-state-badge">ICE: {iceConnectionState}</span>
+                    <span className="network-state-badge">Signal: {signalingState}</span>
                     {connectionQuality && (
                       <span className={`quality-badge quality-${connectionQuality.toLowerCase()}`}>
                         {connectionQuality}

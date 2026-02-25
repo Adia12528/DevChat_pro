@@ -45,27 +45,20 @@ export const MOBILE_VIDEO_CONSTRAINTS = {
 // ==================== ICE SERVERS ====================
 // Enhanced with free TURN servers for NAT traversal in restrictive networks
 export const ICE_SERVERS = [
-  // STUN Servers (for NAT detection)
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
-  // Free TURN Servers (for relay in restrictive NAT/firewall)
   {
-    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+    urls: 'turn:openrelay.metered.ca:80',
     username: 'openrelayproject',
     credential: 'openrelayproject'
   },
   {
-    urls: 'turn:numb.viagee.com:3478',
-    username: 'webrtc@example.com',
-    credential: 'webrtc'
-  },
-  {
-    urls: 'turn:relay.backups.cz:3478',
-    username: 'webrtc',
-    credential: 'webrtc'
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
   }
 ];
 

@@ -7,6 +7,14 @@ require('dotenv').config();
 
 const app = express();
 
+const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
+const configuredLogLevel = (process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'debug')).toLowerCase();
+const activeLogLevel = LOG_LEVELS[configuredLogLevel] != null ? configuredLogLevel : (process.env.NODE_ENV === 'production' ? 'error' : 'debug');
+const shouldLog = (level) => LOG_LEVELS[level] <= LOG_LEVELS[activeLogLevel];
+const logDebug = (...args) => {
+    if (shouldLog('debug')) console.log(...args);
+};
+
 const CALL_EVENTS = Object.freeze({
     OFFER: 'call:offer',
     ANSWER: 'call:answer',
@@ -123,6 +131,9 @@ const roomUsers = {};
 
 io.on('connection', (socket) => {
     console.log(`✅ Connected: ${socket.id}`);
+    const signalLog = (...args) => {
+        logDebug(...args);
+    };
 
     const findTargetSocketInRoom = (room, targetUsername) => {
         if (!room || !targetUsername || !roomUsers[room]) return null;
@@ -151,17 +162,45 @@ io.on('connection', (socket) => {
         io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
     });
 
-    socket.on('send_message', async (data) => {
-        if (!data.text?.trim()) return;
-        // Preserve the type from client data (text, image, voice, file)
-        const newMessage = new Message({ 
-            ...data, 
-            type: data.type || 'text' // Use client-provided type or default to 'text'
-        });
-        const savedMessage = await newMessage.save();
-        console.log(`📤 Message saved: ${savedMessage.type} - ${savedMessage.text?.substring(0, 30)}`);
-        io.to(data.room).emit("receive_message", serializeMessage(savedMessage));
-        io.to(data.room).emit('user_stopped_typing', data.sender);
+    socket.on('send_message', async (data, callback) => {
+        if (!data || typeof data !== 'object') {
+            callback?.({ error: 'Invalid payload' });
+            return;
+        }
+
+        const hasText = typeof data.text === 'string' && data.text.trim().length > 0;
+        const hasMedia = typeof data.fileUrl === 'string' && data.fileUrl.trim().length > 0;
+
+        if (!data.room || !data.sender) {
+            callback?.({ error: 'Missing room or sender' });
+            return;
+        }
+
+        if (!hasText && !hasMedia) {
+            callback?.({ error: 'Empty message' });
+            return;
+        }
+
+        try {
+            const normalizedText = hasText
+                ? data.text.trim()
+                : (data.type === 'voice' ? 'Voice message' : (data.fileName || 'Attachment'));
+
+            // Preserve the type from client data (text, image, voice, file)
+            const newMessage = new Message({ 
+                ...data, 
+                text: normalizedText,
+                type: data.type || 'text' // Use client-provided type or default to 'text'
+            });
+            const savedMessage = await newMessage.save();
+            console.log(`📤 Message saved: ${savedMessage.type} - ${savedMessage.text?.substring(0, 30)}`);
+            io.to(data.room).emit("receive_message", serializeMessage(savedMessage));
+            io.to(data.room).emit('user_stopped_typing', data.sender);
+            callback?.({ success: true });
+        } catch (err) {
+            console.error('Message save error:', err);
+            callback?.({ error: 'Database error' });
+        }
     });
 
     socket.on('edit_message', async (data) => {
@@ -278,99 +317,116 @@ io.on('connection', (socket) => {
     // WebRTC Video/Voice Calling Signaling
     // ==========================
 
+    const resolveCallTargetSocket = (toUsername) => {
+        if (!socket.room || !roomUsers[socket.room] || !toUsername) return null;
+        return findTargetSocketInRoom(socket.room, toUsername);
+    };
+
+    const notifyCallerUnavailable = (reason = 'User not found or offline') => {
+        socket.emit(CALL_EVENTS.REJECTED, { reason });
+    };
+
     // Forward call offer to target user
     socket.on(CALL_EVENTS.OFFER, (data) => {
-        console.log(`📞 Call offer from ${data.from} to ${data.to} (${data.callType})`);
-        
-        // Find target user's socket
-        if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
-            console.log(`🔎 [DEBUG] Room: ${socket.room}, Target user: ${data.to}`);
-            console.log(`🔎 [DEBUG] roomUsers[${socket.room}]:`, roomUsers[socket.room]);
-            console.log(`🔎 call:offer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
-            
+        try {
+            if (!data?.to || !data?.from || !data?.offer || !data?.callType) {
+                notifyCallerUnavailable('Invalid call offer payload');
+                return;
+            }
+
+            signalLog(`📞 Call offer from ${data.from} to ${data.to} (${data.callType})`);
+            const targetSocket = resolveCallTargetSocket(data.to);
+            signalLog(`🔎 call:offer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
+
             if (targetSocket) {
-                console.log(`📤 Emitting call:offer to socket ID ${targetSocket}`);
-                const payload = {
+                io.to(targetSocket).emit(CALL_EVENTS.OFFER, {
                     from: data.from,
                     callType: data.callType,
                     offer: data.offer
-                };
-                io.to(targetSocket).emit(CALL_EVENTS.OFFER, payload);
-                console.log(`✅ Call offer forwarded to ${data.to} (socket: ${targetSocket})`);
+                });
+                signalLog(`✅ Call offer forwarded to ${data.to} (socket: ${targetSocket})`);
             } else {
-                console.log(`❌ Target user ${data.to} not found in room ${socket.room}`);
-                socket.emit(CALL_EVENTS.REJECTED, { reason: 'User not found or offline' });
-                console.log(`❌ Target user ${data.to} not found`);
+                signalLog(`❌ Target user ${data.to} not found in room ${socket.room}`);
+                notifyCallerUnavailable('User not found or offline');
             }
+        } catch (err) {
+            console.error('❌ Failed to forward call offer:', err);
+            notifyCallerUnavailable('Failed to initiate call');
         }
     });
 
     // Forward call answer to caller
     socket.on(CALL_EVENTS.ANSWER, (data) => {
-        console.log(`✅ Call answered: ${data.from} → ${data.to}`);
-        
-        if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
-            console.log(`🔎 call:answer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
-            
+        try {
+            if (!data?.to || !data?.from || !data?.answer) return;
+            signalLog(`✅ Call answered: ${data.from} → ${data.to}`);
+
+            const targetSocket = resolveCallTargetSocket(data.to);
+            signalLog(`🔎 call:answer target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
+
             if (targetSocket) {
-                const payload = {
+                io.to(targetSocket).emit(CALL_EVENTS.ANSWER, {
                     from: data.from,
                     answer: data.answer
-                };
-                io.to(targetSocket).emit(CALL_EVENTS.ANSWER, payload);
-                console.log(`✅ Call answer forwarded to ${data.to}`);
+                });
+                signalLog(`✅ Call answer forwarded to ${data.to}`);
+            } else {
+                socket.emit(CALL_EVENTS.ENDED, { from: data.to || 'Unknown' });
             }
+        } catch (err) {
+            console.error('❌ Failed to forward call answer:', err);
         }
     });
 
     // Forward ICE candidate to peer
     socket.on(CALL_EVENTS.ICE_CANDIDATE, (data) => {
-        console.log(`🧊 ICE candidate: ${socket.username} → ${data.to}`);
-        
-        if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
-            console.log(`🔎 call:ice-candidate target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
-            
+        try {
+            if (!data?.to || !data?.candidate) return;
+            signalLog(`🧊 ICE candidate: ${socket.username} → ${data.to}`);
+
+            const targetSocket = resolveCallTargetSocket(data.to);
             if (targetSocket) {
                 io.to(targetSocket).emit(CALL_EVENTS.ICE_CANDIDATE, {
                     from: socket.username,
                     candidate: data.candidate
                 });
             }
+        } catch (err) {
+            console.error('❌ Failed to forward ICE candidate:', err);
         }
     });
 
     // Handle call rejection
     socket.on(CALL_EVENTS.REJECT, (data) => {
-        console.log(`❌ Call rejected: ${data.from} declined call from ${data.to}`);
-        
-        if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
-            console.log(`🔎 call:reject target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
-            
+        try {
+            if (!data?.to || !data?.from) return;
+            signalLog(`❌ Call rejected: ${data.from} declined call from ${data.to}`);
+
+            const targetSocket = resolveCallTargetSocket(data.to);
             if (targetSocket) {
                 io.to(targetSocket).emit(CALL_EVENTS.REJECTED, {
                     from: data.from
                 });
             }
+        } catch (err) {
+            console.error('❌ Failed to forward call rejection:', err);
         }
     });
 
     // Handle call end
     socket.on(CALL_EVENTS.END, (data) => {
-        console.log(`📴 Call ended: ${data.from} → ${data.to}`);
-        
-        if (socket.room && roomUsers[socket.room]) {
-            const targetSocket = findTargetSocketInRoom(socket.room, data.to);
-            console.log(`🔎 call:end target ${data.to}:`, targetSocket ? `socket ${targetSocket}` : 'not found');
-            
+        try {
+            if (!data?.to || !data?.from) return;
+            signalLog(`📴 Call ended: ${data.from} → ${data.to}`);
+
+            const targetSocket = resolveCallTargetSocket(data.to);
             if (targetSocket) {
                 io.to(targetSocket).emit(CALL_EVENTS.ENDED, {
                     from: data.from
                 });
             }
+        } catch (err) {
+            console.error('❌ Failed to forward call end:', err);
         }
     });
 

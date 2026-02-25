@@ -1,5 +1,5 @@
 // Auto-generated version file - DO NOT EDIT MANUALLY
 // This file is updated automatically during build
-export const APP_VERSION = '2.10.5';
-export const BUILD_DATE = '2026-02-24T17:41:51.170Z';
+export const APP_VERSION = '2.10.6';
+export const BUILD_DATE = '2026-02-25T04:18:29.546Z';
 export const CACHE_VERSION = `devchat-pro-v${APP_VERSION}`;
