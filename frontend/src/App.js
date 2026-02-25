@@ -243,6 +243,7 @@ function App() {
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const callStateRef = useRef(null);
+  const callPeerRef = useRef(null);
   
   // PREMIUM: Advanced call features refs
   const callRecorderRef = useRef(null);
@@ -321,6 +322,7 @@ function App() {
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
   useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
+  useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
 
   useEffect(() => {
     if (callState !== 'active') {
@@ -879,6 +881,46 @@ function App() {
     // WebRTC Signaling Events
 
     const handleIncomingCall = async (data) => {
+      if (
+        data?.renegotiate &&
+        callStateRef.current === 'active' &&
+        peerConnectionRef.current &&
+        callPeerRef.current?.username === data.from &&
+        data.offer
+      ) {
+        try {
+          debugLog('🔁 [RENEGOTIATE] Received ICE-restart offer from active peer:', data.from);
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const renegotiatedAnswer = await peerConnectionRef.current.createAnswer();
+          await peerConnectionRef.current.setLocalDescription(renegotiatedAnswer);
+
+          socketRef.current?.emit(CALL_EVENTS.ANSWER, {
+            to: data.from,
+            from: usernameRef.current,
+            answer: renegotiatedAnswer,
+            renegotiate: true
+          });
+
+          if (pendingIceCandidatesRef.current.length > 0) {
+            const stillPending = [];
+            for (const candidate of pendingIceCandidatesRef.current) {
+              if (!candidate || !candidate.candidate) continue;
+              try {
+                await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+              } catch (iceError) {
+                stillPending.push(candidate);
+              }
+            }
+            pendingIceCandidatesRef.current = stillPending;
+          }
+
+          debugLog('✅ [RENEGOTIATE] Answered ICE-restart offer');
+          return;
+        } catch (err) {
+          console.error('❌ [RENEGOTIATE] Failed handling restart offer:', err);
+        }
+      }
+
       debugLog("📞 ✅ RECEIVED Incoming call from:", data.from, "Type:", data.callType, "Offer:", !!data.offer);
       debugLog("🔔 Setting incomingCall state and playing ringtone");
       setIncomingCall({ from: data.from, callType: data.callType, offer: data.offer });
@@ -2470,8 +2512,9 @@ function App() {
   }, []);
 
   // Initialize peer connection with premium features
-  const createPeerConnection = useCallback((targetUsername) => {
+  const createPeerConnection = useCallback((targetUsername, options = {}) => {
     debugLog('🔧 Creating PREMIUM peer connection for:', targetUsername);
+    const callKind = options.callKind || 'video';
     inboundRemoteStreamRef.current = new MediaStream();
     remoteStreamRef.current = inboundRemoteStreamRef.current;
     setRemoteStream(inboundRemoteStreamRef.current);
@@ -2630,7 +2673,28 @@ function App() {
 
             reconnectRetryTimeoutRef.current = setTimeout(() => {
               try {
-                pc.restartIce();
+                if (!socketRef.current || !targetUsername || !pc) {
+                  throw new Error('Missing socket, peer target, or peer connection');
+                }
+
+                debugLog('🔁 [RECONNECT] Creating ICE-restart offer');
+                pc.createOffer({ iceRestart: true })
+                  .then((restartOffer) => pc.setLocalDescription(restartOffer).then(() => restartOffer))
+                  .then((restartOffer) => {
+                    socketRef.current.emit(CALL_EVENTS.OFFER, {
+                      to: targetUsername,
+                      from: usernameRef.current,
+                      callType: callKind,
+                      offer: restartOffer,
+                      renegotiate: true
+                    });
+                    debugLog('✅ [RECONNECT] ICE-restart offer sent');
+                  })
+                  .catch((restartErr) => {
+                    console.error('❌ [RECONNECT] Failed ICE-restart offer:', restartErr);
+                    setCallError('Connection failed. Unable to recover.');
+                    endCall();
+                  });
               } catch (err) {
                 console.error('❌ [RECONNECT] Failed to restart ICE:', err);
                 setCallError('Connection failed. Unable to recover.');
@@ -2744,7 +2808,7 @@ function App() {
       }
 
       // Create peer connection with premium features
-      const pc = createPeerConnection(targetUser);
+      const pc = createPeerConnection(targetUser, { callKind: type });
 
       // Add local stream tracks
       stream.getTracks().forEach(track => {
@@ -2900,7 +2964,7 @@ function App() {
 
       // Create peer connection with quality control
       console.log('🔧 [RECEIVER] Creating peer connection for caller:', callerUsername);
-      const pc = createPeerConnection(callerUsername);
+      const pc = createPeerConnection(callerUsername, { callKind: incomingCall.callType });
       peerConnectionRef.current = pc;
 
       // Initialize adaptive quality controller
