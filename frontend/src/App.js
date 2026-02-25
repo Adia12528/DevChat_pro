@@ -280,7 +280,7 @@ function App() {
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
-  const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, isHost, viewers }
+  const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, source, isHost, viewers, hasAudio }
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
   const [, setPeerConnectionState] = useState('new');
   const [, setIceConnectionState] = useState('new');
@@ -1522,7 +1522,8 @@ function App() {
     newSocket.on(LIVESTREAM_EVENTS.STARTED, (data) => {
       if (!data?.sessionId || !data?.host) return;
       const visibilityLabel = data.visibility === 'public' ? 'public' : 'room';
-      setSuccessMessage(`🔴 ${data.host} started a ${visibilityLabel} livestream`);
+      const sourceLabel = data.source === 'screen' ? 'screen' : 'camera';
+      setSuccessMessage(`🔴 ${data.host} started a ${sourceLabel} ${visibilityLabel} livestream`);
       setTimeout(() => setSuccessMessage(''), 3000);
     });
 
@@ -1545,6 +1546,7 @@ function App() {
         isLivestream: true,
         sessionId: data.sessionId,
         visibility: data.visibility || 'room',
+        source: data.source || 'camera',
         room: data.room || null
       };
 
@@ -1592,6 +1594,7 @@ function App() {
               host: livestreamInvite.from,
               room: livestreamInvite.room || null,
               visibility: livestreamInvite.visibility || 'room',
+              source: livestreamInvite.source || 'camera',
               isHost: false,
               autoJoined: true
             });
@@ -3945,8 +3948,51 @@ function App() {
     setTimeout(() => setSuccessMessage(''), 2500);
   }, []);
 
-  const startLivestream = useCallback(async (visibilityMode) => {
+  const buildLivestreamSourceStream = useCallback(async (sourceMode) => {
+    const source = sourceMode === 'screen' ? 'screen' : 'camera';
+
+    if (source === 'screen') {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true
+      });
+
+      const composedStream = new MediaStream();
+      displayStream.getVideoTracks().forEach((track) => composedStream.addTrack(track));
+
+      const displayAudioTracks = displayStream.getAudioTracks();
+      if (displayAudioTracks.length > 0) {
+        displayAudioTracks.forEach((track) => composedStream.addTrack(track));
+      } else {
+        try {
+          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          micStream.getAudioTracks().forEach((track) => composedStream.addTrack(track));
+        } catch {
+          // If microphone is denied, continue with video-only screen stream.
+        }
+      }
+
+      return { stream: composedStream, source };
+    }
+
+    const constraints = getAdaptiveMediaConstraints({
+      callType: 'video',
+      userAgent: navigator.userAgent,
+      connectionInfo: runtimeConnectionInfo
+    });
+
+    try {
+      const cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      return { stream: cameraStream, source };
+    } catch {
+      const fallbackStream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
+      return { stream: fallbackStream, source };
+    }
+  }, [runtimeConnectionInfo]);
+
+  const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
+    const source = sourceMode === 'screen' ? 'screen' : 'camera';
     const activeRoomId = roomRef.current || room;
 
     if (!socketRef.current || !connected) {
@@ -3970,17 +4016,17 @@ function App() {
     }
 
     try {
-      const constraints = getAdaptiveMediaConstraints({
-        callType: 'video',
-        userAgent: navigator.userAgent,
-        connectionInfo: runtimeConnectionInfo
-      });
+      const { stream } = await buildLivestreamSourceStream(source);
 
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
+      if (source === 'screen') {
+        const displayTrack = stream.getVideoTracks()[0];
+        if (displayTrack) {
+          displayTrack.onended = () => {
+            if (liveStreamInfoRef.current?.isHost) {
+              stopHostedLivestream(true);
+            }
+          };
+        }
       }
 
       livestreamLocalStreamRef.current = stream;
@@ -3988,7 +4034,8 @@ function App() {
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
         room: activeRoomId,
-        visibility
+        visibility,
+        source
       }, async (ack) => {
         if (!ack?.success || !ack.sessionId) {
           stream.getTracks().forEach((track) => track.stop());
@@ -4002,6 +4049,8 @@ function App() {
           host: usernameRef.current,
           room: activeRoomId,
           visibility,
+          source,
+          hasAudio: stream.getAudioTracks().length > 0,
           isHost: true,
           autoJoined: false,
           viewers: [],
@@ -4011,13 +4060,14 @@ function App() {
         const targets = Array.isArray(ack.targets) ? ack.targets : [];
         await Promise.allSettled(targets.map((viewerUsername) => createLivestreamHostPeer(viewerUsername, ack.sessionId, stream)));
 
-        setSuccessMessage(`🔴 Livestream started (${visibility === 'public' ? 'public' : 'room-only'})`);
+        const sourceLabel = source === 'screen' ? 'screen' : 'camera';
+        setSuccessMessage(`🔴 ${sourceLabel} livestream started (${visibility === 'public' ? 'public' : 'room-only'})`);
         setTimeout(() => setSuccessMessage(''), 3000);
       });
     } catch (err) {
       setCallError(err?.message || 'Unable to access camera/microphone for livestream');
     }
-  }, [room, connected, runtimeConnectionInfo, createLivestreamHostPeer]);
+  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream]);
 
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
@@ -4246,6 +4296,7 @@ function App() {
           host: incomingCall.from,
           room: incomingCall.room || null,
           visibility: incomingCall.visibility || 'room',
+          source: incomingCall.source || 'camera',
           isHost: false,
           autoJoined: false
         });
@@ -4860,6 +4911,12 @@ function App() {
   }, [currentRoomId]);
 
   const livestreamControlsDisabled = !isGroupRoomActive || callState === 'active' || callState === 'calling' || callState === 'ringing';
+  const livestreamSourceLabel = liveStreamInfo?.source === 'screen' ? 'SCREEN' : (liveStreamInfo?.source ? 'CAMERA' : null);
+  const livestreamAudioEnabled = !!(liveStreamInfo && (
+    liveStreamInfo.isHost
+      ? liveStreamInfo.hasAudio
+      : (remoteStream && remoteStream.getAudioTracks && remoteStream.getAudioTracks().length > 0)
+  ));
 
   useEffect(() => {
     if (!showChat || !connected || !socketRef.current || !usernameRef.current) return;
@@ -5191,27 +5248,53 @@ function App() {
                   <button
                     className="menu-item"
                     onClick={() => {
-                      startLivestream('room');
+                      startLivestream('room', 'camera');
                       setShowMenuDropdown(false);
                     }}
                     disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title={isGroupRoomActive ? 'Livestream only in this room' : 'Open a group room to start livestream'}
+                    title={isGroupRoomActive ? 'Camera livestream only in this room' : 'Open a group room to start livestream'}
                   >
-                    <Radio size={18}/>
-                    <span>Start Livestream (Room Only)</span>
+                    <Camera size={18}/>
+                    <span>Start Camera Livestream (Room)</span>
                   </button>
 
                   <button
                     className="menu-item"
                     onClick={() => {
-                      startLivestream('public');
+                      startLivestream('public', 'camera');
                       setShowMenuDropdown(false);
                     }}
                     disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title="Livestream to everyone online"
+                    title="Camera livestream to everyone online"
                   >
                     <Disc3 size={18}/>
-                    <span>Start Livestream (Public)</span>
+                    <span>Start Camera Livestream (Public)</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      startLivestream('room', 'screen');
+                      setShowMenuDropdown(false);
+                    }}
+                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                    title={isGroupRoomActive ? 'Screen livestream only in this room' : 'Open a group room to start livestream'}
+                  >
+                    <Monitor size={18}/>
+                    <span>Start Screen Livestream (Room)</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      startLivestream('public', 'screen');
+                      setShowMenuDropdown(false);
+                    }}
+                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                    title="Screen livestream to everyone online"
+                  >
+                    <Radio size={18}/>
+                    <span>Start Screen Livestream (Public)</span>
                   </button>
 
                   {liveStreamInfo?.isHost && (
@@ -7480,8 +7563,12 @@ function App() {
               <h3>
                 {incomingCall.isLivestream ? (
                   <>
-                    <Radio size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
-                    Live Stream Invite
+                    {incomingCall.source === 'screen' ? (
+                      <Monitor size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
+                    ) : (
+                      <Camera size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
+                    )}
+                    {incomingCall.source === 'screen' ? 'Screen Stream Invite' : 'Camera Stream Invite'}
                   </>
                 ) : incomingCall.callType === 'video' ? (
                   <>
@@ -7497,7 +7584,7 @@ function App() {
               </h3>
               <div className="incoming-call-name">
                 {incomingCall.isLivestream
-                  ? `${incomingCall.from} is live (${incomingCall.visibility === 'public' ? 'Public' : 'Room'})`
+                  ? `${incomingCall.from} is live (${incomingCall.source === 'screen' ? 'Screen' : 'Camera'} • ${incomingCall.visibility === 'public' ? 'Public' : 'Room'})`
                   : incomingCall.from}
               </div>
               <div className="incoming-call-actions">
@@ -7673,6 +7760,14 @@ function App() {
                         ? `Reconnecting (${reconnectInfo.attempt}/${reconnectInfo.max})`
                         : (callState === 'active' ? 'Connected' : 'Connecting')}
                     </span>
+                    {livestreamSourceLabel && (
+                      <span className="call-status-badge">SOURCE: {livestreamSourceLabel}</span>
+                    )}
+                    {liveStreamInfo && (
+                      <span className={`call-status-badge ${livestreamAudioEnabled ? '' : 'warning'}`}>
+                        AUDIO: {livestreamAudioEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    )}
                     {liveStreamInfo && !liveStreamInfo.isHost && liveStreamInfo.autoJoined && (
                       <span className="call-status-badge">AUTO</span>
                     )}

@@ -795,6 +795,7 @@ io.on('connection', (socket) => {
         try {
             const host = data.host || socket.username;
             const visibility = data.visibility === 'public' ? 'public' : 'room';
+            const source = data.source === 'screen' ? 'screen' : 'camera';
             const room = data.room || socket.activeRoom || socket.room;
 
             if (!host || !room) {
@@ -822,6 +823,7 @@ io.on('connection', (socket) => {
                 host,
                 room,
                 visibility,
+                source,
                 startedAt: new Date().toISOString(),
                 viewers: new Set()
             };
@@ -836,13 +838,14 @@ io.on('connection', (socket) => {
                         sessionId,
                         host,
                         room,
-                        visibility
+                        visibility,
+                        source
                     });
                 });
             });
 
             emitLivestreamViewers(sessionId);
-            callback?.({ success: true, sessionId, host, room, visibility, targets: targetUsers });
+            callback?.({ success: true, sessionId, host, room, visibility, source, targets: targetUsers });
         } catch (err) {
             console.error('❌ Failed to start livestream:', err);
             callback?.({ error: 'Failed to start livestream' });
@@ -863,6 +866,7 @@ io.on('connection', (socket) => {
                     from,
                     offer,
                     visibility: session.visibility,
+                    source: session.source,
                     room: session.room
                 });
             });
