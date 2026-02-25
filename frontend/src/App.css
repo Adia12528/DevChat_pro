@@ -3456,6 +3456,30 @@ body {
   flex-shrink: 0;
 }
 
+.menu-item-expand {
+  justify-content: flex-start;
+}
+
+.menu-expand-icon {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.menu-expand-icon.open {
+  transform: rotate(180deg);
+}
+
+.menu-subsection {
+  padding: 4px 0 6px;
+  border-left: 2px solid var(--divider);
+  margin: 0 10px 4px 12px;
+}
+
+.menu-item-sub {
+  padding-left: 16px;
+  font-size: 13px;
+}
+
 .menu-item-danger {
   color: var(--error);
   border-top: 1px solid var(--divider);
@@ -7688,6 +7712,22 @@ textarea.whatsapp-input {
   .call-control-btn {
     width: 44px;
     height: 44px;
+  }
+}
+
+@media (max-height: 700px) {
+  .livestream-comments-panel {
+    bottom: 88px;
+    max-height: 36vh;
+    overflow: hidden;
+  }
+
+  .livestream-comments-list {
+    max-height: 86px;
+  }
+
+  .call-controls {
+    bottom: 12px;
   }
 }
 

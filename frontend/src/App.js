@@ -251,6 +251,7 @@ function App() {
   
   // Menu dropdown state
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+  const [showStreamingTab, setShowStreamingTab] = useState(false);
   
   // Confirmation modals
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -2093,6 +2094,12 @@ function App() {
       document.removeEventListener('mousedown', handleClickOutsideMenu);
       document.removeEventListener('touchstart', handleClickOutsideMenu);
     };
+  }, [showMenuDropdown]);
+
+  useEffect(() => {
+    if (!showMenuDropdown) {
+      setShowStreamingTab(false);
+    }
   }, [showMenuDropdown]);
 
   useEffect(() => {
@@ -3998,12 +4005,20 @@ function App() {
       livestreamLocalStreamRef.current = null;
     }
 
+    setLocalStream(null);
+    setRemoteStream(null);
+    inboundRemoteStreamRef.current = null;
+    setCallState('idle');
+    setCallType(null);
+    setCallPeer(null);
+    setCallDuration(0);
+    stopCallTimer();
     setLiveStreamInfo(null);
     setLivestreamComments([]);
     setLivestreamCommentInput('');
     setSuccessMessage('Livestream stopped');
     setTimeout(() => setSuccessMessage(''), 2500);
-  }, []);
+  }, [stopCallTimer]);
 
   const buildLivestreamSourceStream = useCallback(async (sourceMode) => {
     const source = sourceMode === 'screen' ? 'screen' : 'camera';
@@ -4113,6 +4128,13 @@ function App() {
           viewers: [],
           viewerCount: 0
         });
+        setLocalStream(stream);
+        setRemoteStream(stream);
+        inboundRemoteStreamRef.current = stream;
+        setCallType('video');
+        setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
+        setCallState('active');
+        startCallTimer();
         setLivestreamComments([]);
         setLivestreamCommentInput('');
 
@@ -4126,7 +4148,7 @@ function App() {
     } catch (err) {
       setCallError(err?.message || 'Unable to access camera/microphone for livestream');
     }
-  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream]);
+  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer]);
 
   const sendLivestreamComment = useCallback(() => {
     const activeSession = liveStreamInfoRef.current;
@@ -5353,56 +5375,70 @@ function App() {
                   <div className="menu-divider"></div>
 
                   <button
-                    className="menu-item"
-                    onClick={() => {
-                      startLivestream('room', 'camera');
-                      setShowMenuDropdown(false);
-                    }}
-                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title={isGroupRoomActive ? 'Camera livestream only in this room' : 'Open a group room to start livestream'}
-                  >
-                    <Camera size={18}/>
-                    <span>Start Camera Livestream (Room)</span>
-                  </button>
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      startLivestream('public', 'camera');
-                      setShowMenuDropdown(false);
-                    }}
-                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title="Camera livestream to everyone online"
+                    className={`menu-item menu-item-expand ${showStreamingTab ? 'expanded' : ''}`}
+                    onClick={() => setShowStreamingTab((prev) => !prev)}
+                    title="Open streaming options"
                   >
                     <Disc3 size={18}/>
-                    <span>Start Camera Livestream (Public)</span>
+                    <span>Streaming</span>
+                    <ChevronDown size={16} className={`menu-expand-icon ${showStreamingTab ? 'open' : ''}`} />
                   </button>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      startLivestream('room', 'screen');
-                      setShowMenuDropdown(false);
-                    }}
-                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title={isGroupRoomActive ? 'Screen livestream only in this room' : 'Open a group room to start livestream'}
-                  >
-                    <Monitor size={18}/>
-                    <span>Start Screen Livestream (Room)</span>
-                  </button>
+                  {showStreamingTab && (
+                    <div className="menu-subsection">
+                      <button
+                        className="menu-item menu-item-sub"
+                        onClick={() => {
+                          startLivestream('room', 'camera');
+                          setShowMenuDropdown(false);
+                        }}
+                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                        title={isGroupRoomActive ? 'Camera livestream only in this room' : 'Open a group room to start livestream'}
+                      >
+                        <Camera size={16}/>
+                        <span>Camera Livestream (Room)</span>
+                      </button>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      startLivestream('public', 'screen');
-                      setShowMenuDropdown(false);
-                    }}
-                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                    title="Screen livestream to everyone online"
-                  >
-                    <Radio size={18}/>
-                    <span>Start Screen Livestream (Public)</span>
-                  </button>
+                      <button
+                        className="menu-item menu-item-sub"
+                        onClick={() => {
+                          startLivestream('public', 'camera');
+                          setShowMenuDropdown(false);
+                        }}
+                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                        title="Camera livestream to everyone online"
+                      >
+                        <Disc3 size={16}/>
+                        <span>Camera Livestream (Public)</span>
+                      </button>
+
+                      <button
+                        className="menu-item menu-item-sub"
+                        onClick={() => {
+                          startLivestream('room', 'screen');
+                          setShowMenuDropdown(false);
+                        }}
+                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                        title={isGroupRoomActive ? 'Screen livestream only in this room' : 'Open a group room to start livestream'}
+                      >
+                        <Monitor size={16}/>
+                        <span>Screen Livestream (Room)</span>
+                      </button>
+
+                      <button
+                        className="menu-item menu-item-sub"
+                        onClick={() => {
+                          startLivestream('public', 'screen');
+                          setShowMenuDropdown(false);
+                        }}
+                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                        title="Screen livestream to everyone online"
+                      >
+                        <Radio size={16}/>
+                        <span>Screen Livestream (Public)</span>
+                      </button>
+                    </div>
+                  )}
 
                   {liveStreamInfo?.isHost && (
                     <button
@@ -7790,7 +7826,7 @@ function App() {
                 />
 
                 {/* Local Video (only for video calls) */}
-                {callType === 'video' && localStream && (
+                {callType === 'video' && localStream && !liveStreamInfo?.isHost && (
                   <div
                     className={`local-video-shell ${isDraggingLocalPreview ? 'dragging' : ''}`}
                     onTouchStart={startLocalPreviewDrag}
