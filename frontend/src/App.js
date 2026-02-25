@@ -4126,38 +4126,51 @@ function App() {
   }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer]);
 
   const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
-        // Defensive: Remove old senders before adding new tracks
-        try {
-          const oldPeer = livestreamHostPeersRef.current.get(viewerUsername);
-          if (oldPeer && typeof oldPeer.getSenders === 'function') {
-            oldPeer.getSenders().forEach(sender => {
-              try { oldPeer.removeTrack(sender); } catch {}
-            });
-          }
-        } catch {}
-    if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
-
-    const existingPeer = livestreamHostPeersRef.current.get(viewerUsername);
-    if (existingPeer) {
-      try {
-        existingPeer.close();
-      } catch {
-        // ignore close errors
+    // Defensive: Remove old peer and tracks before adding new ones
+    try {
+      const oldPeer = livestreamHostPeersRef.current.get(viewerUsername);
+      if (oldPeer) {
+        if (typeof oldPeer.getSenders === 'function') {
+          oldPeer.getSenders().forEach(sender => {
+            try { oldPeer.removeTrack(sender); } catch {}
+          });
+        }
+        try { oldPeer.close(); } catch {}
+        livestreamHostPeersRef.current.delete(viewerUsername);
       }
-      livestreamHostPeersRef.current.delete(viewerUsername);
-    }
+    } catch {}
+
+    if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
 
     const pc = new RTCPeerConnection(iceServersConfig);
     livestreamHostPeersRef.current.set(viewerUsername, pc);
 
-    // Always add both audio and video tracks if available
+    // Always add both audio and video tracks if available, and use replaceTrack if peer already has senders
     const videoTracks = stream.getVideoTracks();
     const audioTracks = stream.getAudioTracks();
+    // Add video track
     if (videoTracks.length > 0) {
-      videoTracks.forEach((track) => pc.addTrack(track, stream));
+      videoTracks.forEach((track) => {
+        try {
+          pc.addTrack(track, stream);
+        } catch (err) {
+          // Defensive: fallback to replaceTrack if addTrack fails
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) try { sender.replaceTrack(track); } catch {}
+        }
+      });
     }
+    // Add audio track
     if (audioTracks.length > 0) {
-      audioTracks.forEach((track) => pc.addTrack(track, stream));
+      audioTracks.forEach((track) => {
+        try {
+          pc.addTrack(track, stream);
+        } catch (err) {
+          // Defensive: fallback to replaceTrack if addTrack fails
+          const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (sender) try { sender.replaceTrack(track); } catch {}
+        }
+      });
     }
 
     pc.onicecandidate = (event) => {
@@ -4320,11 +4333,16 @@ function App() {
   }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
-        // Defensive: Prevent duplicate streams
-        if (livestreamLocalStreamRef.current) {
-          livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
-          livestreamLocalStreamRef.current = null;
-        }
+    // Defensive: Prevent duplicate or stale streams
+    if (livestreamLocalStreamRef.current) {
+      livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
+      livestreamLocalStreamRef.current = null;
+    }
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
+      remoteStreamRef.current = null;
+      setRemoteStream(null);
+    }
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
     const source = sourceMode === 'screen' ? 'screen' : 'camera';
     const activeRoomId = roomRef.current || room;
@@ -4352,6 +4370,7 @@ function App() {
     try {
       const { stream } = await buildLivestreamSourceStream(source);
 
+      // Attach onended handler for screen sharing
       if (source === 'screen') {
         const displayTrack = stream.getVideoTracks()[0];
         if (displayTrack) {
@@ -4364,28 +4383,28 @@ function App() {
       }
 
       livestreamLocalStreamRef.current = stream;
-      // Defensive: Always set local/remote stream for host
       setLocalStream(stream);
       setRemoteStream(stream);
       inboundRemoteStreamRef.current = stream;
 
-      // If already hosting, update all peer connections with new tracks
+      // If already hosting, update all peer connections with new tracks using replaceTrack for seamless switching
       if (liveStreamInfoRef.current?.isHost) {
         livestreamHostPeersRef.current.forEach((pc) => {
           const senders = pc.getSenders();
           const videoTrack = stream.getVideoTracks()[0];
           const audioTrack = stream.getAudioTracks()[0];
-          // Remove old tracks before replacing
+          // Replace tracks instead of removing/adding for smoother transitions
           senders.forEach(sender => {
-            if (sender.track && (sender.track.kind === 'video' || sender.track.kind === 'audio')) {
-              try { pc.removeTrack(sender); } catch {}
+            if (sender.track && sender.track.kind === 'video' && videoTrack) {
+              try { sender.replaceTrack(videoTrack); } catch {}
+            }
+            if (sender.track && sender.track.kind === 'audio' && audioTrack) {
+              try { sender.replaceTrack(audioTrack); } catch {}
             }
           });
-          // Add new tracks
-          if (videoTrack) pc.addTrack(videoTrack, stream);
-          if (audioTrack) pc.addTrack(audioTrack, stream);
         });
       }
+
       // Reconnection logic for unstable networks (mobile)
       window.addEventListener('offline', () => {
         setCallError('Network connection lost. Trying to reconnect...');
@@ -4394,19 +4413,14 @@ function App() {
         setCallError(null);
         // Optionally, trigger a reconnection or refresh
       });
-    // Defensive: Clean up any previous remote streams
-    if (remoteStreamRef.current) {
-      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
-      remoteStreamRef.current = null;
-      setRemoteStream(null);
-    }
-    // User feedback for room/public
-    if (visibility === 'public') {
-      setSuccessMessage('You are joining a public livestream.');
-    } else {
-      setSuccessMessage('You are joining a room-only livestream.');
-    }
-    setTimeout(() => setSuccessMessage(''), 2000);
+
+      // User feedback for room/public
+      if (visibility === 'public') {
+        setSuccessMessage('You are joining a public livestream.');
+      } else {
+        setSuccessMessage('You are joining a room-only livestream.');
+      }
+      setTimeout(() => setSuccessMessage(''), 2000);
 
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
@@ -4434,7 +4448,6 @@ function App() {
           viewerCount: 0
         });
         setLocalStream(stream);
-        // Always set remoteStream for host so they see their own video/audio
         setRemoteStream(stream);
         inboundRemoteStreamRef.current = stream;
         setCallType('video');
