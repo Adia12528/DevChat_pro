@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.10.8-notification-center (2026-02-25)
+
+### Added
+- Added a Notification Center in the menu with unread badge count.
+- Added cross-context notifications for non-active chats (DM while in group, group while in DM).
+- Added clickable notifications that switch instantly to the target chat room.
+
+### Changed
+- Added passive room subscriptions so background chats can surface notifications without replacing active chat history.
+- Added room-scoped presence payloads (`user_joined`, `user_left`, `user_list_updated`) to improve per-room online accuracy.
+
+### Fixed
+- Prevented non-active-room messages from being appended to the currently open chat.
+- Improved disconnect cleanup by removing sockets from all joined rooms.
+
 ## 2.10.1-call-hotfix (2026-02-24)
 
 ### Changed
