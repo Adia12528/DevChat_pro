@@ -4430,8 +4430,13 @@ function App() {
 
     // Auto-join room if not already joined
     if (socketRef.current && activeRoomId && !rooms.includes(activeRoomId)) {
-      socketRef.current.emit('join_room', { room: activeRoomId, username: usernameRef.current, active: true, fetchHistory: true });
-      setCallError('Joining room... Please try again in a moment.');
+      socketRef.current.emit('join_room', { room: activeRoomId, username: usernameRef.current, active: true, fetchHistory: true }, () => {
+        // After join completes, retry streaming
+        setTimeout(() => {
+          startLivestream(visibilityMode, sourceMode);
+        }, 300);
+      });
+      setCallError('Joining room... Please wait...');
       return;
     }
 
