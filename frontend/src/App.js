@@ -184,6 +184,7 @@ function App() {
   const [peerConnectionState, setPeerConnectionState] = useState('new');
   const [iceConnectionState, setIceConnectionState] = useState('new');
   const [signalingState, setSignalingState] = useState('stable');
+  const [callDebugInfo, setCallDebugInfo] = useState(null);
   
   // PREMIUM: Advanced Call Features
   const [callStats, setCallStats] = useState(null);
@@ -257,6 +258,42 @@ function App() {
     if (shouldLog('debug')) console.log(...args);
   };
 
+  const attachRemoteStreamToElement = useCallback(() => {
+    const element = remoteVideoRef.current;
+    const stream = remoteStreamRef.current;
+    if (!element || !stream) return;
+
+    if (element.srcObject !== stream) {
+      element.srcObject = stream;
+    }
+    element.muted = false;
+    element.play().catch((e) => debugLog('⚠️ Remote video autoplay blocked:', e));
+  }, []);
+
+  const attachLocalStreamToElement = useCallback(() => {
+    const element = localVideoRef.current;
+    const stream = localStreamRef.current;
+    if (!element || !stream) return;
+
+    if (element.srcObject !== stream) {
+      element.srcObject = stream;
+    }
+  }, []);
+
+  const setRemoteVideoElement = useCallback((node) => {
+    remoteVideoRef.current = node;
+    if (node) {
+      attachRemoteStreamToElement();
+    }
+  }, [attachRemoteStreamToElement]);
+
+  const setLocalVideoElement = useCallback((node) => {
+    localVideoRef.current = node;
+    if (node) {
+      attachLocalStreamToElement();
+    }
+  }, [attachLocalStreamToElement]);
+
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
@@ -265,23 +302,60 @@ function App() {
   useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
 
-  // Attach remote stream to video element when available
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      console.log('📹 Attaching remote stream to video element');
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.muted = false;
-      remoteVideoRef.current.play().catch((e) => console.log('⚠️ Autoplay blocked:', e));
+    if (callState !== 'active') {
+      setCallDebugInfo(null);
+      return;
     }
-  }, [remoteStream]);
 
-  // Attach local stream to video element when available (video calls only)
+    const getTrackSummary = (stream, kind) => {
+      const tracks = stream?.getTracks?.().filter((track) => track.kind === kind) || [];
+      return {
+        total: tracks.length,
+        enabled: tracks.filter((track) => track.enabled && track.readyState === 'live').length
+      };
+    };
+
+    const updateDebugSnapshot = () => {
+      const remoteAudio = getTrackSummary(remoteStreamRef.current, 'audio');
+      const remoteVideo = getTrackSummary(remoteStreamRef.current, 'video');
+      const localAudio = getTrackSummary(localStreamRef.current, 'audio');
+      const localVideo = getTrackSummary(localStreamRef.current, 'video');
+
+      const remoteElement = remoteVideoRef.current;
+      const localElement = localVideoRef.current;
+
+      setCallDebugInfo({
+        remoteAudio,
+        remoteVideo,
+        localAudio,
+        localVideo,
+        remoteBound: !!(remoteElement && remoteElement.srcObject),
+        remoteReadyState: remoteElement?.readyState ?? -1,
+        remotePaused: !!remoteElement?.paused,
+        localBound: !!(localElement && localElement.srcObject),
+        localReadyState: localElement?.readyState ?? -1,
+        localPaused: !!localElement?.paused
+      });
+    };
+
+    updateDebugSnapshot();
+    const intervalId = setInterval(updateDebugSnapshot, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [callState]);
+
+  // Attach remote stream whenever stream changes or call UI mounts/toggles
   useEffect(() => {
-    if (localVideoRef.current && localStream && callType === 'video') {
-      console.log('📹 Attaching local stream to video element');
-      localVideoRef.current.srcObject = localStream;
+    attachRemoteStreamToElement();
+  }, [remoteStream, callState, isCallMinimized, attachRemoteStreamToElement]);
+
+  // Attach local stream whenever stream changes or local video element mounts
+  useEffect(() => {
+    if (callType === 'video') {
+      attachLocalStreamToElement();
     }
-  }, [localStream, callType]);
+  }, [localStream, callType, callState, isCallMinimized, attachLocalStreamToElement]);
 
   // Navigation helper functions
   const navigateTo = useCallback((view, params = {}) => {
@@ -2423,16 +2497,8 @@ function App() {
           const remoteStream = event.streams[0];
           debugLog('📡 [ONTRACK] Stream received with', remoteStream.getTracks().length, 'tracks');
           setRemoteStream(remoteStream);
-          
-          // Set remote stream for BOTH video and audio display
-          if (remoteVideoRef.current) {
-            debugLog('📹 [ONTRACK] Setting remote video element srcObject');
-            remoteVideoRef.current.srcObject = remoteStream;
-            // Ensure video element is not muted so we get audio
-            remoteVideoRef.current.muted = false;
-          } else {
-            console.warn('⚠️ [ONTRACK] remoteVideoRef.current is null!');
-          }
+          remoteStreamRef.current = remoteStream;
+          attachRemoteStreamToElement();
           
           // Log track details
           remoteStream.getTracks().forEach((track, idx) => {
@@ -2566,7 +2632,7 @@ function App() {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [iceServersConfig]);
+  }, [iceServersConfig, attachRemoteStreamToElement]);
 
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
@@ -4983,7 +5049,7 @@ function App() {
               <div className="call-video-container">
                 {/* Remote Video */}
                 <video
-                  ref={remoteVideoRef}
+                  ref={setRemoteVideoElement}
                   autoPlay
                   playsInline
                   className="remote-video"
@@ -4993,7 +5059,7 @@ function App() {
                 {/* Local Video (only for video calls) */}
                 {callType === 'video' && (
                   <video
-                    ref={localVideoRef}
+                    ref={setLocalVideoElement}
                     autoPlay
                     playsInline
                     muted
@@ -5042,6 +5108,22 @@ function App() {
                     <span className="network-state-badge">Peer: {peerConnectionState}</span>
                     <span className="network-state-badge">ICE: {iceConnectionState}</span>
                     <span className="network-state-badge">Signal: {signalingState}</span>
+                    {callDebugInfo && (
+                      <>
+                        <span className="call-debug-badge">
+                          R A:{callDebugInfo.remoteAudio.enabled}/{callDebugInfo.remoteAudio.total} V:{callDebugInfo.remoteVideo.enabled}/{callDebugInfo.remoteVideo.total}
+                        </span>
+                        <span className="call-debug-badge">
+                          REl:{callDebugInfo.remoteBound ? 'ok' : 'none'} rs:{callDebugInfo.remoteReadyState} {callDebugInfo.remotePaused ? 'paused' : 'playing'}
+                        </span>
+                        <span className="call-debug-badge">
+                          L A:{callDebugInfo.localAudio.enabled}/{callDebugInfo.localAudio.total} V:{callDebugInfo.localVideo.enabled}/{callDebugInfo.localVideo.total}
+                        </span>
+                        <span className="call-debug-badge">
+                          LEl:{callDebugInfo.localBound ? 'ok' : 'none'} rs:{callDebugInfo.localReadyState} {callDebugInfo.localPaused ? 'paused' : 'playing'}
+                        </span>
+                      </>
+                    )}
                     {connectionQuality && (
                       <span className={`quality-badge quality-${connectionQuality.toLowerCase()}`}>
                         {connectionQuality}

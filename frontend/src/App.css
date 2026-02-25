@@ -6594,6 +6594,18 @@ textarea.whatsapp-input {
   backdrop-filter: blur(4px);
 }
 
+.call-debug-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.35);
+  color: #e6f1ff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
 .quality-badge {
   display: inline-block;
   padding: 4px 12px;
