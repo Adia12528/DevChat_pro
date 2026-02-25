@@ -180,8 +180,7 @@ export function getFallbackMediaConstraints(callType) {
 }
 
 export function getAdaptiveIceTransportPolicy({ userAgent, connectionInfo } = {}) {
-  const profile = detectDeviceProfile(userAgent, connectionInfo);
-  return profile.isMobile || profile.isLowBandwidth ? 'relay' : 'all';
+  return 'all';
 }
 
 export async function optimizeRtpSenders(peerConnection, { callType, userAgent, connectionInfo } = {}) {
