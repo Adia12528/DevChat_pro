@@ -147,6 +147,34 @@ io.on('connection', (socket) => {
         return [...new Set(Object.values(roomUsers[room]).filter(Boolean))];
     };
 
+    const getAllConnectedUsers = () => {
+        const users = [];
+        Object.values(roomUsers).forEach((roomMap) => {
+            if (!roomMap) return;
+            Object.values(roomMap).forEach((username) => {
+                if (username) users.push(username);
+            });
+        });
+        return [...new Set(users)];
+    };
+
+    const emitGlobalUserList = () => {
+        const users = getAllConnectedUsers();
+        io.emit('global_users_updated', { users, count: users.length });
+    };
+
+    const getSocketIdsByUsername = (targetUsername) => {
+        if (!targetUsername) return [];
+        const sockets = new Set();
+        Object.values(roomUsers).forEach((roomMap) => {
+            if (!roomMap) return;
+            Object.entries(roomMap).forEach(([socketId, username]) => {
+                if (username === targetUsername) sockets.add(socketId);
+            });
+        });
+        return Array.from(sockets);
+    };
+
     const emitRoomUserList = (room) => {
         if (!room) return;
         const users = getUniqueRoomUsers(room);
@@ -159,8 +187,14 @@ io.on('connection', (socket) => {
         if (count > 0) return;
 
         delete roomUsers[room];
-        await Message.deleteMany({ room });
-        console.log(`🧹 Auto-cleared room ${room} because everyone went offline/logout`);
+
+        const connectedUsers = getAllConnectedUsers();
+        if (connectedUsers.length === 0) {
+            await Message.deleteMany({ room });
+            console.log(`🧹 Auto-cleared room ${room} because all users are offline/logout`);
+        } else {
+            console.log(`ℹ️ Room ${room} is empty, messages retained because users are still online in other chats`);
+        }
     };
 
     const removeSocketFromRoom = async ({ room, username, emitOffline = true }) => {
@@ -176,6 +210,7 @@ io.on('connection', (socket) => {
         io.to(room).emit('user_stopped_typing', username);
         io.to(room).emit('user_left', { room, username, users: remainingUsers, count });
         emitRoomUserList(room);
+        emitGlobalUserList();
 
         if (emitOffline) {
             io.to(room).emit('user_offline', { username });
@@ -221,6 +256,7 @@ io.on('connection', (socket) => {
         } else {
             emitRoomUserList(room);
         }
+        emitGlobalUserList();
         
         // Send chat history
         if (shouldFetchHistory) {
@@ -281,7 +317,28 @@ io.on('connection', (socket) => {
             });
             const savedMessage = await newMessage.save();
             console.log(`📤 Message saved: ${savedMessage.type} - ${savedMessage.text?.substring(0, 30)}`);
-            io.to(data.room).emit("receive_message", serializeMessage(savedMessage));
+            const serializedMessage = serializeMessage(savedMessage);
+            io.to(data.room).emit("receive_message", serializedMessage);
+
+            if (typeof data.room === 'string' && data.room.includes('_dm_')) {
+                const dmParticipants = data.room
+                    .split('_dm_')
+                    .map((name) => name?.trim())
+                    .filter(Boolean);
+
+                const roomSocketIds = io.sockets.adapter.rooms.get(data.room) || new Set();
+                const deliveredSocketIds = new Set(roomSocketIds);
+
+                dmParticipants.forEach((participant) => {
+                    const participantSocketIds = getSocketIdsByUsername(participant);
+                    participantSocketIds.forEach((targetSocketId) => {
+                        if (deliveredSocketIds.has(targetSocketId)) return;
+                        io.to(targetSocketId).emit("receive_message", serializedMessage);
+                        deliveredSocketIds.add(targetSocketId);
+                    });
+                });
+            }
+
             io.to(data.room).emit('user_stopped_typing', data.sender);
             callback?.({ success: true });
         } catch (err) {

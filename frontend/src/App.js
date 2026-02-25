@@ -119,6 +119,7 @@ function App() {
   const [groupRoomId, setGroupRoomId] = useState('');
   const [newRoomIdInput, setNewRoomIdInput] = useState('');
   const [roomUserMap, setRoomUserMap] = useState({});
+  const [globalPresenceUsers, setGlobalPresenceUsers] = useState([]);
   const [notificationItems, setNotificationItems] = useState([]);
   
   // Starred messages (localStorage-backed, per session)
@@ -931,6 +932,23 @@ function App() {
       });
     });
 
+    newSocket.on("global_users_updated", (data) => {
+      const activeUsers = Array.isArray(data?.users) ? [...new Set(data.users.filter(Boolean))] : [];
+      setGlobalPresenceUsers(activeUsers);
+      setUserStatus((prev) => {
+        const next = { ...prev };
+        activeUsers.forEach((user) => {
+          next[user] = 'online';
+        });
+        Object.keys(next).forEach((user) => {
+          if (!activeUsers.includes(user)) {
+            next[user] = 'offline';
+          }
+        });
+        return next;
+      });
+    });
+
     // Handle when user goes offline/disconnects
     newSocket.on("user_offline", (data) => {
       console.log("🔌 User went offline:", data.username);
@@ -1519,6 +1537,7 @@ function App() {
       setChat([]);
       setOnlineUsers([]);
       setRoomUserMap({});
+      setGlobalPresenceUsers([]);
       setTypingUsers(new Set());
       setSearchQuery("");
       setDebouncedSearchQuery("");
@@ -2597,6 +2616,7 @@ function App() {
     setChat([]);
     setOnlineUsers([]);
     setRoomUserMap({});
+    setGlobalPresenceUsers([]);
     setNotificationItems([]);
     subscribedRoomsRef.current = new Set();
     setTypingUsers(new Set());
@@ -3815,6 +3835,9 @@ function App() {
   }, [chat]);
 
   const globalOnlineUsers = useMemo(() => {
+    const fromGlobal = globalPresenceUsers
+      .filter((user) => typeof user === 'string' && user.trim().length > 0);
+
     const fromStatus = Object.entries(userStatus)
       .filter(([, status]) => status === 'online')
       .map(([user]) => user);
@@ -3823,8 +3846,8 @@ function App() {
       .flat()
       .filter((user) => typeof user === 'string' && user.trim().length > 0);
 
-    return [...new Set([...fromStatus, ...fromRooms])];
-  }, [userStatus, roomUserMap]);
+    return [...new Set([...fromGlobal, ...fromStatus, ...fromRooms])];
+  }, [globalPresenceUsers, userStatus, roomUserMap]);
 
   const isSelectedUserOnline = useMemo(() => {
     if (!selectedUser) return false;
