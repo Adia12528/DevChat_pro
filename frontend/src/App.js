@@ -17,6 +17,7 @@ import {
   getFallbackMediaConstraints,
   getAdaptiveIceTransportPolicy,
   optimizeRtpSenders,
+  waitForIceGatheringComplete,
   CallStatistics,
   CallRecorder,
   VideoEffectsProcessor,

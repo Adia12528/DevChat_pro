@@ -787,6 +787,29 @@ export function getQualityIndicator(stats) {
   }
 }
 
+// Wait for ICE gathering to complete before sending offer/answer
+export async function waitForIceGatheringComplete(pc, timeoutMs = 3000) {
+  if (!pc || pc.iceGatheringState === 'complete') return pc.localDescription;
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pc.removeEventListener('icegatheringstatechange', onIceGathering);
+      console.log('⚠️ ICE gathering timeout, sending offer anyway');
+      resolve(pc.localDescription);
+    }, timeoutMs);
+
+    const onIceGathering = () => {
+      if (pc.iceGatheringState === 'complete') {
+        clearTimeout(timer);
+        pc.removeEventListener('icegatheringstatechange', onIceGathering);
+        resolve(pc.localDescription);
+      }
+    };
+
+    pc.addEventListener('icegatheringstatechange', onIceGathering);
+  });
+}
+
 export default {
   OPTIMAL_AUDIO_CONSTRAINTS,
   OPTIMAL_VIDEO_CONSTRAINTS,
@@ -806,5 +829,6 @@ export default {
   getScreenStream,
   switchToScreenShare,
   switchBackToCamera,
-  getQualityIndicator
+  getQualityIndicator,
+  waitForIceGatheringComplete
 };
