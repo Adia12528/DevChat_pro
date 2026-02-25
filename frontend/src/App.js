@@ -4141,9 +4141,15 @@ function App() {
     const pc = new RTCPeerConnection(iceServersConfig);
     livestreamHostPeersRef.current.set(viewerUsername, pc);
 
-    stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
-    });
+    // Always add both audio and video tracks if available
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+    if (videoTracks.length > 0) {
+      videoTracks.forEach((track) => pc.addTrack(track, stream));
+    }
+    if (audioTracks.length > 0) {
+      audioTracks.forEach((track) => pc.addTrack(track, stream));
+    }
 
     pc.onicecandidate = (event) => {
       if (!event.candidate || !socketRef.current) return;
@@ -4310,6 +4316,24 @@ function App() {
 
       livestreamLocalStreamRef.current = stream;
 
+      // If already hosting, update all peer connections with new tracks
+      if (liveStreamInfoRef.current?.isHost) {
+        livestreamHostPeersRef.current.forEach((pc) => {
+          // Replace video track
+          const senders = pc.getSenders();
+          const videoTrack = stream.getVideoTracks()[0];
+          const audioTrack = stream.getAudioTracks()[0];
+          if (videoTrack) {
+            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+            if (videoSender) videoSender.replaceTrack(videoTrack);
+          }
+          if (audioTrack) {
+            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+            if (audioSender) audioSender.replaceTrack(audioTrack);
+          }
+        });
+      }
+
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
         room: activeRoomId,
@@ -4336,13 +4360,9 @@ function App() {
           viewerCount: 0
         });
         setLocalStream(stream);
-        if (source === 'camera') {
-          setRemoteStream(stream);
-          inboundRemoteStreamRef.current = stream;
-        } else {
-          setRemoteStream(null);
-          inboundRemoteStreamRef.current = null;
-        }
+        // Always set remoteStream for host so they see their own video/audio
+        setRemoteStream(stream);
+        inboundRemoteStreamRef.current = stream;
         setCallType('video');
         setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
         setCallState('active');
