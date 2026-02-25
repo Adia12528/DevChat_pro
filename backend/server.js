@@ -28,6 +28,8 @@ const CALL_EVENTS = Object.freeze({
 const LIVESTREAM_EVENTS = Object.freeze({
     START: 'livestream:start',
     STARTED: 'livestream:started',
+    AVAILABLE: 'livestream:available',
+    JOIN_REQUEST: 'livestream:join-request',
     OFFER: 'livestream:offer',
     ANSWER: 'livestream:answer',
     ICE_CANDIDATE: 'livestream:ice-candidate',
@@ -258,16 +260,10 @@ io.on('connection', (socket) => {
         const session = liveStreams[sessionId];
         if (!session) return;
 
-        const viewerNames = Array.from(session.viewers || []);
-        viewerNames.forEach((viewerName) => {
-            const viewerSocketIds = getSocketIdsByUsername(viewerName);
-            viewerSocketIds.forEach((viewerSocketId) => {
-                io.to(viewerSocketId).emit(LIVESTREAM_EVENTS.STOPPED, {
-                    sessionId,
-                    host: session.host,
-                    reason
-                });
-            });
+        io.emit(LIVESTREAM_EVENTS.STOPPED, {
+            sessionId,
+            host: session.host,
+            reason
         });
 
         delete liveStreams[sessionId];
@@ -297,6 +293,24 @@ io.on('connection', (socket) => {
         });
 
         return true;
+    };
+
+    const getVisibleLivestreamSessionsForUser = ({ username, room }) => {
+        if (!username) return [];
+        return Object.values(liveStreams)
+            .filter((session) => {
+                if (!session || session.host === username) return false;
+                if (session.visibility === 'public') return true;
+                return !!room && session.room === room;
+            })
+            .map((session) => ({
+                sessionId: session.id,
+                host: session.host,
+                room: session.room,
+                visibility: session.visibility,
+                source: session.source,
+                startedAt: session.startedAt
+            }));
     };
 
     const emitRoomUserList = (room) => {
@@ -419,6 +433,11 @@ io.on('connection', (socket) => {
             });
             emitRoomPolicy(room);
         }
+
+        const visibleSessions = getVisibleLivestreamSessionsForUser({ username, room });
+        visibleSessions.forEach((sessionInfo) => {
+            socket.emit(LIVESTREAM_EVENTS.AVAILABLE, sessionInfo);
+        });
         
         // Send chat history
         if (shouldFetchHistory) {
@@ -975,6 +994,31 @@ io.on('connection', (socket) => {
         if (session.host !== host) return;
 
         stopLivestreamSession(sessionId, 'host_stopped');
+    });
+
+    socket.on(LIVESTREAM_EVENTS.JOIN_REQUEST, (data = {}) => {
+        const sessionId = data.sessionId;
+        const viewer = data.from || socket.username;
+        const session = liveStreams[sessionId];
+
+        if (!session || !viewer || viewer === session.host) return;
+
+        if (session.visibility === 'room') {
+            const roomUsersList = getUniqueRoomUsers(session.room);
+            if (!roomUsersList.includes(viewer)) return;
+        }
+
+        const hostSocketIds = getSocketIdsByUsername(session.host);
+        hostSocketIds.forEach((hostSocketId) => {
+            io.to(hostSocketId).emit(LIVESTREAM_EVENTS.JOIN_REQUEST, {
+                sessionId,
+                from: viewer,
+                host: session.host,
+                room: session.room,
+                visibility: session.visibility,
+                source: session.source
+            });
+        });
     });
 
     socket.on(LIVESTREAM_EVENTS.COMMENT, (data = {}) => {

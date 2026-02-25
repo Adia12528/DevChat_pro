@@ -46,6 +46,8 @@ const CALL_EVENTS = Object.freeze({
 const LIVESTREAM_EVENTS = Object.freeze({
   START: 'livestream:start',
   STARTED: 'livestream:started',
+  AVAILABLE: 'livestream:available',
+  JOIN_REQUEST: 'livestream:join-request',
   OFFER: 'livestream:offer',
   ANSWER: 'livestream:answer',
   ICE_CANDIDATE: 'livestream:ice-candidate',
@@ -140,6 +142,8 @@ function App() {
   const [roomUserMap, setRoomUserMap] = useState({});
   const [globalPresenceUsers, setGlobalPresenceUsers] = useState([]);
   const [notificationItems, setNotificationItems] = useState([]);
+  const [videoInputDevices, setVideoInputDevices] = useState([]);
+  const [selectedVideoInputId, setSelectedVideoInputId] = useState(() => localStorage.getItem('devchatPreferredCameraId') || '');
   const [notificationPrefs, setNotificationPrefs] = useState(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem('devchatNotificationPrefs') || '{}');
@@ -289,6 +293,7 @@ function App() {
   const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, source, isHost, viewers, hasAudio }
   const [livestreamComments, setLivestreamComments] = useState([]);
   const [livestreamCommentInput, setLivestreamCommentInput] = useState('');
+  const [livestreamViewerExpanded, setLivestreamViewerExpanded] = useState(false);
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
   const [, setPeerConnectionState] = useState('new');
   const [, setIceConnectionState] = useState('new');
@@ -671,6 +676,14 @@ function App() {
   }, [autoJoinLivestream]);
 
   useEffect(() => {
+    if (selectedVideoInputId) {
+      localStorage.setItem('devchatPreferredCameraId', selectedVideoInputId);
+    } else {
+      localStorage.removeItem('devchatPreferredCameraId');
+    }
+  }, [selectedVideoInputId]);
+
+  useEffect(() => {
     localStorage.setItem('showDoubleTick', String(showDoubleTick));
   }, [showDoubleTick]);
 
@@ -697,6 +710,58 @@ function App() {
   useEffect(() => {
     localStorage.setItem('devchatTypingTimeoutByRoom', JSON.stringify(typingTimeoutByRoom));
   }, [typingTimeoutByRoom]);
+
+  const refreshVideoInputs = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices
+        .filter((device) => device.kind === 'videoinput')
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Camera ${index + 1}`
+        }));
+
+      setVideoInputDevices(cameras);
+
+      if (selectedVideoInputId && !cameras.some((camera) => camera.deviceId === selectedVideoInputId)) {
+        setSelectedVideoInputId('');
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to enumerate cameras:', err?.message || err);
+    }
+  }, [selectedVideoInputId]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) return undefined;
+
+    refreshVideoInputs();
+
+    const onDeviceChange = () => {
+      refreshVideoInputs();
+    };
+
+    navigator.mediaDevices.addEventListener?.('devicechange', onDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener?.('devicechange', onDeviceChange);
+    };
+  }, [refreshVideoInputs]);
+
+  const withPreferredVideoDevice = useCallback((constraints) => {
+    if (!selectedVideoInputId || !constraints || constraints.video === false) return constraints;
+
+    const nextConstraints = { ...constraints };
+    const existingVideo = typeof nextConstraints.video === 'object' && nextConstraints.video !== null
+      ? nextConstraints.video
+      : {};
+
+    nextConstraints.video = {
+      ...existingVideo,
+      deviceId: { exact: selectedVideoInputId }
+    };
+
+    return nextConstraints;
+  }, [selectedVideoInputId]);
 
   // Mobile detection
   useEffect(() => {
@@ -1535,6 +1600,50 @@ function App() {
       const sourceLabel = data.source === 'screen' ? 'screen' : 'camera';
       setSuccessMessage(`🔴 ${data.host} started a ${sourceLabel} ${visibilityLabel} livestream`);
       setTimeout(() => setSuccessMessage(''), 3000);
+
+      setNotificationItems((prev) => {
+        if (prev.some((entry) => entry.type === 'livestream' && entry.sessionId === data.sessionId)) return prev;
+        return [
+          {
+            id: `live-${data.sessionId}`,
+            type: 'livestream',
+            sessionId: data.sessionId,
+            room: data.room || roomRef.current,
+            sender: data.host,
+            source: 'LIVE',
+            visibility: data.visibility || 'room',
+            streamSource: data.source || 'camera',
+            preview: `${data.host} is live now (${sourceLabel} • ${visibilityLabel})`,
+            time: data.startedAt || new Date().toISOString()
+          },
+          ...prev
+        ].slice(0, 100);
+      });
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.AVAILABLE, (data) => {
+      if (!data?.sessionId || !data?.host) return;
+      const visibilityLabel = data.visibility === 'public' ? 'public' : 'room';
+      const sourceLabel = data.source === 'screen' ? 'screen' : 'camera';
+
+      setNotificationItems((prev) => {
+        if (prev.some((entry) => entry.type === 'livestream' && entry.sessionId === data.sessionId)) return prev;
+        return [
+          {
+            id: `live-${data.sessionId}`,
+            type: 'livestream',
+            sessionId: data.sessionId,
+            room: data.room || roomRef.current,
+            sender: data.host,
+            source: 'LIVE',
+            visibility: data.visibility || 'room',
+            streamSource: data.source || 'camera',
+            preview: `${data.host} is still live (${sourceLabel} • ${visibilityLabel})`,
+            time: data.startedAt || new Date().toISOString()
+          },
+          ...prev
+        ].slice(0, 100);
+      });
     });
 
     newSocket.on(LIVESTREAM_EVENTS.OFFER, (data) => {
@@ -1691,6 +1800,19 @@ function App() {
       });
     });
 
+    newSocket.on(LIVESTREAM_EVENTS.JOIN_REQUEST, (data) => {
+      if (!data?.sessionId || !data?.from) return;
+      const activeSession = liveStreamInfoRef.current;
+      if (!activeSession?.isHost || activeSession.sessionId !== data.sessionId) return;
+
+      const hostStream = livestreamLocalStreamRef.current;
+      if (!hostStream) return;
+
+      createLivestreamHostPeer(data.from, data.sessionId, hostStream).catch((err) => {
+        console.error('❌ Failed to connect late livestream viewer:', err);
+      });
+    });
+
     newSocket.on(LIVESTREAM_EVENTS.COMMENTED, (data) => {
       if (!data?.sessionId || !data?.from || !data?.text) return;
       if (liveStreamInfoRef.current?.sessionId !== data.sessionId) return;
@@ -1724,6 +1846,8 @@ function App() {
 
     newSocket.on(LIVESTREAM_EVENTS.STOPPED, (data) => {
       if (!data?.sessionId) return;
+
+      setNotificationItems((prev) => prev.filter((entry) => entry.sessionId !== data.sessionId));
 
       const activeSession = liveStreamInfoRef.current;
       if (activeSession?.sessionId !== data.sessionId) return;
@@ -4047,20 +4171,28 @@ function App() {
       return { stream: composedStream, source };
     }
 
-    const constraints = getAdaptiveMediaConstraints({
+    const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
       callType: 'video',
       userAgent: navigator.userAgent,
       connectionInfo: runtimeConnectionInfo
-    });
+    }));
 
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      refreshVideoInputs();
       return { stream: cameraStream, source };
     } catch {
-      const fallbackStream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
+      const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints('video'));
+      let fallbackStream;
+      try {
+        fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+      } catch {
+        fallbackStream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
+      }
+      refreshVideoInputs();
       return { stream: fallbackStream, source };
     }
-  }, [runtimeConnectionInfo]);
+  }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
@@ -4178,6 +4310,18 @@ function App() {
     });
   }, []);
 
+  const requestJoinLivestreamFromNotification = useCallback((notification) => {
+    if (!notification?.sessionId || !socketRef.current) return;
+
+    socketRef.current.emit(LIVESTREAM_EVENTS.JOIN_REQUEST, {
+      sessionId: notification.sessionId,
+      from: usernameRef.current
+    });
+
+    setSuccessMessage(`🔄 Joining ${notification.sender}'s livestream...`);
+    setTimeout(() => setSuccessMessage(''), 2200);
+  }, []);
+
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
     if (!targetUser || !socketRef.current) {
@@ -4206,11 +4350,11 @@ function App() {
         return;
       }
 
-      const constraints = getAdaptiveMediaConstraints({
+      const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
         callType: type,
         userAgent: navigator.userAgent,
         connectionInfo: runtimeConnectionInfo
-      });
+      }));
 
       debugLog('🎙️ [CALLER] Requesting media with optimal constraints');
       let stream;
@@ -4219,9 +4363,14 @@ function App() {
       } catch (mediaErr) {
         // Fallback to lower quality if optimal fails
         console.warn('⚠️ [CALLER] Optimal constraints failed, trying fallback...');
-        const fallbackConstraints = getFallbackMediaConstraints(type);
-        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints(type));
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints(type));
+        }
       }
+      refreshVideoInputs();
 
       debugLog('📹 [CALLER] Got media stream:', {
         audio: stream.getAudioTracks().length,
@@ -4328,7 +4477,7 @@ function App() {
       stopRingtone();
       clearCallTimeout();
     }
-  }, [username, createPeerConnection, playRingtone, stopRingtone, checkPermissions, clearCallTimeout, waitForIceGatheringComplete]);
+  }, [username, createPeerConnection, playRingtone, stopRingtone, checkPermissions, clearCallTimeout, waitForIceGatheringComplete, withPreferredVideoDevice, refreshVideoInputs]);
 
   // Reject incoming call
   const rejectCall = useCallback(() => {
@@ -4460,11 +4609,11 @@ function App() {
         ringtoneRef.current.currentTime = 0;
       }
 
-      const constraints = getAdaptiveMediaConstraints({
+      const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
         callType: incomingCall.callType,
         userAgent: navigator.userAgent,
         connectionInfo: runtimeConnectionInfo
-      });
+      }));
 
       console.log('📹 [RECEIVER] Requesting media with adaptive constraints');
       let stream;
@@ -4473,9 +4622,14 @@ function App() {
       } catch (mediaErr) {
         // Fallback to lower quality if optimal fails
         console.warn('⚠️ [RECEIVER] Optimal constraints failed, trying fallback...');
-        const fallbackConstraints = getFallbackMediaConstraints(incomingCall.callType);
-        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints(incomingCall.callType));
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints(incomingCall.callType));
+        }
       }
+      refreshVideoInputs();
 
       console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
       stream.getTracks().forEach((track) => {
@@ -4645,7 +4799,7 @@ function App() {
       setCallError(errorMsg);
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, iceServersConfig, attachRemoteStreamToElement]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, iceServersConfig, attachRemoteStreamToElement, withPreferredVideoDevice, refreshVideoInputs]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
@@ -4787,6 +4941,7 @@ function App() {
     setLiveStreamInfo(null);
     setLivestreamComments([]);
     setLivestreamCommentInput('');
+    setLivestreamViewerExpanded(false);
     stopCallTimer();
     stopRingtone();
   }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream]);
@@ -5046,6 +5201,8 @@ function App() {
       ? liveStreamInfo.hasAudio
       : (remoteStream && remoteStream.getAudioTracks && remoteStream.getAudioTracks().length > 0)
   ));
+  const isLivestreamViewer = !!(liveStreamInfo && !liveStreamInfo.isHost);
+  const remoteVideoFitMode = isLivestreamViewer ? (livestreamViewerExpanded ? 'cover' : 'contain') : 'cover';
 
   useEffect(() => {
     if (!showChat || !connected || !socketRef.current || !usernameRef.current) return;
@@ -7390,6 +7547,13 @@ function App() {
                       key={`notification-${notification.id}`}
                       className="starred-panel-item notification-item"
                       onClick={() => {
+                        if (notification.type === 'livestream') {
+                          setNotificationItems((prev) => prev.filter((entry) => entry.id !== notification.id));
+                          requestJoinLivestreamFromNotification(notification);
+                          goBack();
+                          return;
+                        }
+
                         setRooms((prev) => {
                           if (prev.some((roomEntry) => roomEntry.id === notification.room)) return prev;
                           if (notification.room.includes('_dm_')) {
@@ -7407,10 +7571,17 @@ function App() {
                     >
                       <div className="starred-item-meta">
                         <span className="starred-item-sender">{notification.sender}</span>
-                        <span className={`notification-source ${notification.source === 'DM' ? 'dm' : 'group'}`}>{notification.source}</span>
+                        <span className={`notification-source ${notification.source === 'DM' ? 'dm' : notification.source === 'LIVE' ? 'live' : 'group'}`}>{notification.source}</span>
                         <span className="starred-item-time">{formatRelativeTime(notification.time)}</span>
                       </div>
-                      <div className="starred-item-preview">{notification.preview}</div>
+                      <div className="starred-item-preview">
+                        {notification.preview}
+                        {notification.type === 'livestream' && (
+                          <span style={{ display: 'block', marginTop: 4, fontSize: 11, fontWeight: 700, color: 'var(--primary, #00a884)' }}>
+                            Tap to join live stream
+                          </span>
+                        )}
+                      </div>
                     </button>
                   ))
                 )}
@@ -7480,6 +7651,32 @@ function App() {
                     }}
                   >
                     Preview ringtone
+                  </button>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Camera Source</h4>
+                  <div className="settings-row">
+                    <label htmlFor="camera-source-select">Video input</label>
+                    <select
+                      id="camera-source-select"
+                      className="settings-select"
+                      value={selectedVideoInputId}
+                      onChange={(event) => setSelectedVideoInputId(event.target.value)}
+                    >
+                      <option value="">System default camera</option>
+                      {videoInputDevices.map((cameraDevice) => (
+                        <option key={cameraDevice.deviceId} value={cameraDevice.deviceId}>
+                          {cameraDevice.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    className="settings-btn"
+                    onClick={refreshVideoInputs}
+                  >
+                    Refresh camera list
                   </button>
                 </div>
 
@@ -7816,13 +8013,22 @@ function App() {
             ) : (
               <div className="call-video-container">
                 <audio ref={setRemoteAudioElement} autoPlay playsInline style={{ display: 'none' }} />
+                {isLivestreamViewer && (
+                  <button
+                    className="livestream-viewer-expand-btn"
+                    onClick={() => setLivestreamViewerExpanded((prev) => !prev)}
+                    title={livestreamViewerExpanded ? 'Show full frame' : 'Expand video'}
+                  >
+                    {livestreamViewerExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
+                )}
                 {/* Remote Video */}
                 <video
                   ref={setRemoteVideoElement}
                   autoPlay
                   playsInline
                   className="remote-video"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
                 />
 
                 {/* Local Video (only for video calls) */}
