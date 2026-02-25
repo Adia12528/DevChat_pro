@@ -192,6 +192,28 @@
   --divider: rgba(255, 255, 255, 0.08);
 }
 
+[data-theme="pink"] {
+  --bg: #1d121c;
+  --bg-secondary: #281826;
+  --header: #2d1c2c;
+  --surface: #322030;
+  --surface-hover: #3d273a;
+  --primary: #ff5bbd;
+  --primary-hover: #ff7fcc;
+  --primary-muted: rgba(255, 91, 189, 0.18);
+  --primary-glow: rgba(255, 91, 189, 0.34);
+  --me: linear-gradient(135deg, #d94aa2 0%, #a7337b 100%);
+  --me-solid: #c14193;
+  --other: #322030;
+  --other-border: #4f3550;
+  --txt: #ffeef8;
+  --txt-secondary: #ddb0cf;
+  --txt-muted: #ad7d9d;
+  --border: #563d57;
+  --border-light: #6a4a69;
+  --divider: rgba(255, 255, 255, 0.08);
+}
+
 :root[data-font="default"] {
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
@@ -3114,6 +3136,35 @@ body {
   cursor: pointer;
 }
 
+.tick-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--divider);
+}
+
+.tick-legend-title {
+  color: var(--txt-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tick-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--txt-secondary);
+  font-size: 11px;
+}
+
+.tick-legend-muted {
+  color: var(--txt-muted);
+  font-size: 11px;
+}
+
 .settings-chip.active {
   border-color: var(--primary);
   color: var(--primary);
@@ -5940,6 +5991,55 @@ textarea.whatsapp-input {
 }
 .read-receipt:hover {
   opacity: 1;
+}
+
+.message-ticks {
+  font-size: 11px;
+  line-height: 1;
+  margin-left: 6px;
+  letter-spacing: -1px;
+  color: var(--txt-muted, #8696a0);
+  opacity: 0.92;
+  transition: color var(--transition-fast, 0.15s), opacity var(--transition-fast, 0.15s);
+}
+
+.message-ticks.blue {
+  color: var(--info, #3b82f6);
+  opacity: 1;
+}
+
+.room-summary-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.room-summary-item.active {
+  background: var(--primary-muted, rgba(0,168,132,0.12));
+}
+
+.room-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+}
+
+.room-status-badge.active {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.room-status-badge.inactive {
+  color: var(--txt-muted, #8696a0);
+  background: rgba(134, 150, 160, 0.12);
+  border-color: rgba(134, 150, 160, 0.25);
 }
 
 /* REACTION SUMMARY - Below message */

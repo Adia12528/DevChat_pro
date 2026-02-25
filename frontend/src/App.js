@@ -55,6 +55,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showDoubleTick, setShowDoubleTick] = useState(localStorage.getItem('showDoubleTick') !== 'false');
+  const [showBlueTick, setShowBlueTick] = useState(localStorage.getItem('showBlueTick') !== 'false');
   const [copiedMsgId, setCopiedMsgId] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
   const [editingMsgId, setEditingMsgId] = useState(null);
@@ -508,6 +510,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('ringtoneVolume', String(ringtoneVolume));
   }, [ringtoneVolume]);
+
+  useEffect(() => {
+    localStorage.setItem('showDoubleTick', String(showDoubleTick));
+  }, [showDoubleTick]);
+
+  useEffect(() => {
+    localStorage.setItem('showBlueTick', String(showBlueTick));
+  }, [showBlueTick]);
 
   // Mobile detection
   useEffect(() => {
@@ -3609,6 +3619,38 @@ function App() {
       .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
   }, [onlineUsers]);
 
+  const roomSummaries = useMemo(() => {
+    const uniqueRooms = new Map();
+
+    if (groupRoomId) {
+      uniqueRooms.set(groupRoomId, {
+        id: groupRoomId,
+        name: groupRoomId,
+        type: 'group'
+      });
+    }
+
+    rooms.forEach((roomEntry) => {
+      if (!roomEntry?.id) return;
+      if (!uniqueRooms.has(roomEntry.id)) {
+        uniqueRooms.set(roomEntry.id, roomEntry);
+      }
+    });
+
+    return Array.from(uniqueRooms.values()).map((roomEntry) => {
+      const isGroupRoom = roomEntry.type !== 'dm';
+      const roomPeerCount = isGroupRoom
+        ? normalizedOnlineUsers.filter((onlineUser) => onlineUser !== username).length
+        : normalizedOnlineUsers.filter((onlineUser) => onlineUser === (roomEntry.with || roomEntry.name)).length;
+
+      return {
+        ...roomEntry,
+        isActive: roomPeerCount > 0,
+        peerCount: roomPeerCount
+      };
+    });
+  }, [groupRoomId, rooms, normalizedOnlineUsers, username]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -3731,6 +3773,17 @@ function App() {
                   >
                     <Users size={18}/>
                     <span>Conversations {onlineUsers.length > 0 && <span className="menu-badge">{onlineUsers.length}</span>}</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      navigateTo('rooms');
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <Hash size={18}/>
+                    <span>Rooms {roomSummaries.length > 0 && <span className="menu-badge">{roomSummaries.length}</span>}</span>
                   </button>
 
                   <button
@@ -4181,7 +4234,22 @@ function App() {
                   <span className="timestamp" title={new Date(m.time).toLocaleString()}>
                     {formatRelativeTime(m.time)}
                   </span>
-                  {isOwn && readBy[m._id]?.length > 1 && (
+
+                  {isOwn && showDoubleTick && (() => {
+                    const readers = readBy[m._id] || m.readBy || [];
+                    const seenByOthers = readers.filter((readerName) => readerName !== username).length > 0;
+
+                    return (
+                      <span
+                        className={`message-ticks ${(seenByOthers && showBlueTick) ? 'blue' : ''}`}
+                        title={seenByOthers ? 'Seen' : 'Delivered'}
+                      >
+                        ✓✓
+                      </span>
+                    );
+                  })()}
+
+                  {isOwn && !showDoubleTick && readBy[m._id]?.length > 1 && (
                     <span className="read-receipt" title={`Read by: ${readBy[m._id].slice(1).join(', ')}`}>
                       <CheckCircle size={11} /> {readBy[m._id].length - 1}
                     </span>
@@ -5243,6 +5311,67 @@ function App() {
 
       {/* Settings Panel */}
       <AnimatePresence>
+        {currentView === 'rooms' && (
+          <motion.div
+            className="starred-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => goBack()}
+          >
+            <motion.div
+              className="starred-panel settings-panel"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="panel-header-nav">
+                <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
+                <h3 className="panel-header-title"># Rooms</h3>
+                <div className="panel-header-actions">
+                  <span className="starred-count-badge">{roomSummaries.length}</span>
+                </div>
+              </div>
+
+              <div className="panel-content">
+                {roomSummaries.length === 0 ? (
+                  <div className="starred-panel-empty">
+                    <Hash size={40} color="var(--txt-muted, #8696a0)" />
+                    <p>No rooms yet</p>
+                    <span>Create a DM or join a room to see it here</span>
+                  </div>
+                ) : (
+                  roomSummaries.map((roomEntry) => (
+                    <button
+                      key={`room-summary-${roomEntry.id}`}
+                      className={`starred-panel-item room-summary-item ${(activeRoom || room) === roomEntry.id ? 'active' : ''}`}
+                      onClick={() => {
+                        switchRoom(roomEntry.id);
+                        goBack();
+                      }}
+                    >
+                      <div className="starred-item-meta">
+                        <span className="starred-item-sender">
+                          {roomEntry.type === 'dm' ? 'Direct' : 'Group'}
+                        </span>
+                        <span className={`room-status-badge ${roomEntry.isActive ? 'active' : 'inactive'}`}>
+                          {roomEntry.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className="starred-item-preview">
+                        {roomEntry.name}
+                        {roomEntry.peerCount > 0 ? ` • ${roomEntry.peerCount} online` : ''}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {currentView === 'settings' && (
           <motion.div
             className="starred-panel-overlay"
@@ -5315,7 +5444,8 @@ function App() {
                       { id: 'light', label: 'Light' },
                       { id: 'ocean', label: 'Ocean' },
                       { id: 'forest', label: 'Forest' },
-                      { id: 'sunset', label: 'Sunset' }
+                      { id: 'sunset', label: 'Sunset' },
+                      { id: 'pink', label: 'Pink' }
                     ].map((themeOption) => (
                       <button
                         key={themeOption.id}
@@ -5358,6 +5488,45 @@ function App() {
                       checked={soundEnabled}
                       onChange={(e) => setSoundEnabled(e.target.checked)}
                     />
+                  </div>
+                  <div className="settings-row">
+                    <label htmlFor="setting-double-tick">Show double tick (delivered)</label>
+                    <input
+                      id="setting-double-tick"
+                      type="checkbox"
+                      checked={showDoubleTick}
+                      onChange={(e) => setShowDoubleTick(e.target.checked)}
+                    />
+                  </div>
+                  <div className="settings-row">
+                    <label htmlFor="setting-blue-tick">Blue tick when read</label>
+                    <input
+                      id="setting-blue-tick"
+                      type="checkbox"
+                      checked={showBlueTick}
+                      disabled={!showDoubleTick}
+                      onChange={(e) => setShowBlueTick(e.target.checked)}
+                    />
+                  </div>
+
+                  <div className="tick-legend" aria-label="Tick legend preview">
+                    <span className="tick-legend-title">Preview:</span>
+                    {!showDoubleTick ? (
+                      <span className="tick-legend-muted">Message ticks are hidden</span>
+                    ) : (
+                      <>
+                        <span className="tick-legend-item">
+                          <span className="message-ticks">✓✓</span>
+                          Delivered
+                        </span>
+                        {showBlueTick && (
+                          <span className="tick-legend-item">
+                            <span className="message-ticks blue">✓✓</span>
+                            Read
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
