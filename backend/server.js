@@ -175,6 +175,15 @@ io.on('connection', (socket) => {
         return Array.from(sockets);
     };
 
+    const usersShareGroupRoom = (firstUser, secondUser) => {
+        if (!firstUser || !secondUser) return false;
+        return Object.entries(roomUsers).some(([roomId, roomMap]) => {
+            if (!roomMap || roomId.includes('_dm_')) return false;
+            const uniqueUsers = [...new Set(Object.values(roomMap).filter(Boolean))];
+            return uniqueUsers.includes(firstUser) && uniqueUsers.includes(secondUser);
+        });
+    };
+
     const emitRoomUserList = (room) => {
         if (!room) return;
         const users = getUniqueRoomUsers(room);
@@ -305,6 +314,24 @@ io.on('connection', (socket) => {
         }
 
         try {
+            if (typeof data.room === 'string' && data.room.includes('_dm_')) {
+                const dmParticipants = data.room
+                    .split('_dm_')
+                    .map((name) => name?.trim())
+                    .filter(Boolean);
+
+                if (dmParticipants.length !== 2 || !dmParticipants.includes(data.sender)) {
+                    callback?.({ error: 'Invalid DM room' });
+                    return;
+                }
+
+                const recipient = dmParticipants.find((participant) => participant !== data.sender);
+                if (!usersShareGroupRoom(data.sender, recipient)) {
+                    callback?.({ error: 'DM is allowed only when both users are online in the same room' });
+                    return;
+                }
+            }
+
             const normalizedText = hasText
                 ? data.text.trim()
                 : (data.type === 'voice' ? 'Voice message' : (data.fileName || 'Attachment'));

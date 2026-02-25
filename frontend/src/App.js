@@ -2535,6 +2535,20 @@ function App() {
       setTimeout(() => setErrorMessage(''), 2500);
       return;
     }
+
+    const baseRoomId = groupRoomId || (roomRef.current && !roomRef.current.includes('_dm_') ? roomRef.current : null);
+    const baseRoomUsers = baseRoomId
+      ? (roomUserMap[baseRoomId] || [])
+          .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
+          .filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
+      : [];
+
+    if (!baseRoomUsers.includes(targetUser)) {
+      setErrorMessage('DM is allowed only with users online in your same room');
+      setTimeout(() => setErrorMessage(''), 2800);
+      return;
+    }
+
     const dmRoom = [username, targetUser].sort().join('_dm_');
     const existingRoom = rooms.find(r => r.id === dmRoom);
     if (!existingRoom) {
@@ -2547,7 +2561,7 @@ function App() {
     setShowRoomSidebar(false);
     setShowMenuDropdown(false);
     setShowProfileModal(null);
-  }, [username, rooms]);
+  }, [username, rooms, groupRoomId, roomUserMap]);
 
   const switchRoom = useCallback((roomId) => {
     setActiveRoom(roomId);
@@ -3849,19 +3863,45 @@ function App() {
     return [...new Set([...fromGlobal, ...fromStatus, ...fromRooms])];
   }, [globalPresenceUsers, userStatus, roomUserMap]);
 
-  const isSelectedUserOnline = useMemo(() => {
-    if (!selectedUser) return false;
-    return globalOnlineUsers.some((user) => {
-      if (typeof user === 'string') return user === selectedUser;
-      return user?.username === selectedUser;
-    });
-  }, [globalOnlineUsers, selectedUser]);
-
   const normalizedOnlineUsers = useMemo(() => {
     return globalOnlineUsers
       .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
       .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
   }, [globalOnlineUsers]);
+
+  const presenceRoomId = useMemo(() => {
+    if (currentRoomInfo?.type === 'dm') {
+      return groupRoomId || null;
+    }
+    if (currentRoomId && !currentRoomId.includes('_dm_')) {
+      return currentRoomId;
+    }
+    return groupRoomId || null;
+  }, [currentRoomInfo, groupRoomId, currentRoomId]);
+
+  const sameRoomOnlineUsers = useMemo(() => {
+    if (!presenceRoomId) return [];
+    const roomMembers = (roomUserMap[presenceRoomId] || [])
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
+      .filter((entry) => typeof entry === 'string' && entry.trim().length > 0 && entry !== username);
+    return [...new Set(roomMembers)];
+  }, [presenceRoomId, roomUserMap, username]);
+
+  const sameRoomOnlineSet = useMemo(() => new Set(sameRoomOnlineUsers), [sameRoomOnlineUsers]);
+  const visibleOnlineCount = sameRoomOnlineUsers.length;
+
+  const visibleConversationRooms = useMemo(() => {
+    return rooms.filter((roomEntry) => {
+      if (roomEntry?.type !== 'dm') return true;
+      const peerName = roomEntry.with || roomEntry.name;
+      return sameRoomOnlineSet.has(peerName) || roomEntry.id === currentRoomId;
+    });
+  }, [rooms, sameRoomOnlineSet, currentRoomId]);
+
+  const isSelectedUserOnline = useMemo(() => {
+    if (!selectedUser) return false;
+    return sameRoomOnlineSet.has(selectedUser);
+  }, [sameRoomOnlineSet, selectedUser]);
 
   const roomSummaries = useMemo(() => {
     const uniqueRooms = new Map();
@@ -4024,7 +4064,7 @@ function App() {
                     }}
                   >
                     <Users size={18}/>
-                    <span>Conversations {normalizedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{normalizedOnlineUsers.filter((user) => user !== username).length}</span>}</span>
+                    <span>Conversations {visibleOnlineCount > 0 && <span className="menu-badge">{visibleOnlineCount}</span>}</span>
                   </button>
 
                   <button
@@ -4184,9 +4224,9 @@ function App() {
           </div>
         )}
         
-        <div className="users-info" title={`${onlineUsers.length} member${onlineUsers.length !== 1 ? 's' : ''} online`}>
+        <div className="users-info" title={`${visibleOnlineCount} member${visibleOnlineCount !== 1 ? 's' : ''} online (excluding you)`}>
           <Users size={16}/>
-          <span className="users-count">{onlineUsers.length}</span>
+          <span className="users-count">{visibleOnlineCount}</span>
         </div>
         <button 
           className="theme-toggle"
@@ -5083,7 +5123,7 @@ function App() {
 
                 <div className="sidebar-section">
                   <div className="sidebar-section-title">Your Conversations</div>
-                {rooms.map(r => (
+                {visibleConversationRooms.map(r => (
                   <button
                     key={r.id}
                     className={`room-item ${activeRoom === r.id ? 'active' : ''}`}
@@ -5099,11 +5139,10 @@ function App() {
 
                 <div className="sidebar-section">
                   <div className="sidebar-section-title">Online Members</div>
-                  {normalizedOnlineUsers.filter(u => u !== username).length === 0 ? (
+                  {sameRoomOnlineUsers.length === 0 ? (
                     <div className="sidebar-empty">No other members online</div>
                   ) : (
-                    normalizedOnlineUsers
-                      .filter(u => u !== username)
+                    sameRoomOnlineUsers
                       .map((user) => (
                         <div className="sidebar-user-row" key={`online-${user}`}>
                           <div className="sidebar-user-meta">
