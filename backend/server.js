@@ -99,6 +99,7 @@ mongoose.connect(dbURI)
 const MsgSchema = new mongoose.Schema({
     room: { type: String, index: true },
     sender: String,
+    clientMessageId: { type: String, default: null },
     text: String,
     type: { type: String, default: 'text' },
     time: { type: Date, default: Date.now },
@@ -128,6 +129,52 @@ const serializeMessage = (msg) => {
 
 // Track users in rooms
 const roomUsers = {};
+const roomPolicies = {};
+const blockedUsers = {};
+const userReports = [];
+
+const toSet = (list = []) => [...new Set((Array.isArray(list) ? list : []).filter(Boolean))];
+
+const ensureRoomPolicy = (room, ownerCandidate) => {
+    if (!room || room.includes('_dm_')) return null;
+    if (!roomPolicies[room]) {
+        roomPolicies[room] = {
+            owner: ownerCandidate || null,
+            mods: [],
+            locked: false,
+            inviteOnly: false,
+            invited: ownerCandidate ? [ownerCandidate] : []
+        };
+    }
+
+    if (ownerCandidate && !roomPolicies[room].owner) {
+        roomPolicies[room].owner = ownerCandidate;
+    }
+
+    roomPolicies[room].mods = toSet(roomPolicies[room].mods);
+    roomPolicies[room].invited = toSet(roomPolicies[room].invited);
+    return roomPolicies[room];
+};
+
+const isRoomOwner = (policy, username) => !!policy && !!username && policy.owner === username;
+const isRoomMod = (policy, username) => !!policy && !!username && policy.mods.includes(username);
+const hasRoomAdminAccess = (policy, username) => isRoomOwner(policy, username) || isRoomMod(policy, username);
+
+const serializePolicy = (policy, username) => {
+    if (!policy) return null;
+    return {
+        owner: policy.owner,
+        mods: [...policy.mods],
+        locked: !!policy.locked,
+        inviteOnly: !!policy.inviteOnly,
+        role: isRoomOwner(policy, username) ? 'owner' : (isRoomMod(policy, username) ? 'mod' : 'member')
+    };
+};
+
+const hasUserBlocked = (actor, target) => {
+    if (!actor || !target) return false;
+    return (blockedUsers[actor] || []).includes(target);
+};
 
 io.on('connection', (socket) => {
     console.log(`✅ Connected: ${socket.id}`);
@@ -175,19 +222,20 @@ io.on('connection', (socket) => {
         return Array.from(sockets);
     };
 
-    const usersShareGroupRoom = (firstUser, secondUser) => {
-        if (!firstUser || !secondUser) return false;
-        return Object.entries(roomUsers).some(([roomId, roomMap]) => {
-            if (!roomMap || roomId.includes('_dm_')) return false;
-            const uniqueUsers = [...new Set(Object.values(roomMap).filter(Boolean))];
-            return uniqueUsers.includes(firstUser) && uniqueUsers.includes(secondUser);
-        });
-    };
-
     const emitRoomUserList = (room) => {
         if (!room) return;
         const users = getUniqueRoomUsers(room);
         io.to(room).emit('user_list_updated', { room, users, count: users.length });
+    };
+
+    const emitRoomPolicy = (room) => {
+        if (!room || room.includes('_dm_')) return;
+        const policy = roomPolicies[room];
+        if (!policy) return;
+        io.to(room).emit('room_policy_updated', {
+            room,
+            policy: serializePolicy(policy)
+        });
     };
 
     const cleanupRoomIfEmpty = async (room) => {
@@ -238,6 +286,25 @@ io.on('connection', (socket) => {
 
         if (!room) return;
 
+        if (!room.includes('_dm_')) {
+            const policy = ensureRoomPolicy(room, username);
+            const userAlreadyInRoom = getUniqueRoomUsers(room).includes(username);
+            const isAdmin = hasRoomAdminAccess(policy, username);
+            const isInvited = (policy?.invited || []).includes(username);
+
+            if (policy?.inviteOnly && !isAdmin && !isInvited && !userAlreadyInRoom) {
+                socket.emit('room_join_denied', { room, reason: 'invite_only' });
+                return;
+            }
+
+            if (policy?.locked && !isAdmin && !userAlreadyInRoom) {
+                socket.emit('room_join_denied', { room, reason: 'locked' });
+                return;
+            }
+
+            policy.invited = toSet([...(policy.invited || []), username]);
+        }
+
         const previousRoom = socket.room;
         if (setActiveRoom && previousRoom && previousRoom !== room) {
             socket.leave(previousRoom);
@@ -266,6 +333,15 @@ io.on('connection', (socket) => {
             emitRoomUserList(room);
         }
         emitGlobalUserList();
+
+        if (!room.includes('_dm_')) {
+            const policy = ensureRoomPolicy(room, username);
+            socket.emit('room_policy_updated', {
+                room,
+                policy: serializePolicy(policy, username)
+            });
+            emitRoomPolicy(room);
+        }
         
         // Send chat history
         if (shouldFetchHistory) {
@@ -326,8 +402,13 @@ io.on('connection', (socket) => {
                 }
 
                 const recipient = dmParticipants.find((participant) => participant !== data.sender);
-                if (!usersShareGroupRoom(data.sender, recipient)) {
-                    callback?.({ error: 'DM is allowed only when both users are online in the same room' });
+                if (hasUserBlocked(data.sender, recipient)) {
+                    callback?.({ error: 'You blocked this user' });
+                    return;
+                }
+
+                if (hasUserBlocked(recipient, data.sender)) {
+                    callback?.({ error: 'You cannot message this user' });
                     return;
                 }
             }
@@ -367,7 +448,7 @@ io.on('connection', (socket) => {
             }
 
             io.to(data.room).emit('user_stopped_typing', data.sender);
-            callback?.({ success: true });
+            callback?.({ success: true, messageId: serializedMessage._id, clientMessageId: serializedMessage.clientMessageId || null });
         } catch (err) {
             console.error('Message save error:', err);
             callback?.({ error: 'Database error' });
@@ -477,11 +558,169 @@ io.on('connection', (socket) => {
         const { username, status } = data;
         const activeRoom = socket.activeRoom || socket.room;
         if (activeRoom) {
-            socket.to(activeRoom).emit('user_status_changed', { username, status });
+            socket.to(activeRoom).emit('user_status_changed', { username, status, lastSeen: Date.now() });
             if (status === 'online') {
                 emitRoomUserList(activeRoom);
             }
         }
+    });
+
+    socket.on('room_policy_request', (data = {}) => {
+        const room = data.room || socket.activeRoom || socket.room;
+        if (!room || room.includes('_dm_')) return;
+        const policy = ensureRoomPolicy(room, socket.username || data.actor || null);
+        socket.emit('room_policy_updated', {
+            room,
+            policy: serializePolicy(policy, socket.username || data.actor || null)
+        });
+    });
+
+    socket.on('room_set_policy', (data = {}, callback) => {
+        const room = data.room;
+        const actor = data.actor || socket.username;
+        if (!room || room.includes('_dm_')) {
+            callback?.({ error: 'Invalid room' });
+            return;
+        }
+
+        const policy = ensureRoomPolicy(room, actor);
+        if (!hasRoomAdminAccess(policy, actor)) {
+            callback?.({ error: 'Only owner/mod can update room policy' });
+            return;
+        }
+
+        if (typeof data.locked === 'boolean') policy.locked = data.locked;
+        if (typeof data.inviteOnly === 'boolean') policy.inviteOnly = data.inviteOnly;
+
+        emitRoomPolicy(room);
+        callback?.({ success: true, policy: serializePolicy(policy, actor) });
+    });
+
+    socket.on('room_invite_user', (data = {}, callback) => {
+        const { room, actor, target } = data;
+        if (!room || !target || room.includes('_dm_')) {
+            callback?.({ error: 'Invalid invite payload' });
+            return;
+        }
+
+        const policy = ensureRoomPolicy(room, actor || socket.username);
+        const actingUser = actor || socket.username;
+        if (!hasRoomAdminAccess(policy, actingUser)) {
+            callback?.({ error: 'Only owner/mod can invite users' });
+            return;
+        }
+
+        policy.invited = toSet([...(policy.invited || []), target]);
+        emitRoomPolicy(room);
+
+        getSocketIdsByUsername(target).forEach((targetSocketId) => {
+            io.to(targetSocketId).emit('room_invited', { room, by: actingUser });
+        });
+
+        callback?.({ success: true });
+    });
+
+    socket.on('room_grant_mod', (data = {}, callback) => {
+        const { room, actor, target } = data;
+        if (!room || !target || room.includes('_dm_')) {
+            callback?.({ error: 'Invalid mod payload' });
+            return;
+        }
+
+        const actingUser = actor || socket.username;
+        const policy = ensureRoomPolicy(room, actingUser);
+        if (!isRoomOwner(policy, actingUser)) {
+            callback?.({ error: 'Only owner can promote moderators' });
+            return;
+        }
+
+        policy.mods = toSet([...(policy.mods || []), target]).filter((u) => u !== policy.owner);
+        emitRoomPolicy(room);
+        callback?.({ success: true });
+    });
+
+    socket.on('room_remove_user', async (data = {}, callback) => {
+        const { room, actor, target } = data;
+        if (!room || !target || room.includes('_dm_')) {
+            callback?.({ error: 'Invalid remove payload' });
+            return;
+        }
+
+        const actingUser = actor || socket.username;
+        const policy = ensureRoomPolicy(room, actingUser);
+        if (!hasRoomAdminAccess(policy, actingUser)) {
+            callback?.({ error: 'Only owner/mod can remove users' });
+            return;
+        }
+
+        if (target === policy.owner) {
+            callback?.({ error: 'Owner cannot be removed' });
+            return;
+        }
+
+        const targetSocketIds = getSocketIdsByUsername(target);
+        for (const targetSocketId of targetSocketIds) {
+            if (roomUsers[room]?.[targetSocketId]) {
+                delete roomUsers[room][targetSocketId];
+            }
+            const targetSocket = io.sockets.sockets.get(targetSocketId);
+            if (targetSocket) {
+                targetSocket.leave(room);
+                if (targetSocket.room === room) {
+                    targetSocket.room = null;
+                }
+            }
+            io.to(targetSocketId).emit('room_removed', { room, by: actingUser });
+        }
+
+        io.to(room).emit('user_removed_from_room', { room, target, by: actingUser });
+        emitRoomUserList(room);
+        emitRoomPolicy(room);
+        callback?.({ success: true });
+    });
+
+    socket.on('block_user', (data = {}, callback) => {
+        const actor = data.actor || socket.username;
+        const target = data.target;
+        if (!actor || !target || actor === target) {
+            callback?.({ error: 'Invalid block request' });
+            return;
+        }
+
+        blockedUsers[actor] = toSet([...(blockedUsers[actor] || []), target]);
+        socket.emit('block_list_updated', { actor, blocked: blockedUsers[actor] });
+        callback?.({ success: true });
+    });
+
+    socket.on('unblock_user', (data = {}, callback) => {
+        const actor = data.actor || socket.username;
+        const target = data.target;
+        if (!actor || !target) {
+            callback?.({ error: 'Invalid unblock request' });
+            return;
+        }
+
+        blockedUsers[actor] = (blockedUsers[actor] || []).filter((name) => name !== target);
+        socket.emit('block_list_updated', { actor, blocked: blockedUsers[actor] });
+        callback?.({ success: true });
+    });
+
+    socket.on('report_user', (data = {}, callback) => {
+        const actor = data.actor || socket.username;
+        const target = data.target;
+        if (!actor || !target || actor === target) {
+            callback?.({ error: 'Invalid report request' });
+            return;
+        }
+
+        userReports.push({
+            actor,
+            target,
+            room: data.room || socket.activeRoom || socket.room || null,
+            reason: data.reason || 'unspecified',
+            time: new Date().toISOString()
+        });
+        callback?.({ success: true });
     });
 
     socket.on('update_profile', (data) => {
