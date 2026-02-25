@@ -222,6 +222,8 @@ function App() {
   const peerConnectionRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
+  const inboundRemoteStreamRef = useRef(null);
   const callTimerRef = useRef(null);
   const ringtoneRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -259,15 +261,26 @@ function App() {
   };
 
   const attachRemoteStreamToElement = useCallback(() => {
-    const element = remoteVideoRef.current;
     const stream = remoteStreamRef.current;
-    if (!element || !stream) return;
+    if (!stream) return;
 
-    if (element.srcObject !== stream) {
-      element.srcObject = stream;
+    const videoElement = remoteVideoRef.current;
+    if (videoElement) {
+      if (videoElement.srcObject !== stream) {
+        videoElement.srcObject = stream;
+      }
+      videoElement.muted = false;
+      videoElement.play().catch((e) => debugLog('⚠️ Remote video autoplay blocked:', e));
     }
-    element.muted = false;
-    element.play().catch((e) => debugLog('⚠️ Remote video autoplay blocked:', e));
+
+    const audioElement = remoteAudioRef.current;
+    if (audioElement) {
+      if (audioElement.srcObject !== stream) {
+        audioElement.srcObject = stream;
+      }
+      audioElement.muted = false;
+      audioElement.play().catch((e) => debugLog('⚠️ Remote audio autoplay blocked:', e));
+    }
   }, []);
 
   const attachLocalStreamToElement = useCallback(() => {
@@ -293,6 +306,13 @@ function App() {
       attachLocalStreamToElement();
     }
   }, [attachLocalStreamToElement]);
+
+  const setRemoteAudioElement = useCallback((node) => {
+    remoteAudioRef.current = node;
+    if (node) {
+      attachRemoteStreamToElement();
+    }
+  }, [attachRemoteStreamToElement]);
 
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
@@ -1074,6 +1094,7 @@ function App() {
         });
         remoteStreamRef.current = null;
       }
+      inboundRemoteStreamRef.current = null;
 
       // Close peer connection
       if (peerConnectionRef.current) {
@@ -2442,6 +2463,9 @@ function App() {
   // Initialize peer connection with premium features
   const createPeerConnection = useCallback((targetUsername) => {
     debugLog('🔧 Creating PREMIUM peer connection for:', targetUsername);
+    inboundRemoteStreamRef.current = new MediaStream();
+    remoteStreamRef.current = inboundRemoteStreamRef.current;
+    setRemoteStream(inboundRemoteStreamRef.current);
     
     const pc = new RTCPeerConnection(iceServersConfig);
     
@@ -2493,25 +2517,45 @@ function App() {
       });
       
       try {
-        if (event.streams && event.streams.length > 0) {
-          const remoteStream = event.streams[0];
-          debugLog('📡 [ONTRACK] Stream received with', remoteStream.getTracks().length, 'tracks');
-          setRemoteStream(remoteStream);
-          remoteStreamRef.current = remoteStream;
-          attachRemoteStreamToElement();
-          
-          // Log track details
-          remoteStream.getTracks().forEach((track, idx) => {
-            debugLog(`🎵 [ONTRACK] Track ${idx}:`, {
-              kind: track.kind,
-              enabled: track.enabled,
-              id: track.id,
-              readyState: track.readyState
-            });
-          });
-        } else {
-          console.warn('⚠️ [ONTRACK] No streams in event:', { event });
+        let stream = inboundRemoteStreamRef.current;
+        if (!stream) {
+          stream = new MediaStream();
+          inboundRemoteStreamRef.current = stream;
         }
+
+        if (event.track) {
+          const exists = stream.getTracks().some((track) => track.id === event.track.id);
+          if (!exists) {
+            stream.addTrack(event.track);
+          }
+
+          event.track.onunmute = () => {
+            debugLog(`🔊 [ONTRACK] Track unmuted: ${event.track.kind}`);
+            attachRemoteStreamToElement();
+          };
+
+          event.track.onended = () => {
+            debugLog(`🛑 [ONTRACK] Track ended: ${event.track.kind}`);
+          };
+        }
+
+        if (event.streams?.length > 0) {
+          event.streams[0].getTracks().forEach((track) => {
+            const exists = stream.getTracks().some((existingTrack) => existingTrack.id === track.id);
+            if (!exists) {
+              stream.addTrack(track);
+            }
+          });
+        }
+
+        debugLog('📡 [ONTRACK] Aggregated remote stream tracks:', {
+          audio: stream.getAudioTracks().length,
+          video: stream.getVideoTracks().length
+        });
+
+        setRemoteStream(stream);
+        remoteStreamRef.current = stream;
+        attachRemoteStreamToElement();
       } catch (err) {
         console.error('❌ [ONTRACK] Error handling track:', err);
       }
@@ -3072,6 +3116,7 @@ function App() {
     setCallPeer(null);
     setLocalStream(null);
     setRemoteStream(null);
+    inboundRemoteStreamRef.current = null;
     setIsMuted(false);
     setIsVideoOff(false);
     setIsScreenSharing(false);
@@ -5047,6 +5092,7 @@ function App() {
               </div>
             ) : (
               <div className="call-video-container">
+                <audio ref={setRemoteAudioElement} autoPlay playsInline style={{ display: 'none' }} />
                 {/* Remote Video */}
                 <video
                   ref={setRemoteVideoElement}
