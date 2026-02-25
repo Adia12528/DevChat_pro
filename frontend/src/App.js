@@ -5623,6 +5623,27 @@ function App() {
 
   return (
     <div className="chat-container">
+      {/* Streaming error/success toast */}
+      {(callError || successMessage) && (
+        <div className="stream-toast" style={{
+          position: 'fixed',
+          top: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          background: callError ? '#ff4d4f' : '#00a884',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          fontWeight: 600,
+          fontSize: '16px',
+          minWidth: '220px',
+          textAlign: 'center',
+        }}>
+          {callError || successMessage}
+        </div>
+      )}
       {/* PWA Install Banner */}
       <AnimatePresence>
         {showInstallPrompt && !showChat && (
