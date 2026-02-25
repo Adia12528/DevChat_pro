@@ -203,15 +203,15 @@ io.on('connection', (socket) => {
         // Initialize room if doesn't exist
         if (!roomUsers[room]) roomUsers[room] = {};
         roomUsers[room][socket.id] = username;
+
+        // Broadcast presence immediately (don't wait for DB history load)
+        const users = getUniqueRoomUsers(room);
+        io.to(room).emit('user_joined', { username, users, count: users.length });
+        emitRoomUserList(room);
         
         // Send chat history
         const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
         socket.emit('load_history', history.map(serializeMessage));
-        
-        // Broadcast user joined with refreshed roster
-        const users = getUniqueRoomUsers(room);
-        io.to(room).emit('user_joined', { username, users, count: users.length });
-        emitRoomUserList(room);
     });
 
     socket.on('leave_room', async (data) => {
