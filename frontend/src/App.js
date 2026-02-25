@@ -1558,10 +1558,26 @@ function App() {
 
             viewerPc.ontrack = (event) => {
               const incomingStream = event.streams?.[0];
-              if (!incomingStream) return;
-              inboundRemoteStreamRef.current = incomingStream;
-              remoteStreamRef.current = incomingStream;
-              setRemoteStream(incomingStream);
+              if (incomingStream) {
+                inboundRemoteStreamRef.current = incomingStream;
+                remoteStreamRef.current = incomingStream;
+                setRemoteStream(incomingStream);
+                attachRemoteStreamToElement();
+                return;
+              }
+
+              if (!inboundRemoteStreamRef.current) {
+                inboundRemoteStreamRef.current = new MediaStream();
+              }
+
+              const aggregatedStream = inboundRemoteStreamRef.current;
+              const existingTrack = aggregatedStream.getTracks().find((track) => track.id === event.track.id);
+              if (!existingTrack) {
+                aggregatedStream.addTrack(event.track);
+              }
+
+              remoteStreamRef.current = aggregatedStream;
+              setRemoteStream(aggregatedStream);
               attachRemoteStreamToElement();
             };
 
@@ -4260,10 +4276,26 @@ function App() {
 
         viewerPc.ontrack = (event) => {
           const incomingStream = event.streams?.[0];
-          if (!incomingStream) return;
-          inboundRemoteStreamRef.current = incomingStream;
-          remoteStreamRef.current = incomingStream;
-          setRemoteStream(incomingStream);
+          if (incomingStream) {
+            inboundRemoteStreamRef.current = incomingStream;
+            remoteStreamRef.current = incomingStream;
+            setRemoteStream(incomingStream);
+            attachRemoteStreamToElement();
+            return;
+          }
+
+          if (!inboundRemoteStreamRef.current) {
+            inboundRemoteStreamRef.current = new MediaStream();
+          }
+
+          const aggregatedStream = inboundRemoteStreamRef.current;
+          const existingTrack = aggregatedStream.getTracks().find((track) => track.id === event.track.id);
+          if (!existingTrack) {
+            aggregatedStream.addTrack(event.track);
+          }
+
+          remoteStreamRef.current = aggregatedStream;
+          setRemoteStream(aggregatedStream);
           attachRemoteStreamToElement();
         };
 
