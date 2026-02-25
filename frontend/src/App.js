@@ -1013,13 +1013,6 @@ function App() {
           return;
         }
 
-        const candidateKey = `${data.candidate.sdpMid ?? ''}|${data.candidate.sdpMLineIndex ?? ''}|${data.candidate.candidate}`;
-        if (seenIceCandidateKeysRef.current.has(candidateKey)) {
-          debugLog('↩️ [ICE] Duplicate candidate ignored');
-          return;
-        }
-        seenIceCandidateKeysRef.current.add(candidateKey);
-
         if (pc && pc.remoteDescription) {
           debugLog("➕ [ICE] Adding ICE candidate", {
             candidate: data.candidate.candidate?.substring(0, 50),
