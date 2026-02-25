@@ -50,17 +50,179 @@ export const ICE_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:openrelay.metered.ca:80' },
   {
-    urls: 'turn:openrelay.metered.ca:80',
+    urls: 'turn:openrelay.metered.ca:80?transport=udp',
     username: 'openrelayproject',
     credential: 'openrelayproject'
   },
   {
-    urls: 'turn:openrelay.metered.ca:443',
+    urls: 'turn:openrelay.metered.ca:80?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  },
+  {
+    urls: 'turns:openrelay.metered.ca:443?transport=tcp',
     username: 'openrelayproject',
     credential: 'openrelayproject'
   }
 ];
+
+export function detectDeviceProfile(userAgent = '', connectionInfo = {}) {
+  const normalizedUA = (userAgent || '').toLowerCase();
+  const isAndroid = normalizedUA.includes('android');
+  const isIOS = /iphone|ipad|ipod/.test(normalizedUA);
+  const isMobile = isAndroid || isIOS;
+  const isMac = normalizedUA.includes('mac os') && !isIOS;
+  const isWindows = normalizedUA.includes('windows');
+  const isLinux = normalizedUA.includes('linux') && !isAndroid;
+
+  const hardwareConcurrency = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
+  const deviceMemory = typeof navigator !== 'undefined' ? (navigator.deviceMemory || 4) : 4;
+  const effectiveType = (connectionInfo?.effectiveType || '').toLowerCase();
+  const saveData = !!connectionInfo?.saveData;
+
+  const isLowBandwidth = saveData || /(^2g$|^3g$|slow-2g)/.test(effectiveType);
+  const isMidBandwidth = /(^4g$)/.test(effectiveType);
+  const performanceTier = (hardwareConcurrency <= 4 || deviceMemory <= 4 || isLowBandwidth)
+    ? 'low'
+    : (hardwareConcurrency <= 8 || deviceMemory <= 8 || isMidBandwidth)
+      ? 'medium'
+      : 'high';
+
+  return {
+    isAndroid,
+    isIOS,
+    isMobile,
+    isMac,
+    isWindows,
+    isLinux,
+    hardwareConcurrency,
+    deviceMemory,
+    effectiveType,
+    saveData,
+    isLowBandwidth,
+    isMidBandwidth,
+    performanceTier
+  };
+}
+
+export function getAdaptiveMediaConstraints({ callType, userAgent, connectionInfo } = {}) {
+  const profile = detectDeviceProfile(userAgent, connectionInfo);
+  const baseAudio = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1,
+    sampleRate: 48000,
+    sampleSize: 16
+  };
+
+  if (callType !== 'video') {
+    return {
+      audio: baseAudio,
+      video: false
+    };
+  }
+
+  if (profile.performanceTier === 'low') {
+    return {
+      audio: baseAudio,
+      video: {
+        width: { ideal: 640, min: 320, max: 960 },
+        height: { ideal: 360, min: 240, max: 540 },
+        frameRate: { ideal: 15, max: 24 },
+        facingMode: 'user'
+      }
+    };
+  }
+
+  if (profile.performanceTier === 'medium' || profile.isMobile) {
+    return {
+      audio: baseAudio,
+      video: {
+        width: { ideal: 960, min: 320, max: 1280 },
+        height: { ideal: 540, min: 240, max: 720 },
+        frameRate: { ideal: 24, max: 30 },
+        facingMode: 'user',
+        aspectRatio: { ideal: 16 / 9 }
+      }
+    };
+  }
+
+  return {
+    audio: baseAudio,
+    video: {
+      width: { ideal: 1280, min: 320, max: 1920 },
+      height: { ideal: 720, min: 240, max: 1080 },
+      frameRate: { ideal: 30, max: 60 },
+      facingMode: 'user',
+      aspectRatio: { ideal: 16 / 9 }
+    }
+  };
+}
+
+export function getFallbackMediaConstraints(callType) {
+  return callType === 'video'
+    ? {
+        audio: true,
+        video: { width: 320, height: 240, frameRate: 12 }
+      }
+    : {
+        audio: true,
+        video: false
+      };
+}
+
+export function getAdaptiveIceTransportPolicy({ userAgent, connectionInfo } = {}) {
+  const profile = detectDeviceProfile(userAgent, connectionInfo);
+  return profile.isMobile || profile.isLowBandwidth ? 'relay' : 'all';
+}
+
+export async function optimizeRtpSenders(peerConnection, { callType, userAgent, connectionInfo } = {}) {
+  if (!peerConnection || typeof peerConnection.getSenders !== 'function') return;
+
+  const profile = detectDeviceProfile(userAgent, connectionInfo);
+  const senders = peerConnection.getSenders();
+  const videoBitrate = profile.performanceTier === 'low' ? 350000 : profile.performanceTier === 'medium' ? 800000 : 1600000;
+  const videoMaxFramerate = profile.performanceTier === 'low' ? 15 : profile.performanceTier === 'medium' ? 24 : 30;
+  const audioBitrate = profile.performanceTier === 'low' ? 24000 : profile.performanceTier === 'medium' ? 40000 : 64000;
+
+  await Promise.all(senders.map(async (sender) => {
+    if (!sender?.track || typeof sender.getParameters !== 'function' || typeof sender.setParameters !== 'function') return;
+
+    try {
+      const parameters = sender.getParameters() || {};
+      parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+
+      if (sender.track.kind === 'video' && callType === 'video') {
+        parameters.degradationPreference = profile.performanceTier === 'high' ? 'maintain-resolution' : 'balanced';
+        parameters.encodings[0] = {
+          ...parameters.encodings[0],
+          maxBitrate: videoBitrate,
+          maxFramerate: videoMaxFramerate,
+          scaleResolutionDownBy: profile.performanceTier === 'low' ? 1.5 : 1
+        };
+      }
+
+      if (sender.track.kind === 'audio') {
+        parameters.encodings[0] = {
+          ...parameters.encodings[0],
+          maxBitrate: audioBitrate
+        };
+      }
+
+      await sender.setParameters(parameters);
+    } catch (error) {
+      console.warn('Failed to optimize RTP sender:', error?.message || error);
+    }
+  }));
+}
 
 // ==================== CALL STATISTICS TRACKING ====================
 export class CallStatistics {
@@ -590,6 +752,11 @@ export default {
   OPTIMAL_AUDIO_ONLY_CONSTRAINTS,
   MOBILE_VIDEO_CONSTRAINTS,
   ICE_SERVERS,
+  detectDeviceProfile,
+  getAdaptiveMediaConstraints,
+  getFallbackMediaConstraints,
+  getAdaptiveIceTransportPolicy,
+  optimizeRtpSenders,
   CallStatistics,
   CallRecorder,
   VideoEffectsProcessor,

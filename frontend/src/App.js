@@ -13,10 +13,10 @@ import './App.css';
 import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 import {
   ICE_SERVERS,
-  OPTIMAL_AUDIO_CONSTRAINTS,
-  OPTIMAL_VIDEO_CONSTRAINTS,
-  OPTIMAL_AUDIO_ONLY_CONSTRAINTS,
-  MOBILE_VIDEO_CONSTRAINTS,
+  getAdaptiveMediaConstraints,
+  getFallbackMediaConstraints,
+  getAdaptiveIceTransportPolicy,
+  optimizeRtpSenders,
   CallStatistics,
   CallRecorder,
   VideoEffectsProcessor,
@@ -2379,19 +2379,28 @@ function App() {
   // WebRTC Video/Voice Calling Functions
   // ==========================
 
+  const runtimeConnectionInfo = useMemo(() => {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    return {
+      effectiveType: connection?.effectiveType,
+      downlink: connection?.downlink,
+      rtt: connection?.rtt,
+      saveData: connection?.saveData
+    };
+  }, []);
+
   // ICE servers configuration
-  const iceServersConfig = useMemo(() => ({
-    iceServers: [
-      ...ICE_SERVERS,
-      { urls: 'stun:stun.services.mozilla.com' },
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    ],
-    iceCandidatePoolSize: 10
-  }), []);
+  const iceServersConfig = useMemo(() => {
+    const iceTransportPolicy = getAdaptiveIceTransportPolicy({
+      userAgent: navigator.userAgent,
+      connectionInfo: runtimeConnectionInfo
+    });
+    return {
+      iceServers: ICE_SERVERS,
+      iceCandidatePoolSize: 10,
+      iceTransportPolicy
+    };
+  }, [runtimeConnectionInfo]);
 
   const clearCallTimeout = useCallback(() => {
     if (callTimeoutRef.current) {
@@ -2706,11 +2715,11 @@ function App() {
         return;
       }
 
-      // PREMIUM: Use optimal constraints for better quality
-      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-      const constraints = type === 'video'
-        ? (isMobile ? MOBILE_VIDEO_CONSTRAINTS : OPTIMAL_VIDEO_CONSTRAINTS)
-        : OPTIMAL_AUDIO_ONLY_CONSTRAINTS;
+      const constraints = getAdaptiveMediaConstraints({
+        callType: type,
+        userAgent: navigator.userAgent,
+        connectionInfo: runtimeConnectionInfo
+      });
 
       debugLog('🎙️ [CALLER] Requesting media with optimal constraints');
       let stream;
@@ -2719,9 +2728,7 @@ function App() {
       } catch (mediaErr) {
         // Fallback to lower quality if optimal fails
         console.warn('⚠️ [CALLER] Optimal constraints failed, trying fallback...');
-        const fallbackConstraints = type === 'video'
-          ? { video: { width: 320, height: 240, frameRate: 15 }, audio: true }
-          : { audio: true, video: false };
+        const fallbackConstraints = getFallbackMediaConstraints(type);
         stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       }
 
@@ -2743,6 +2750,12 @@ function App() {
       stream.getTracks().forEach(track => {
         debugLog('🎚️ [CALLER] Adding track:', track.kind);
         pc.addTrack(track, stream);
+      });
+
+      await optimizeRtpSenders(pc, {
+        callType: type,
+        userAgent: navigator.userAgent,
+        connectionInfo: runtimeConnectionInfo
       });
 
       // PREMIUM: Start recording if enabled
@@ -2855,26 +2868,20 @@ function App() {
         ringtoneRef.current.currentTime = 0;
       }
 
-      // Get media stream with optimal constraints and fallback
-      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-      let constraints;
-      
-      if (incomingCall.callType === 'video') {
-        constraints = isMobile ? MOBILE_VIDEO_CONSTRAINTS : OPTIMAL_VIDEO_CONSTRAINTS;
-      } else {
-        constraints = { audio: OPTIMAL_AUDIO_CONSTRAINTS, video: false };
-      }
+      const constraints = getAdaptiveMediaConstraints({
+        callType: incomingCall.callType,
+        userAgent: navigator.userAgent,
+        connectionInfo: runtimeConnectionInfo
+      });
 
-      console.log('📹 [RECEIVER] Device:', isMobile ? 'Mobile' : 'Desktop', '| Requesting media with constraints');
+      console.log('📹 [RECEIVER] Requesting media with adaptive constraints');
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (mediaErr) {
         // Fallback to lower quality if optimal fails
         console.warn('⚠️ [RECEIVER] Optimal constraints failed, trying fallback...');
-        const fallbackConstraints = incomingCall.callType === 'video'
-          ? { video: { width: 320, height: 240, frameRate: 15 }, audio: true }
-          : { audio: true, video: false };
+        const fallbackConstraints = getFallbackMediaConstraints(incomingCall.callType);
         stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       }
 
@@ -2916,6 +2923,12 @@ function App() {
       stream.getTracks().forEach(track => {
         console.log('📌 [RECEIVER] Adding track:', track.kind, track.id);
         pc.addTrack(track, stream);
+      });
+
+      await optimizeRtpSenders(pc, {
+        callType: incomingCall.callType,
+        userAgent: navigator.userAgent,
+        connectionInfo: runtimeConnectionInfo
       });
 
       // Handle pending ICE candidates
@@ -3018,7 +3031,7 @@ function App() {
       setCallError(errorMsg);
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
