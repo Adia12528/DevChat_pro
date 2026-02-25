@@ -628,26 +628,6 @@ function App() {
     });
   }, [chat, username]);
 
-  // Real-time cleanup: Remove offline users periodically
-  useEffect(() => {
-    const cleanupOfflineUsers = setInterval(() => {
-      setOnlineUsers(prev => {
-        return prev.filter(u => {
-          const userLastSeenTime = userLastSeen[u];
-          // Remove user if they haven't sent any messages for 5 minutes (offline timeout)
-          if (userLastSeenTime && Date.now() - userLastSeenTime > 300000) {
-            console.log(`🔌 Auto-removing offline user: ${u}`);
-            return false;
-          }
-          // Also filter out anyone with offline status
-          return userStatus[u] !== 'offline';
-        });
-      });
-    }, 30000); // Check every 30 seconds
-
-    return () => clearInterval(cleanupOfflineUsers);
-  }, [userLastSeen, userStatus]);
-
   // Session management - restore from sessionStorage on mount
   useEffect(() => {
     const savedUsername = sessionStorage.getItem('chatUsername');
@@ -842,13 +822,14 @@ function App() {
 
     newSocket.on("user_joined", (data) => {
       console.log("👤 User joined:", data.username);
-      setOnlineUsers(Array.isArray(data.users) ? data.users : []);
+      const users = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
+      setOnlineUsers(users);
     });
 
     newSocket.on("user_left", (data) => {
       console.log("👤 User left:", data.username);
       if (Array.isArray(data.users)) {
-        setOnlineUsers(data.users);
+        setOnlineUsers([...new Set(data.users.filter(Boolean))]);
       } else {
         setOnlineUsers((prev) => prev.filter(u => u !== data.username));
       }
@@ -859,7 +840,7 @@ function App() {
     // Handle user list updates from server
     newSocket.on("user_list_updated", (data) => {
       console.log("📋 User list updated:", data.users);
-      const activeUsers = Array.isArray(data.users) ? data.users.filter(u => u) : [];
+      const activeUsers = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
       setOnlineUsers(activeUsers);
     });
 

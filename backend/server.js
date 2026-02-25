@@ -142,6 +142,17 @@ io.on('connection', (socket) => {
         ) || null;
     };
 
+    const getUniqueRoomUsers = (room) => {
+        if (!room || !roomUsers[room]) return [];
+        return [...new Set(Object.values(roomUsers[room]).filter(Boolean))];
+    };
+
+    const emitRoomUserList = (room) => {
+        if (!room) return;
+        const users = getUniqueRoomUsers(room);
+        io.to(room).emit('user_list_updated', { users, count: users.length });
+    };
+
     const cleanupRoomIfEmpty = async (room) => {
         if (!room || !roomUsers[room]) return;
         const count = Object.keys(roomUsers[room]).length;
@@ -159,11 +170,12 @@ io.on('connection', (socket) => {
             delete roomUsers[room][socket.id];
         }
 
-        const remainingUsers = Object.values(roomUsers[room]);
+        const remainingUsers = getUniqueRoomUsers(room);
         const count = remainingUsers.length;
 
         io.to(room).emit('user_stopped_typing', username);
         io.to(room).emit('user_left', { username, users: remainingUsers, count });
+        emitRoomUserList(room);
 
         if (emitOffline) {
             io.to(room).emit('user_offline', { username });
@@ -197,7 +209,9 @@ io.on('connection', (socket) => {
         socket.emit('load_history', history.map(serializeMessage));
         
         // Broadcast user joined with refreshed roster
-        io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
+        const users = getUniqueRoomUsers(room);
+        io.to(room).emit('user_joined', { username, users, count: users.length });
+        emitRoomUserList(room);
     });
 
     socket.on('leave_room', async (data) => {
@@ -362,7 +376,12 @@ io.on('connection', (socket) => {
 
     socket.on('update_status', (data) => {
         const { username, status } = data;
-        socket.to(socket.room).emit('user_status_changed', { username, status });
+        if (socket.room) {
+            socket.to(socket.room).emit('user_status_changed', { username, status });
+            if (status === 'online') {
+                emitRoomUserList(socket.room);
+            }
+        }
     });
 
     socket.on('update_profile', (data) => {
