@@ -4126,6 +4126,15 @@ function App() {
   }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer]);
 
   const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
+        // Defensive: Remove old senders before adding new tracks
+        try {
+          const oldPeer = livestreamHostPeersRef.current.get(viewerUsername);
+          if (oldPeer && typeof oldPeer.getSenders === 'function') {
+            oldPeer.getSenders().forEach(sender => {
+              try { oldPeer.removeTrack(sender); } catch {}
+            });
+          }
+        } catch {}
     if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
 
     const existingPeer = livestreamHostPeersRef.current.get(viewerUsername);
@@ -4226,32 +4235,58 @@ function App() {
   }, [stopCallTimer]);
 
   const buildLivestreamSourceStream = useCallback(async (sourceMode) => {
-    const source = sourceMode === 'screen' ? 'screen' : 'camera';
 
-    if (source === 'screen') {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
-      });
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+    let source = sourceMode === 'screen' ? 'screen' : 'camera';
 
-      const composedStream = new MediaStream();
-      displayStream.getVideoTracks().forEach((track) => composedStream.addTrack(track));
-
-      const displayAudioTracks = displayStream.getAudioTracks();
-      if (displayAudioTracks.length > 0) {
-        displayAudioTracks.forEach((track) => composedStream.addTrack(track));
-      } else {
-        try {
-          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-          micStream.getAudioTracks().forEach((track) => composedStream.addTrack(track));
-        } catch {
-          // If microphone is denied, continue with video-only screen stream.
-        }
-      }
-
-      return { stream: composedStream, source };
+    // Defensive: Always check for mediaDevices
+    if (!navigator.mediaDevices) {
+      alert('Your browser does not support media devices.');
+      throw new Error('Media devices not supported');
     }
 
+    if (source === 'screen') {
+      // On mobile, getDisplayMedia is not supported
+      if (isMobile || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+        alert('Screen sharing is not supported on your device. Falling back to camera.');
+        source = 'camera';
+      } else {
+        try {
+          const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true
+          });
+
+          // Defensive: Ensure at least one video track
+          if (!displayStream.getVideoTracks().length) {
+            alert('No video track found in screen share.');
+            throw new Error('No video track in screen share');
+          }
+
+          const composedStream = new MediaStream();
+          displayStream.getVideoTracks().forEach((track) => composedStream.addTrack(track));
+
+          const displayAudioTracks = displayStream.getAudioTracks();
+          if (displayAudioTracks.length > 0) {
+            displayAudioTracks.forEach((track) => composedStream.addTrack(track));
+          } else {
+            try {
+              const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+              micStream.getAudioTracks().forEach((track) => composedStream.addTrack(track));
+            } catch {
+              // If microphone is denied, continue with video-only screen stream.
+            }
+          }
+
+          return { stream: composedStream, source };
+        } catch (err) {
+          alert('Screen sharing failed. Falling back to camera.');
+          source = 'camera';
+        }
+      }
+    }
+
+    // Always fallback to camera if screen is not possible
     const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
       callType: 'video',
       userAgent: navigator.userAgent,
@@ -4260,8 +4295,13 @@ function App() {
 
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Defensive: Ensure at least one video track
+      if (!cameraStream.getVideoTracks().length) {
+        alert('No camera video track found. Please check your camera.');
+        throw new Error('No camera video track');
+      }
       refreshVideoInputs();
-      return { stream: cameraStream, source };
+      return { stream: cameraStream, source: 'camera' };
     } catch {
       const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints('video'));
       let fallbackStream;
@@ -4270,12 +4310,21 @@ function App() {
       } catch {
         fallbackStream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
       }
+      if (!fallbackStream.getVideoTracks().length) {
+        alert('No camera video track found in fallback.');
+        throw new Error('No camera video track in fallback');
+      }
       refreshVideoInputs();
-      return { stream: fallbackStream, source };
+      return { stream: fallbackStream, source: 'camera' };
     }
   }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
+        // Defensive: Prevent duplicate streams
+        if (livestreamLocalStreamRef.current) {
+          livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
+          livestreamLocalStreamRef.current = null;
+        }
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
     const source = sourceMode === 'screen' ? 'screen' : 'camera';
     const activeRoomId = roomRef.current || room;
@@ -4315,24 +4364,49 @@ function App() {
       }
 
       livestreamLocalStreamRef.current = stream;
+      // Defensive: Always set local/remote stream for host
+      setLocalStream(stream);
+      setRemoteStream(stream);
+      inboundRemoteStreamRef.current = stream;
 
       // If already hosting, update all peer connections with new tracks
       if (liveStreamInfoRef.current?.isHost) {
         livestreamHostPeersRef.current.forEach((pc) => {
-          // Replace video track
           const senders = pc.getSenders();
           const videoTrack = stream.getVideoTracks()[0];
           const audioTrack = stream.getAudioTracks()[0];
-          if (videoTrack) {
-            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-            if (videoSender) videoSender.replaceTrack(videoTrack);
-          }
-          if (audioTrack) {
-            const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-            if (audioSender) audioSender.replaceTrack(audioTrack);
-          }
+          // Remove old tracks before replacing
+          senders.forEach(sender => {
+            if (sender.track && (sender.track.kind === 'video' || sender.track.kind === 'audio')) {
+              try { pc.removeTrack(sender); } catch {}
+            }
+          });
+          // Add new tracks
+          if (videoTrack) pc.addTrack(videoTrack, stream);
+          if (audioTrack) pc.addTrack(audioTrack, stream);
         });
       }
+      // Reconnection logic for unstable networks (mobile)
+      window.addEventListener('offline', () => {
+        setCallError('Network connection lost. Trying to reconnect...');
+      });
+      window.addEventListener('online', () => {
+        setCallError(null);
+        // Optionally, trigger a reconnection or refresh
+      });
+    // Defensive: Clean up any previous remote streams
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
+      remoteStreamRef.current = null;
+      setRemoteStream(null);
+    }
+    // User feedback for room/public
+    if (visibility === 'public') {
+      setSuccessMessage('You are joining a public livestream.');
+    } else {
+      setSuccessMessage('You are joining a room-only livestream.');
+    }
+    setTimeout(() => setSuccessMessage(''), 2000);
 
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
