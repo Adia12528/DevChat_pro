@@ -50,6 +50,7 @@ export const ICE_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
   { urls: 'stun:stun4.l.google.com:19302' },
+  // Metered.ca TURN (free)
   {
     urls: [
       'turn:openrelay.metered.ca:80?transport=udp',
@@ -62,6 +63,17 @@ export const ICE_SERVERS = [
     urls: 'turns:openrelay.metered.ca:443?transport=tcp',
     username: 'openrelayproject',
     credential: 'openrelayproject'
+  },
+  // Fallback TURN from another provider (numb.viagenie.ca)
+  {
+    urls: 'turn:numb.viagenie.ca:3478?transport=udp',
+    username: 'webrtc@live.com',
+    credential: 'muazkh'
+  },
+  {
+    urls: 'turn:numb.viagenie.ca:3478?transport=tcp',
+    username: 'webrtc@live.com',
+    credential: 'muazkh'
   }
 ];
 
