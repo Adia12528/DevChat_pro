@@ -195,7 +195,7 @@ io.on('connection', (socket) => {
         if (!room) return;
 
         const previousRoom = socket.room;
-        if (previousRoom && previousRoom !== room) {
+        if (setActiveRoom && previousRoom && previousRoom !== room) {
             socket.leave(previousRoom);
             removeSocketFromRoom({ room: previousRoom, username, emitOffline: false })
                 .catch((err) => console.error('Cleanup error while switching rooms:', err));

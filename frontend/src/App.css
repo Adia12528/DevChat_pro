@@ -3763,7 +3763,7 @@ body {
     transform: translateX(-50%);
   }
   
-  .users-info span {
+  .users-info span:not(.users-count) {
     display: none;
   }
   

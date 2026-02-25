@@ -910,7 +910,6 @@ function App() {
           return { ...prev, [targetRoom]: users };
         });
       }
-      setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
 
@@ -2539,6 +2538,7 @@ function App() {
     setChat([]);
     const roomUsers = roomUserMap[roomId];
     setOnlineUsers(Array.isArray(roomUsers) ? roomUsers : []);
+    setNotificationItems((prev) => prev.filter((entry) => entry.room !== roomId));
     setShowRoomSidebar(false);
     setShowMenuDropdown(false);
   }, [roomUserMap]);
@@ -3814,19 +3814,31 @@ function App() {
       .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
   }, [chat]);
 
+  const globalOnlineUsers = useMemo(() => {
+    const fromStatus = Object.entries(userStatus)
+      .filter(([, status]) => status === 'online')
+      .map(([user]) => user);
+
+    const fromRooms = Object.values(roomUserMap)
+      .flat()
+      .filter((user) => typeof user === 'string' && user.trim().length > 0);
+
+    return [...new Set([...fromStatus, ...fromRooms])];
+  }, [userStatus, roomUserMap]);
+
   const isSelectedUserOnline = useMemo(() => {
     if (!selectedUser) return false;
-    return onlineUsers.some((user) => {
+    return globalOnlineUsers.some((user) => {
       if (typeof user === 'string') return user === selectedUser;
       return user?.username === selectedUser;
     });
-  }, [onlineUsers, selectedUser]);
+  }, [globalOnlineUsers, selectedUser]);
 
   const normalizedOnlineUsers = useMemo(() => {
-    return onlineUsers
+    return globalOnlineUsers
       .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
       .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
-  }, [onlineUsers]);
+  }, [globalOnlineUsers]);
 
   const roomSummaries = useMemo(() => {
     const uniqueRooms = new Map();
@@ -3848,9 +3860,13 @@ function App() {
 
     return Array.from(uniqueRooms.values()).map((roomEntry) => {
       const isGroupRoom = roomEntry.type !== 'dm';
+      const roomMembers = (roomUserMap[roomEntry.id] || [])
+        .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
+        .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
+      const peerName = roomEntry.with || roomEntry.name;
       const roomPeerCount = isGroupRoom
-        ? normalizedOnlineUsers.filter((onlineUser) => onlineUser !== username).length
-        : normalizedOnlineUsers.filter((onlineUser) => onlineUser === (roomEntry.with || roomEntry.name)).length;
+        ? roomMembers.filter((onlineUser) => onlineUser !== username).length
+        : (roomMembers.includes(peerName) || userStatus[peerName] === 'online' ? 1 : 0);
 
       return {
         ...roomEntry,
@@ -3858,7 +3874,7 @@ function App() {
         peerCount: roomPeerCount
       };
     });
-  }, [groupRoomId, rooms, normalizedOnlineUsers, username]);
+  }, [groupRoomId, rooms, roomUserMap, username, userStatus]);
 
   const groupRoomSummaries = useMemo(() => {
     return roomSummaries.filter((roomEntry) => roomEntry.type !== 'dm');
@@ -3985,7 +4001,7 @@ function App() {
                     }}
                   >
                     <Users size={18}/>
-                    <span>Conversations {onlineUsers.length > 0 && <span className="menu-badge">{onlineUsers.length}</span>}</span>
+                    <span>Conversations {normalizedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{normalizedOnlineUsers.filter((user) => user !== username).length}</span>}</span>
                   </button>
 
                   <button
