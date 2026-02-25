@@ -42,6 +42,12 @@ const CALL_EVENTS = Object.freeze({
   SCREEN_SHARE_END: 'call:screen-share-end'
 });
 
+const LOCAL_PREVIEW_SIZES = [
+  { width: 140, height: 105 },
+  { width: 200, height: 150 },
+  { width: 260, height: 195 }
+];
+
 function App() {
   // Existing state
   const [username, setUsername] = useState("");
@@ -120,7 +126,6 @@ function App() {
   const [showStarredPanel, setShowStarredPanel] = useState(false);
 
   // Read receipts & last seen
-  const [readBy, setReadBy] = useState({}); // { msgId: [usernames] }
   const [userLastSeen, setUserLastSeen] = useState({}); // { username: timestamp }
   const [reactionCounts, setReactionCounts] = useState({}); // { msgId: { emoji: count } }
   
@@ -189,10 +194,12 @@ function App() {
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
-  const [peerConnectionState, setPeerConnectionState] = useState('new');
-  const [iceConnectionState, setIceConnectionState] = useState('new');
-  const [signalingState, setSignalingState] = useState('stable');
-  const [callDebugInfo, setCallDebugInfo] = useState(null);
+  const [, setPeerConnectionState] = useState('new');
+  const [, setIceConnectionState] = useState('new');
+  const [, setSignalingState] = useState('stable');
+  const [localPreviewPosition, setLocalPreviewPosition] = useState({ x: 20, y: 20 });
+  const [localPreviewSizeIndex, setLocalPreviewSizeIndex] = useState(1);
+  const [isDraggingLocalPreview, setIsDraggingLocalPreview] = useState(false);
   
   // PREMIUM: Advanced Call Features
   const [callStats, setCallStats] = useState(null);
@@ -255,6 +262,8 @@ function App() {
   const remoteStreamRef = useRef(null);
   const callStateRef = useRef(null);
   const callPeerRef = useRef(null);
+  const localPreviewDragOffsetRef = useRef({ x: 0, y: 0 });
+  const localPreviewMovedRef = useRef(false);
   
   // PREMIUM: Advanced call features refs
   const callRecorderRef = useRef(null);
@@ -336,47 +345,61 @@ function App() {
   useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
 
   useEffect(() => {
-    if (callState !== 'active') {
-      setCallDebugInfo(null);
-      return;
+    if (callState === 'active' && callType === 'video' && !isCallMinimized && !localPreviewMovedRef.current) {
+      const previewSize = LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1];
+      const padding = 20;
+      const initialX = Math.max(padding, window.innerWidth - previewSize.width - padding);
+      setLocalPreviewPosition({ x: initialX, y: 20 });
     }
+  }, [callState, callType, isCallMinimized, localPreviewSizeIndex]);
 
-    const getTrackSummary = (stream, kind) => {
-      const tracks = stream?.getTracks?.().filter((track) => track.kind === kind) || [];
+  useEffect(() => {
+    if (!isDraggingLocalPreview) return;
+
+    const clampPosition = (x, y) => {
+      const previewSize = LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1];
+      const padding = 8;
+      const maxX = Math.max(padding, window.innerWidth - previewSize.width - padding);
+      const maxY = Math.max(padding, window.innerHeight - previewSize.height - padding);
+
       return {
-        total: tracks.length,
-        enabled: tracks.filter((track) => track.enabled && track.readyState === 'live').length
+        x: Math.min(Math.max(padding, x), maxX),
+        y: Math.min(Math.max(padding, y), maxY)
       };
     };
 
-    const updateDebugSnapshot = () => {
-      const remoteAudio = getTrackSummary(remoteStreamRef.current, 'audio');
-      const remoteVideo = getTrackSummary(remoteStreamRef.current, 'video');
-      const localAudio = getTrackSummary(localStreamRef.current, 'audio');
-      const localVideo = getTrackSummary(localStreamRef.current, 'video');
-
-      const remoteElement = remoteVideoRef.current;
-      const localElement = localVideoRef.current;
-
-      setCallDebugInfo({
-        remoteAudio,
-        remoteVideo,
-        localAudio,
-        localVideo,
-        remoteBound: !!(remoteElement && remoteElement.srcObject),
-        remoteReadyState: remoteElement?.readyState ?? -1,
-        remotePaused: !!remoteElement?.paused,
-        localBound: !!(localElement && localElement.srcObject),
-        localReadyState: localElement?.readyState ?? -1,
-        localPaused: !!localElement?.paused
-      });
+    const extractPoint = (event) => {
+      if (event.touches && event.touches.length > 0) {
+        return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      }
+      return { x: event.clientX, y: event.clientY };
     };
 
-    updateDebugSnapshot();
-    const intervalId = setInterval(updateDebugSnapshot, 1000);
+    const onPointerMove = (event) => {
+      if (event.cancelable) event.preventDefault();
+      const point = extractPoint(event);
+      const offset = localPreviewDragOffsetRef.current;
+      const nextX = point.x - offset.x;
+      const nextY = point.y - offset.y;
+      setLocalPreviewPosition(clampPosition(nextX, nextY));
+    };
 
-    return () => clearInterval(intervalId);
-  }, [callState]);
+    const onPointerUp = () => {
+      setIsDraggingLocalPreview(false);
+    };
+
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('touchend', onPointerUp);
+    };
+  }, [isDraggingLocalPreview, localPreviewSizeIndex]);
 
   // Attach remote stream whenever stream changes or call UI mounts/toggles
   useEffect(() => {
@@ -529,18 +552,6 @@ function App() {
   // Mention detection, read receipts & conversation stats
   useEffect(() => {
     if (chat.length === 0) return;
-    
-    // Update read receipts (mark messages as read by current user)
-    setReadBy(prev => {
-      const updated = { ...prev };
-      chat.forEach(msg => {
-        if (!updated[msg._id]) updated[msg._id] = [];
-        if (username && !updated[msg._id].includes(username)) {
-          updated[msg._id] = [...updated[msg._id], username];
-        }
-      });
-      return updated;
-    });
 
     // Detect mentions and track notification count
     const mentions = chat.filter(msg => 
@@ -917,7 +928,7 @@ function App() {
     newSocket.on("messages_read", (data) => {
       setChat(prev => prev.map(m => {
         if (data.messageIds.includes(m._id)) {
-          return { ...m, readBy: [...(m.readBy || []), data.username] };
+          return { ...m, readBy: [...new Set([...(m.readBy || []), data.username])] };
         }
         return m;
       }));
@@ -3389,6 +3400,10 @@ function App() {
     setIsScreenSharing(false);
     setRemoteIsScreenSharing(false);
     setIsCallMinimized(false);
+    setLocalPreviewSizeIndex(1);
+    setLocalPreviewPosition({ x: 20, y: 20 });
+    localPreviewMovedRef.current = false;
+    setIsDraggingLocalPreview(false);
     setCallDuration(0);
     setCallError(null);
     setCallStats(null);
@@ -3508,6 +3523,43 @@ function App() {
   // Toggle call minimize
   const toggleCallMinimize = useCallback(() => {
     setIsCallMinimized(prev => !prev);
+  }, []);
+
+  const startLocalPreviewDrag = useCallback((event) => {
+    if (callType !== 'video') return;
+    if (event.button != null && event.button !== 0) return;
+
+    const point = event.touches?.[0]
+      ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
+      : { x: event.clientX, y: event.clientY };
+
+    localPreviewDragOffsetRef.current = {
+      x: point.x - localPreviewPosition.x,
+      y: point.y - localPreviewPosition.y
+    };
+
+    localPreviewMovedRef.current = true;
+    setIsDraggingLocalPreview(true);
+  }, [callType, localPreviewPosition.x, localPreviewPosition.y]);
+
+  const resizeLocalPreview = useCallback((direction) => {
+    setLocalPreviewSizeIndex((prev) => {
+      const next = direction === 'up'
+        ? Math.min(prev + 1, LOCAL_PREVIEW_SIZES.length - 1)
+        : Math.max(prev - 1, 0);
+
+      const nextSize = LOCAL_PREVIEW_SIZES[next] || LOCAL_PREVIEW_SIZES[1];
+      const padding = 8;
+      const maxX = Math.max(padding, window.innerWidth - nextSize.width - padding);
+      const maxY = Math.max(padding, window.innerHeight - nextSize.height - padding);
+
+      setLocalPreviewPosition((position) => ({
+        x: Math.min(Math.max(padding, position.x), maxX),
+        y: Math.min(Math.max(padding, position.y), maxY)
+      }));
+
+      return next;
+    });
   }, []);
 
   // Toggle call recording
@@ -4236,8 +4288,8 @@ function App() {
                   </span>
 
                   {isOwn && showDoubleTick && (() => {
-                    const readers = readBy[m._id] || m.readBy || [];
-                    const seenByOthers = readers.filter((readerName) => readerName !== username).length > 0;
+                    const readers = Array.isArray(m.readBy) ? m.readBy : [];
+                    const seenByOthers = readers.some((readerName) => readerName && readerName !== username);
 
                     return (
                       <span
@@ -4249,9 +4301,9 @@ function App() {
                     );
                   })()}
 
-                  {isOwn && !showDoubleTick && readBy[m._id]?.length > 1 && (
-                    <span className="read-receipt" title={`Read by: ${readBy[m._id].slice(1).join(', ')}`}>
-                      <CheckCircle size={11} /> {readBy[m._id].length - 1}
+                  {isOwn && !showDoubleTick && Array.isArray(m.readBy) && m.readBy.filter((readerName) => readerName !== username).length > 0 && (
+                    <span className="read-receipt" title={`Read by: ${m.readBy.filter((readerName) => readerName !== username).join(', ')}`}>
+                      <CheckCircle size={11} /> {m.readBy.filter((readerName) => readerName !== username).length}
                     </span>
                   )}
                 </div>
@@ -5666,23 +5718,56 @@ function App() {
 
                 {/* Local Video (only for video calls) */}
                 {callType === 'video' && (
-                  <video
-                    ref={setLocalVideoElement}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="local-video"
+                  <div
+                    className={`local-video-shell ${isDraggingLocalPreview ? 'dragging' : ''}`}
                     style={{
                       position: 'absolute',
-                      bottom: '20px',
-                      right: '20px',
-                      width: '200px',
-                      height: '150px',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                      border: '2px solid rgba(255,255,255,0.3)'
+                      left: `${localPreviewPosition.x}px`,
+                      top: `${localPreviewPosition.y}px`,
+                      width: `${(LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1]).width}px`,
+                      height: `${(LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1]).height}px`
                     }}
-                  />
+                  >
+                    <div
+                      className="local-video-toolbar"
+                      onMouseDown={startLocalPreviewDrag}
+                      onTouchStart={startLocalPreviewDrag}
+                      title="Drag to move"
+                    >
+                      <span className="local-video-label">You</span>
+                      <div className="local-video-size-controls">
+                        <button
+                          type="button"
+                          className="local-video-size-btn"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onClick={() => resizeLocalPreview('down')}
+                          disabled={localPreviewSizeIndex === 0}
+                          title="Smaller"
+                        >
+                          <Minimize2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="local-video-size-btn"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onClick={() => resizeLocalPreview('up')}
+                          disabled={localPreviewSizeIndex === LOCAL_PREVIEW_SIZES.length - 1}
+                          title="Bigger"
+                        >
+                          <Maximize2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <video
+                      ref={setLocalVideoElement}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="local-video"
+                    />
+                  </div>
                 )}
 
                 {/* Call Info Overlay */}
@@ -5712,25 +5797,6 @@ function App() {
                       <span className="reconnect-countdown-badge">
                         Retry in {reconnectInfo.secondsLeft}s
                       </span>
-                    )}
-                    <span className="network-state-badge">Peer: {peerConnectionState}</span>
-                    <span className="network-state-badge">ICE: {iceConnectionState}</span>
-                    <span className="network-state-badge">Signal: {signalingState}</span>
-                    {callDebugInfo && (
-                      <>
-                        <span className="call-debug-badge">
-                          R A:{callDebugInfo.remoteAudio.enabled}/{callDebugInfo.remoteAudio.total} V:{callDebugInfo.remoteVideo.enabled}/{callDebugInfo.remoteVideo.total}
-                        </span>
-                        <span className="call-debug-badge">
-                          REl:{callDebugInfo.remoteBound ? 'ok' : 'none'} rs:{callDebugInfo.remoteReadyState} {callDebugInfo.remotePaused ? 'paused' : 'playing'}
-                        </span>
-                        <span className="call-debug-badge">
-                          L A:{callDebugInfo.localAudio.enabled}/{callDebugInfo.localAudio.total} V:{callDebugInfo.localVideo.enabled}/{callDebugInfo.localVideo.total}
-                        </span>
-                        <span className="call-debug-badge">
-                          LEl:{callDebugInfo.localBound ? 'ok' : 'none'} rs:{callDebugInfo.localReadyState} {callDebugInfo.localPaused ? 'paused' : 'playing'}
-                        </span>
-                      </>
                     )}
                     {connectionQuality && (
                       <span className={`quality-badge quality-${connectionQuality.toLowerCase()}`}>

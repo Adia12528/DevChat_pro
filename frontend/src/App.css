@@ -6743,19 +6743,81 @@ textarea.whatsapp-input {
 }
 
 .local-video {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 200px;
-  height: 150px;
+  width: 100%;
+  height: calc(100% - 30px);
   object-fit: cover;
-  border-radius: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0;
+  border: none;
   background: #1a1a1a;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  z-index: 10;
+  box-shadow: none;
+  z-index: 1;
   display: block;
   visibility: visible;
+}
+
+.local-video-shell {
+  position: absolute;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: #1a1a1a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  z-index: 12;
+  touch-action: none;
+}
+
+.local-video-shell.dragging {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.local-video-toolbar {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: move;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.local-video-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.local-video-size-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.local-video-size-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.local-video-size-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.local-video-size-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* Call Info Overlay */
@@ -7289,12 +7351,9 @@ textarea.whatsapp-input {
     min-height: 40px;
   }
 
-  .local-video {
-    width: 120px;
-    height: 90px;
-    top: auto;
-    bottom: 10px;
-    right: 10px;
+  .local-video-shell {
+    max-width: min(48vw, 180px);
+    max-height: min(36vw, 140px);
   }
 
   .call-info-overlay {
@@ -7357,12 +7416,9 @@ textarea.whatsapp-input {
     min-height: 36px;
   }
 
-  .local-video {
-    width: 100px;
-    height: 75px;
-    top: auto;
-    bottom: 10px;
-    right: 10px;
+  .local-video-shell {
+    max-width: min(50vw, 150px);
+    max-height: min(38vw, 112px);
   }
 
   .call-controls {

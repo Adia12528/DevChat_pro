@@ -142,9 +142,47 @@ io.on('connection', (socket) => {
         ) || null;
     };
 
+    const cleanupRoomIfEmpty = async (room) => {
+        if (!room || !roomUsers[room]) return;
+        const count = Object.keys(roomUsers[room]).length;
+        if (count > 0) return;
+
+        delete roomUsers[room];
+        await Message.deleteMany({ room });
+        console.log(`🧹 Auto-cleared room ${room} because everyone went offline/logout`);
+    };
+
+    const removeSocketFromRoom = async ({ room, username, emitOffline = true }) => {
+        if (!room || !roomUsers[room]) return;
+
+        if (roomUsers[room][socket.id]) {
+            delete roomUsers[room][socket.id];
+        }
+
+        const remainingUsers = Object.values(roomUsers[room]);
+        const count = remainingUsers.length;
+
+        io.to(room).emit('user_stopped_typing', username);
+        io.to(room).emit('user_left', { username, users: remainingUsers, count });
+
+        if (emitOffline) {
+            io.to(room).emit('user_offline', { username });
+        }
+
+        if (count === 0) {
+            await cleanupRoomIfEmpty(room);
+        }
+    };
+
     socket.on('join_room', async (data) => {
         const room = typeof data === 'string' ? data : data.room;
         const username = (typeof data === 'object' ? data.username : '') || 'Anonymous';
+
+        const previousRoom = socket.room;
+        if (previousRoom && previousRoom !== room) {
+            socket.leave(previousRoom);
+            await removeSocketFromRoom({ room: previousRoom, username, emitOffline: false });
+        }
         
         socket.join(room);
         socket.username = username;
@@ -160,6 +198,26 @@ io.on('connection', (socket) => {
         
         // Broadcast user joined with refreshed roster
         io.to(room).emit('user_joined', { username, users: Object.values(roomUsers[room]), count: Object.keys(roomUsers[room]).length });
+    });
+
+    socket.on('leave_room', async (data) => {
+        const room = typeof data === 'string' ? data : data?.room || socket.room;
+        const username = (typeof data === 'object' ? data.username : '') || socket.username || 'User';
+        if (!room) return;
+
+        socket.leave(room);
+        await removeSocketFromRoom({ room, username, emitOffline: true });
+        if (socket.room === room) {
+            socket.room = null;
+        }
+    });
+
+    socket.on('user_logout', async (data) => {
+        const room = data?.room || socket.room;
+        const username = data?.username || socket.username || 'User';
+        if (!room) return;
+
+        await removeSocketFromRoom({ room, username, emitOffline: true });
     });
 
     socket.on('send_message', async (data, callback) => {
@@ -433,10 +491,8 @@ io.on('connection', (socket) => {
     socket.on('user_leaving', (data) => {
         console.log("👋 User explicitly leaving:", data.username);
         if (socket.room && roomUsers[socket.room]) {
-            delete roomUsers[socket.room][socket.id];
-            const users = Object.values(roomUsers[socket.room]);
-            io.to(socket.room).emit('user_left', { username: data.username, users, count: users.length });
-            if (users.length === 0) delete roomUsers[socket.room];
+            removeSocketFromRoom({ room: socket.room, username: data.username || socket.username || 'User', emitOffline: true })
+                .catch((err) => console.error('Cleanup error in user_leaving:', err));
         }
     });
 
@@ -447,23 +503,8 @@ io.on('connection', (socket) => {
         const username = socket.username || 'User';
         
         if (socket.room && roomUsers[socket.room]) {
-            delete roomUsers[socket.room][socket.id];
-            const count = Object.keys(roomUsers[socket.room]).length;
-            const remainingUsers = Object.values(roomUsers[socket.room]);
-            
-            // Clear typing indicator when user disconnects
-            io.to(socket.room).emit('user_stopped_typing', username);
-            
-            // Notify others that user left with refreshed roster
-            io.to(socket.room).emit('user_left', { username, users: remainingUsers, count });
-            
-            // Also emit explicit offline event for presence tracking
-            io.to(socket.room).emit('user_offline', { username });
-            
-            if (count === 0) {
-                delete roomUsers[socket.room];
-                console.log(`🗑️  Room ${socket.room} cleaned up (empty)`);
-            }
+            removeSocketFromRoom({ room: socket.room, username, emitOffline: true })
+                .catch((err) => console.error('Cleanup error on disconnect:', err));
         }
         
         // If user was closing browser without calling user_leaving, clean up typing
