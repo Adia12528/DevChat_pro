@@ -166,6 +166,7 @@ function App() {
     }
   });
   const [dmSearchQuery, setDmSearchQuery] = useState('');
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
   const [searchFilters, setSearchFilters] = useState({
     sender: '',
     fromDate: '',
@@ -187,6 +188,7 @@ function App() {
   });
   const [roomPolicies, setRoomPolicies] = useState({});
   const [roomInviteTarget, setRoomInviteTarget] = useState('');
+  const [showRoomAdminTools, setShowRoomAdminTools] = useState(false);
   
   // Starred messages (localStorage-backed, per session)
   const [starredMsgIds, setStarredMsgIds] = useState(() => {
@@ -1759,6 +1761,10 @@ function App() {
     return filteredChat.length;
   }, [debouncedSearchQuery, filteredChat]);
 
+  const failedQueueItems = useMemo(() => {
+    return outgoingQueue.filter((entry) => entry.status === 'failed');
+  }, [outgoingQueue]);
+
   const availableSenders = useMemo(() => {
     return [...new Set(chat.map((msg) => msg.sender).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }, [chat]);
@@ -1873,12 +1879,13 @@ function App() {
       setGroupRoomId(room);
       setRooms([{ id: room, name: room, type: 'group' }]);
       setActiveRoom(room);
+      setMessage(roomDrafts[room] || '');
       subscribedRoomsRef.current = new Set([room]);
       socketRef.current.emit("join_room", { room, username, active: true, fetchHistory: true }); 
       socketRef.current.emit("update_status", { username, status: 'online' });
       setShowChat(true); 
     } 
-  }, [username, room]);
+  }, [username, room, roomDrafts]);
 
   const handleMessageChange = useCallback((e) => {
     const nextValue = e.target.value;
@@ -4625,17 +4632,6 @@ function App() {
                   <button
                     className="menu-item"
                     onClick={() => {
-                      navigateTo('threads');
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <Reply size={18}/>
-                    <span>Threads {threadRootCount > 0 && <span className="menu-badge">{threadRootCount}</span>}</span>
-                  </button>
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
                       navigateTo('notifications');
                       setShowMenuDropdown(false);
                     }}
@@ -4810,9 +4806,16 @@ function App() {
         >
           {showMarkdown ? <Eye size={18}/> : <EyeOff size={18}/>}
         </button>
+        <button
+          className="markdown-toggle"
+          onClick={() => setShowAdvancedSearch((prev) => !prev)}
+          title={showAdvancedSearch ? "Hide advanced search" : "Show advanced search"}
+        >
+          <Settings size={16} />
+        </button>
       </div>
 
-      {(currentRoomId || '').includes('_dm_') && (
+      {showAdvancedSearch && (currentRoomId || '').includes('_dm_') && (
         <div className="search-bar" style={{ marginTop: 6 }}>
           <MessageSquare size={16} />
           <input
@@ -4830,6 +4833,7 @@ function App() {
         </div>
       )}
 
+      {showAdvancedSearch && (
       <div className="search-bar" style={{ gap: 8, flexWrap: 'wrap' }}>
         <select
           className="search-input"
@@ -4884,6 +4888,7 @@ function App() {
           Mentions only
         </label>
       </div>
+      )}
 
       {pinnedMessages.length > 0 && (
         <div className="pinned-messages-bar" onClick={() => navigateTo('pinned')} style={{cursor:'pointer'}}>
@@ -5255,23 +5260,12 @@ function App() {
         </div>
       )}
 
-      {outgoingQueue.length > 0 && (
-        <div className="uploading-bar" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-          <strong style={{ fontSize: 12 }}>Send Queue</strong>
-          {outgoingQueue.slice(0, 4).map((entry) => (
-            <div key={`queue-${entry.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-              <span style={{ fontSize: 12, opacity: 0.9 }}>
-                {entry.payload.type === 'text' || !entry.payload.type ? (entry.payload.text || 'Message') : `${entry.payload.type} message`} · {entry.status}
-              </span>
-              {entry.status === 'failed' ? (
-                <button className="media-panel-btn" onClick={() => retryQueueItem(entry.id)}>
-                  Retry
-                </button>
-              ) : (
-                <span style={{ fontSize: 11, opacity: 0.75 }}>#{entry.attempts}</span>
-              )}
-            </div>
-          ))}
+      {failedQueueItems.length > 0 && (
+        <div className="uploading-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 12px' }}>
+          <span style={{ fontSize: 12 }}>⚠️ {failedQueueItems.length} message{failedQueueItems.length > 1 ? 's' : ''} failed</span>
+          <button className="media-panel-btn" onClick={() => failedQueueItems.forEach((entry) => retryQueueItem(entry.id))}>
+            Retry all
+          </button>
         </div>
       )}
 
@@ -6411,7 +6405,16 @@ function App() {
                   </button>
                 </div>
 
-                {!!currentRoomId && (
+                {(!!currentRoomId || (canManageCurrentRoom && !(currentRoomId || '').includes('_dm_'))) && (
+                  <div className="rooms-join-row" style={{ alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 12, opacity: 0.75 }}>Advanced room options</span>
+                    <button className="media-panel-btn" onClick={() => setShowRoomAdminTools((prev) => !prev)}>
+                      {showRoomAdminTools ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                )}
+
+                {showRoomAdminTools && !!currentRoomId && (
                   <div className="rooms-join-row" style={{ alignItems: 'center', gap: 8 }}>
                     <label style={{ fontSize: 12, opacity: 0.8 }}>Typing timeout for this room (ms)</label>
                     <input
@@ -6429,7 +6432,7 @@ function App() {
                   </div>
                 )}
 
-                {canManageCurrentRoom && !(currentRoomId || '').includes('_dm_') && (
+                {showRoomAdminTools && canManageCurrentRoom && !(currentRoomId || '').includes('_dm_') && (
                   <div className="rooms-join-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
@@ -6690,6 +6693,16 @@ function App() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Views</h4>
+                  <button
+                    className="settings-btn"
+                    onClick={() => navigateTo('threads')}
+                  >
+                    Open Threads {threadRootCount > 0 ? `(${threadRootCount})` : ''}
+                  </button>
                 </div>
 
                 <div className="settings-section">
