@@ -4087,6 +4087,7 @@ function App() {
 
     viewerPc.onicecandidate = (event) => {
       if (!event.candidate || !socketRef.current) return;
+      console.log('[LIVESTREAM VIEWER] Sending ICE candidate:', event.candidate);
       socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
         sessionId,
         to: host,
@@ -4102,12 +4103,27 @@ function App() {
     const answer = await viewerPc.createAnswer();
     await viewerPc.setLocalDescription(answer);
 
+    // Wait for ICE gathering before sending answer
+    await waitForIceGatheringComplete(viewerPc, 4000);
+
     socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
       sessionId,
       to: host,
       from: usernameRef.current,
       answer: viewerPc.localDescription || answer
     });
+
+    // Add reconnection logic for viewer
+    viewerPc.onconnectionstatechange = () => {
+      console.log('[LIVESTREAM VIEWER] Connection state:', viewerPc.connectionState);
+      if (viewerPc.connectionState === 'failed' || viewerPc.connectionState === 'disconnected') {
+        // Attempt to rejoin
+        if (socketRef.current) {
+          console.log('[LIVESTREAM VIEWER] Connection failed/disconnected, attempting to rejoin...');
+          socketRef.current.emit(LIVESTREAM_EVENTS.JOIN_REQUEST, { sessionId, from: usernameRef.current });
+        }
+      }
+    };
 
     setLiveStreamInfo({
       sessionId,
@@ -4124,7 +4140,7 @@ function App() {
     setCallPeer({ username: `${host} • LIVE`, userId: host });
     setCallState('active');
     startCallTimer();
-  }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer]);
+  }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer, waitForIceGatheringComplete]);
 
   const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
     // Defensive: Remove old peer and tracks before adding new ones
@@ -4176,6 +4192,7 @@ function App() {
 
     pc.onicecandidate = (event) => {
       if (!event.candidate || !socketRef.current) return;
+      console.log('[LIVESTREAM HOST] Sending ICE candidate:', event.candidate);
       socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
         sessionId,
         to: viewerUsername,
@@ -4184,15 +4201,25 @@ function App() {
       });
     };
 
+    // Add ICE restart and reconnection logic for host peer
     pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      if (state === 'failed' || state === 'closed' || state === 'disconnected') {
+      console.log('[LIVESTREAM HOST] Connection state:', pc.connectionState);
+      if (pc.connectionState === 'failed') {
+        // Attempt ICE restart
+        if (typeof pc.restartIce === 'function') {
+          console.log('[LIVESTREAM HOST] ICE failed, attempting restart...');
+          pc.restartIce();
+        }
+      }
+      if (pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
         closeLivestreamHostPeer(viewerUsername);
       }
     };
 
+    // Wait for ICE gathering before sending offer
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
+    await waitForIceGatheringComplete(pc, 4000);
 
     socketRef.current.emit(LIVESTREAM_EVENTS.OFFER, {
       sessionId,
@@ -4200,7 +4227,7 @@ function App() {
       from: usernameRef.current,
       offer: pc.localDescription || offer
     });
-  }, [closeLivestreamHostPeer, iceServersConfig]);
+  }, [closeLivestreamHostPeer, iceServersConfig, waitForIceGatheringComplete]);
 
   const stopHostedLivestream = useCallback((notifyServer = true) => {
     const activeSession = liveStreamInfoRef.current;
@@ -4571,10 +4598,10 @@ function App() {
         audio: stream.getAudioTracks().length,
         video: stream.getVideoTracks().length
       });
+      // Ensure all tracks are enabled
       stream.getTracks().forEach((track) => {
         track.enabled = true;
       });
-      
       setLocalStream(stream);
 
       if (localVideoRef.current && type === 'video') {
@@ -4769,6 +4796,7 @@ function App() {
       refreshVideoInputs();
 
       console.log('📹 [RECEIVER] Got media stream:', { audio: !!stream.getAudioTracks().length, video: !!stream.getVideoTracks().length });
+      // Ensure all tracks are enabled
       stream.getTracks().forEach((track) => {
         track.enabled = true;
       });
@@ -8183,6 +8211,7 @@ function App() {
                 )}
                 {/* Remote Video */}
                 <video
+                  key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
                   ref={setRemoteVideoElement}
                   autoPlay
                   playsInline
@@ -8236,6 +8265,7 @@ function App() {
                       </div>
                     </div>
                     <video
+                      key={localStream ? `local-${localStream.id}` : 'local-no-stream'}
                       ref={setLocalVideoElement}
                       autoPlay
                       playsInline
