@@ -1722,7 +1722,12 @@ function App() {
         if (!data?.sessionId || !data?.from || !data?.answer) return;
         const hostPeer = livestreamHostPeersRef.current.get(data.from);
         if (!hostPeer) return;
-        await hostPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        // Only set remote description if signaling state is not 'stable'
+        if (hostPeer.signalingState !== 'stable') {
+          await hostPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } else {
+          console.warn('⚠️ Skipping setRemoteDescription: signalingState is stable');
+        }
       } catch (err) {
         console.error('❌ Failed to apply livestream answer:', err);
       }
@@ -4406,15 +4411,27 @@ function App() {
     }
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
     const source = sourceMode === 'screen' ? 'screen' : 'camera';
-    const activeRoomId = roomRef.current || room;
+    let activeRoomId = roomRef.current || room;
 
+    // Auto-join room if not connected or not in a valid group room
     if (!socketRef.current || !connected) {
-      setCallError('Connect to chat before starting a livestream');
+      setCallError('Connecting to chat...');
+      // Attempt to connect
+      if (socketRef.current) {
+        socketRef.current.connect();
+      }
       return;
     }
 
     if (!activeRoomId || activeRoomId.includes('_dm_')) {
       setCallError('Livestream is available only in group rooms');
+      return;
+    }
+
+    // Auto-join room if not already joined
+    if (socketRef.current && activeRoomId && !rooms.includes(activeRoomId)) {
+      socketRef.current.emit('join_room', { room: activeRoomId, username: usernameRef.current, active: true, fetchHistory: true });
+      setCallError('Joining room... Please try again in a moment.');
       return;
     }
 
@@ -5755,10 +5772,10 @@ function App() {
                   <button
                     className="menu-item"
                     onClick={() => {
-                      navigateTo('stream-settings');
+                      startLivestream(streamVisibility, streamSource);
                       setShowMenuDropdown(false);
                     }}
-                    title="Stream settings and start streaming"
+                    title="Start streaming with current settings"
                   >
                     <Disc3 size={18}/>
                     <span>Stream</span>
