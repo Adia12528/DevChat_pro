@@ -62,6 +62,10 @@ const LIVESTREAM_EVENTS = Object.freeze({
   REACTED: 'livestream:reacted'
 });
 
+const ROOM_EVENTS = Object.freeze({
+  REGISTRY_UPDATED: 'room_registry_updated'
+});
+
 const LOCAL_PREVIEW_SIZES = [
   { width: 140, height: 105 },
   { width: 200, height: 150 },
@@ -140,6 +144,7 @@ function App() {
   const [groupRoomId, setGroupRoomId] = useState('');
   const [newRoomIdInput, setNewRoomIdInput] = useState('');
   const [roomUserMap, setRoomUserMap] = useState({});
+  const [activeRoomRegistry, setActiveRoomRegistry] = useState([]);
   const [globalPresenceUsers, setGlobalPresenceUsers] = useState([]);
   const [notificationItems, setNotificationItems] = useState([]);
   const [videoInputDevices, setVideoInputDevices] = useState([]);
@@ -1672,73 +1677,15 @@ function App() {
       if (autoJoinLivestreamRef.current) {
         (async () => {
           try {
-            const viewerPc = new RTCPeerConnection(iceServersConfig);
-            livestreamViewerPeerRef.current = viewerPc;
-
-            viewerPc.ontrack = (event) => {
-              const incomingStream = event.streams?.[0];
-              if (incomingStream) {
-                inboundRemoteStreamRef.current = incomingStream;
-                remoteStreamRef.current = incomingStream;
-                setRemoteStream(incomingStream);
-                attachRemoteStreamToElement();
-                return;
-              }
-
-              if (!inboundRemoteStreamRef.current) {
-                inboundRemoteStreamRef.current = new MediaStream();
-              }
-
-              const aggregatedStream = inboundRemoteStreamRef.current;
-              const existingTrack = aggregatedStream.getTracks().find((track) => track.id === event.track.id);
-              if (!existingTrack) {
-                aggregatedStream.addTrack(event.track);
-              }
-
-              remoteStreamRef.current = aggregatedStream;
-              setRemoteStream(aggregatedStream);
-              attachRemoteStreamToElement();
-            };
-
-            viewerPc.onicecandidate = (event) => {
-              if (!event.candidate || !socketRef.current) return;
-              socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
-                sessionId: livestreamInvite.sessionId,
-                to: livestreamInvite.from,
-                from: usernameRef.current,
-                candidate: event.candidate
-              });
-            };
-
-            viewerPc.addTransceiver('video', { direction: 'recvonly' });
-            viewerPc.addTransceiver('audio', { direction: 'recvonly' });
-
-            await viewerPc.setRemoteDescription(new RTCSessionDescription(livestreamInvite.offer));
-            const answer = await viewerPc.createAnswer();
-            await viewerPc.setLocalDescription(answer);
-
-            socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
-              sessionId: livestreamInvite.sessionId,
-              to: livestreamInvite.from,
-              from: usernameRef.current,
-              answer: viewerPc.localDescription || answer
-            });
-
-            setLiveStreamInfo({
+            await joinLivestreamAsViewer({
               sessionId: livestreamInvite.sessionId,
               host: livestreamInvite.from,
-              room: livestreamInvite.room || null,
+              offer: livestreamInvite.offer,
               visibility: livestreamInvite.visibility || 'room',
               source: livestreamInvite.source || 'camera',
-              isHost: false,
+              room: livestreamInvite.room || null,
               autoJoined: true
             });
-            setLivestreamComments([]);
-            setLivestreamCommentInput('');
-            setCallType('video');
-            setCallPeer({ username: `${livestreamInvite.from} • LIVE`, userId: livestreamInvite.from });
-            setCallState('active');
-            startCallTimer();
             setSuccessMessage(`✅ Auto-joined livestream from ${livestreamInvite.from}`);
             setTimeout(() => setSuccessMessage(''), 2400);
           } catch (err) {
@@ -1753,6 +1700,13 @@ function App() {
 
       setIncomingCall(livestreamInvite);
       playRingtone();
+    });
+
+    newSocket.on(ROOM_EVENTS.REGISTRY_UPDATED, (data) => {
+      const nextRooms = Array.isArray(data?.rooms)
+        ? data.rooms.filter((roomEntry) => roomEntry?.id && !roomEntry.id.includes('_dm_'))
+        : [];
+      setActiveRoomRegistry(nextRooms);
     });
 
     newSocket.on(LIVESTREAM_EVENTS.ANSWER, async (data) => {
@@ -2291,6 +2245,7 @@ function App() {
       setChat([]);
       setOnlineUsers([]);
       setRoomUserMap({});
+      setActiveRoomRegistry([]);
       setGlobalPresenceUsers([]);
       setTypingUsers(new Set());
       setSearchQuery("");
@@ -3581,6 +3536,7 @@ function App() {
     setChat([]);
     setOnlineUsers([]);
     setRoomUserMap({});
+    setActiveRoomRegistry([]);
     setGlobalPresenceUsers([]);
     setNotificationItems([]);
     subscribedRoomsRef.current = new Set();
@@ -4050,6 +4006,125 @@ function App() {
     }
   }, []);
 
+  const closeLivestreamViewerPeer = useCallback(() => {
+    if (livestreamViewerPeerRef.current) {
+      try {
+        livestreamViewerPeerRef.current.ontrack = null;
+        livestreamViewerPeerRef.current.onicecandidate = null;
+        livestreamViewerPeerRef.current.close();
+      } catch {
+        // ignore close errors
+      }
+      livestreamViewerPeerRef.current = null;
+    }
+
+    if (inboundRemoteStreamRef.current) {
+      inboundRemoteStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore track stop errors
+        }
+      });
+    }
+
+    inboundRemoteStreamRef.current = null;
+    remoteStreamRef.current = null;
+    setRemoteStream(null);
+  }, []);
+
+  const applyLivestreamIncomingTrack = useCallback((event) => {
+    const incomingStream = event.streams?.[0];
+
+    if (incomingStream) {
+      const normalizedStream = new MediaStream();
+      const firstVideoTrack = incomingStream.getVideoTracks()[0];
+      const firstAudioTrack = incomingStream.getAudioTracks()[0];
+
+      if (firstVideoTrack) normalizedStream.addTrack(firstVideoTrack);
+      if (firstAudioTrack) normalizedStream.addTrack(firstAudioTrack);
+
+      inboundRemoteStreamRef.current = normalizedStream;
+      remoteStreamRef.current = normalizedStream;
+      setRemoteStream(normalizedStream);
+      attachRemoteStreamToElement();
+      return;
+    }
+
+    if (!inboundRemoteStreamRef.current) {
+      inboundRemoteStreamRef.current = new MediaStream();
+    }
+
+    const aggregatedStream = inboundRemoteStreamRef.current;
+    const existingTrack = event.track.kind === 'video'
+      ? aggregatedStream.getVideoTracks()[0]
+      : aggregatedStream.getAudioTracks()[0];
+
+    if (existingTrack && existingTrack.id !== event.track.id) {
+      aggregatedStream.removeTrack(existingTrack);
+    }
+
+    const alreadyPresent = aggregatedStream.getTracks().some((track) => track.id === event.track.id);
+    if (!alreadyPresent) {
+      aggregatedStream.addTrack(event.track);
+    }
+
+    remoteStreamRef.current = aggregatedStream;
+    setRemoteStream(new MediaStream(aggregatedStream.getTracks()));
+    attachRemoteStreamToElement();
+  }, [attachRemoteStreamToElement]);
+
+  const joinLivestreamAsViewer = useCallback(async ({ sessionId, host, offer, visibility = 'room', source = 'camera', room = null, autoJoined = false }) => {
+    if (!sessionId || !host || !offer || !socketRef.current) return;
+
+    closeLivestreamViewerPeer();
+
+    const viewerPc = new RTCPeerConnection(iceServersConfig);
+    livestreamViewerPeerRef.current = viewerPc;
+
+    viewerPc.ontrack = applyLivestreamIncomingTrack;
+
+    viewerPc.onicecandidate = (event) => {
+      if (!event.candidate || !socketRef.current) return;
+      socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
+        sessionId,
+        to: host,
+        from: usernameRef.current,
+        candidate: event.candidate
+      });
+    };
+
+    viewerPc.addTransceiver('video', { direction: 'recvonly' });
+    viewerPc.addTransceiver('audio', { direction: 'recvonly' });
+
+    await viewerPc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await viewerPc.createAnswer();
+    await viewerPc.setLocalDescription(answer);
+
+    socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
+      sessionId,
+      to: host,
+      from: usernameRef.current,
+      answer: viewerPc.localDescription || answer
+    });
+
+    setLiveStreamInfo({
+      sessionId,
+      host,
+      room,
+      visibility,
+      source,
+      isHost: false,
+      autoJoined
+    });
+    setLivestreamComments([]);
+    setLivestreamCommentInput('');
+    setCallType('video');
+    setCallPeer({ username: `${host} • LIVE`, userId: host });
+    setCallState('active');
+    startCallTimer();
+  }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer]);
+
   const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
     if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
 
@@ -4261,8 +4336,13 @@ function App() {
           viewerCount: 0
         });
         setLocalStream(stream);
-        setRemoteStream(stream);
-        inboundRemoteStreamRef.current = stream;
+        if (source === 'camera') {
+          setRemoteStream(stream);
+          inboundRemoteStreamRef.current = stream;
+        } else {
+          setRemoteStream(null);
+          inboundRemoteStreamRef.current = null;
+        }
         setCallType('video');
         setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
         setCallState('active');
@@ -4312,6 +4392,13 @@ function App() {
 
   const requestJoinLivestreamFromNotification = useCallback((notification) => {
     if (!notification?.sessionId || !socketRef.current) return;
+
+    const activeSession = liveStreamInfoRef.current;
+    if (activeSession?.sessionId === notification.sessionId) {
+      setSuccessMessage(`✅ Already in ${notification.sender}'s livestream`);
+      setTimeout(() => setSuccessMessage(''), 1800);
+      return;
+    }
 
     socketRef.current.emit(LIVESTREAM_EVENTS.JOIN_REQUEST, {
       sessionId: notification.sessionId,
@@ -4513,74 +4600,16 @@ function App() {
     if (incomingCall.isLivestream) {
       stopRingtone();
       try {
-        const viewerPc = new RTCPeerConnection(iceServersConfig);
-        livestreamViewerPeerRef.current = viewerPc;
-
-        viewerPc.ontrack = (event) => {
-          const incomingStream = event.streams?.[0];
-          if (incomingStream) {
-            inboundRemoteStreamRef.current = incomingStream;
-            remoteStreamRef.current = incomingStream;
-            setRemoteStream(incomingStream);
-            attachRemoteStreamToElement();
-            return;
-          }
-
-          if (!inboundRemoteStreamRef.current) {
-            inboundRemoteStreamRef.current = new MediaStream();
-          }
-
-          const aggregatedStream = inboundRemoteStreamRef.current;
-          const existingTrack = aggregatedStream.getTracks().find((track) => track.id === event.track.id);
-          if (!existingTrack) {
-            aggregatedStream.addTrack(event.track);
-          }
-
-          remoteStreamRef.current = aggregatedStream;
-          setRemoteStream(aggregatedStream);
-          attachRemoteStreamToElement();
-        };
-
-        viewerPc.onicecandidate = (event) => {
-          if (!event.candidate || !socketRef.current) return;
-          socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
-            sessionId: incomingCall.sessionId,
-            to: incomingCall.from,
-            from: username,
-            candidate: event.candidate
-          });
-        };
-
-        viewerPc.addTransceiver('video', { direction: 'recvonly' });
-        viewerPc.addTransceiver('audio', { direction: 'recvonly' });
-
-        await viewerPc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-        const answer = await viewerPc.createAnswer();
-        await viewerPc.setLocalDescription(answer);
-
-        socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
-          sessionId: incomingCall.sessionId,
-          to: incomingCall.from,
-          from: username,
-          answer: viewerPc.localDescription || answer
-        });
-
-        setLiveStreamInfo({
+        await joinLivestreamAsViewer({
           sessionId: incomingCall.sessionId,
           host: incomingCall.from,
-          room: incomingCall.room || null,
+          offer: incomingCall.offer,
           visibility: incomingCall.visibility || 'room',
           source: incomingCall.source || 'camera',
-          isHost: false,
+          room: incomingCall.room || null,
           autoJoined: false
         });
-        setLivestreamComments([]);
-        setLivestreamCommentInput('');
-        setCallType('video');
-        setCallPeer({ username: `${incomingCall.from} • LIVE`, userId: incomingCall.from });
-        setCallState('active');
         setIncomingCall(null);
-        startCallTimer();
       } catch (err) {
         console.error('❌ Failed to join livestream:', err);
         setCallError('Failed to join livestream');
@@ -4799,7 +4828,7 @@ function App() {
       setCallError(errorMsg);
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, iceServersConfig, attachRemoteStreamToElement, withPreferredVideoDevice, refreshVideoInputs]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs, joinLivestreamAsViewer]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
@@ -5282,6 +5311,17 @@ function App() {
       .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
   }, [globalOnlineUsers]);
 
+  const roomScopedOnlineUsers = useMemo(() => {
+    const activeRoomId = activeRoom || room;
+    if (!activeRoomId) return [];
+
+    const users = (roomUserMap[activeRoomId] || [])
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
+      .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
+
+    return [...new Set(users)];
+  }, [activeRoom, room, roomUserMap]);
+
   const roomSummaries = useMemo(() => {
     const uniqueRooms = new Map();
 
@@ -5300,9 +5340,20 @@ function App() {
       }
     });
 
+    activeRoomRegistry.forEach((roomEntry) => {
+      if (!roomEntry?.id || uniqueRooms.has(roomEntry.id)) return;
+      uniqueRooms.set(roomEntry.id, {
+        id: roomEntry.id,
+        name: roomEntry.name || roomEntry.id,
+        type: 'group'
+      });
+    });
+
     return Array.from(uniqueRooms.values()).map((roomEntry) => {
       const isGroupRoom = roomEntry.type !== 'dm';
-      const roomMembers = (roomUserMap[roomEntry.id] || [])
+      const registryEntry = activeRoomRegistry.find((entry) => entry.id === roomEntry.id);
+      const registryUsers = Array.isArray(registryEntry?.users) ? registryEntry.users : [];
+      const roomMembers = ((roomUserMap[roomEntry.id] || []).length > 0 ? roomUserMap[roomEntry.id] : registryUsers)
         .map((entry) => (typeof entry === 'string' ? entry : entry?.username))
         .filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
       const peerName = roomEntry.with || roomEntry.name;
@@ -5316,7 +5367,7 @@ function App() {
         peerCount: roomPeerCount
       };
     });
-  }, [groupRoomId, rooms, roomUserMap, username, userStatus]);
+  }, [groupRoomId, rooms, roomUserMap, username, userStatus, activeRoomRegistry]);
 
   const groupRoomSummaries = useMemo(() => {
     return roomSummaries.filter((roomEntry) => roomEntry.type !== 'dm');
@@ -5493,7 +5544,7 @@ function App() {
                     }}
                   >
                     <Users size={18}/>
-                    <span>Conversations {normalizedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{normalizedOnlineUsers.filter((user) => user !== username).length}</span>}</span>
+                    <span>Conversations {roomScopedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{roomScopedOnlineUsers.filter((user) => user !== username).length}</span>}</span>
                   </button>
 
                   <button
@@ -6790,10 +6841,10 @@ function App() {
 
                 <div className="sidebar-section">
                   <div className="sidebar-section-title">Online Members</div>
-                  {normalizedOnlineUsers.filter(u => u !== username).length === 0 ? (
+                  {roomScopedOnlineUsers.filter(u => u !== username).length === 0 ? (
                     <div className="sidebar-empty">No other members online</div>
                   ) : (
-                    normalizedOnlineUsers
+                    roomScopedOnlineUsers
                       .filter(u => u !== username)
                       .map((user) => (
                         <div className="sidebar-user-row" key={`online-${user}`}>

@@ -44,6 +44,10 @@ const LIVESTREAM_EVENTS = Object.freeze({
     REACTED: 'livestream:reacted'
 });
 
+const ROOM_EVENTS = Object.freeze({
+    REGISTRY_UPDATED: 'room_registry_updated'
+});
+
 // CORS Configuration - Allow all Vercel deployments and localhost
 const frontendOrigin = process.env.FRONTEND_ORIGIN;
 const allowedOrigins = [
@@ -230,6 +234,24 @@ io.on('connection', (socket) => {
         io.emit('global_users_updated', { users, count: users.length });
     };
 
+    const emitRoomRegistry = () => {
+        const rooms = Object.entries(roomUsers)
+            .filter(([roomId, roomMap]) => roomId && roomMap && !roomId.includes('_dm_'))
+            .map(([roomId, roomMap]) => {
+                const users = [...new Set(Object.values(roomMap || {}).filter(Boolean))];
+                return {
+                    id: roomId,
+                    name: roomId,
+                    count: users.length,
+                    users
+                };
+            })
+            .filter((entry) => entry.count > 0)
+            .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
+
+        io.emit(ROOM_EVENTS.REGISTRY_UPDATED, { rooms });
+    };
+
     const getSocketIdsByUsername = (targetUsername) => {
         if (!targetUsername) return [];
         const sockets = new Set();
@@ -359,6 +381,7 @@ io.on('connection', (socket) => {
         io.to(room).emit('user_left', { room, username, users: remainingUsers, count });
         emitRoomUserList(room);
         emitGlobalUserList();
+        emitRoomRegistry();
 
         if (emitOffline) {
             io.to(room).emit('user_offline', { username });
@@ -424,6 +447,7 @@ io.on('connection', (socket) => {
             emitRoomUserList(room);
         }
         emitGlobalUserList();
+        emitRoomRegistry();
 
         if (!room.includes('_dm_')) {
             const policy = ensureRoomPolicy(room, username);
