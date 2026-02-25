@@ -71,6 +71,12 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
+  const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
+  const [ringtoneVolume, setRingtoneVolume] = useState(() => {
+    const storedVolume = Number(localStorage.getItem('ringtoneVolume'));
+    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0.05, storedVolume)) : 0.18;
+  });
   const [unreadCount, setUnreadCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [userProfiles, setUserProfiles] = useState({});
@@ -224,6 +230,8 @@ function App() {
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const inboundRemoteStreamRef = useRef(null);
+  const ringtoneIntervalRef = useRef(null);
+  const ringtoneAudioContextRef = useRef(null);
   const callTimerRef = useRef(null);
   const ringtoneRef = useRef(null);
   const recordingIntervalRef = useRef(null);
@@ -487,6 +495,19 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-font', fontStyle);
+    localStorage.setItem('fontStyle', fontStyle);
+  }, [fontStyle]);
+
+  useEffect(() => {
+    localStorage.setItem('ringtoneStyle', ringtoneStyle);
+  }, [ringtoneStyle]);
+
+  useEffect(() => {
+    localStorage.setItem('ringtoneVolume', String(ringtoneVolume));
+  }, [ringtoneVolume]);
 
   // Mobile detection
   useEffect(() => {
@@ -2515,22 +2536,94 @@ function App() {
     }
   }, []);
 
-  // Play ringtone
-  const playRingtone = useCallback(() => {
-    if (!ringtoneRef.current) {
-      ringtoneRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBCp+zPLTgjMGHmS9++++bChAQJfZ7K1pHAU+ldb4z34rBSt9y/jYhzYJG2S56+OiUhELUrTn8bRpHgU5j9Xy0IAtBihzy/LagTAFIW29+e+vaxwFPZXV+M5+KwUrfcz52IU1BythvfztpleUhBNk');
-      ringtoneRef.current.loop = true;
+  const stopRingtone = useCallback(() => {
+    if (ringtoneIntervalRef.current) {
+      clearInterval(ringtoneIntervalRef.current);
+      ringtoneIntervalRef.current = null;
     }
-    ringtoneRef.current.play().catch(e => console.log('Ringtone play failed:', e));
+
+    if (ringtoneRef.current) {
+      try {
+        ringtoneRef.current.pause();
+        ringtoneRef.current.currentTime = 0;
+      } catch {}
+    }
+
+    if (ringtoneAudioContextRef.current) {
+      const context = ringtoneAudioContextRef.current;
+      ringtoneAudioContextRef.current = null;
+      context.close().catch(() => {});
+    }
   }, []);
 
-  // Stop ringtone  
-  const stopRingtone = useCallback(() => {
-    if (ringtoneRef.current) {
-      ringtoneRef.current.pause();
-      ringtoneRef.current.currentTime = 0;
-    }
-  }, []);
+  const playRingtone = useCallback(() => {
+    if (!soundEnabledRef.current || ringtoneStyle === 'off') return;
+
+    stopRingtone();
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const context = new AudioCtx();
+    ringtoneAudioContextRef.current = context;
+
+    const normalizedVolume = Math.min(1, Math.max(0.05, ringtoneVolume));
+    const profiles = {
+      soft: {
+        sequence: [523.25, 659.25],
+        noteMs: 180,
+        gapMs: 120,
+        repeatMs: 1700,
+        gain: 0.012
+      },
+      chime: {
+        sequence: [392.0, 523.25, 659.25],
+        noteMs: 160,
+        gapMs: 100,
+        repeatMs: 1800,
+        gain: 0.015
+      },
+      pulse: {
+        sequence: [440.0, 440.0],
+        noteMs: 140,
+        gapMs: 140,
+        repeatMs: 1200,
+        gain: 0.01
+      }
+    };
+
+    const profile = profiles[ringtoneStyle] || profiles.soft;
+
+    const playTone = (frequency, durationMs, startDelayMs, gainFactor) => {
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, context.currentTime + startDelayMs / 1000);
+
+      const startAt = context.currentTime + startDelayMs / 1000;
+      const endAt = startAt + durationMs / 1000;
+      const peakGain = gainFactor * normalizedVolume;
+
+      gainNode.gain.setValueAtTime(0.0001, startAt);
+      gainNode.gain.exponentialRampToValueAtTime(Math.max(peakGain, 0.0002), startAt + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, endAt);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+      oscillator.start(startAt);
+      oscillator.stop(endAt + 0.02);
+    };
+
+    const playSequence = () => {
+      profile.sequence.forEach((frequency, index) => {
+        const startDelayMs = index * (profile.noteMs + profile.gapMs);
+        playTone(frequency, profile.noteMs, startDelayMs, profile.gain);
+      });
+    };
+
+    playSequence();
+    ringtoneIntervalRef.current = setInterval(playSequence, profile.repeatMs);
+  }, [ringtoneStyle, ringtoneVolume, stopRingtone]);
 
   // Start call timer
   const startCallTimer = useCallback(() => {
@@ -3658,6 +3751,17 @@ function App() {
                   >
                     <MessageSquare size={18}/>
                     <span>Quick Replies</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      navigateTo('settings');
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <Settings size={18}/>
+                    <span>Settings</span>
                   </button>
 
                   {recentMentions > 0 && (
@@ -5131,6 +5235,131 @@ function App() {
                     </div>
                   ))
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Settings Panel */}
+      <AnimatePresence>
+        {currentView === 'settings' && (
+          <motion.div
+            className="starred-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => goBack()}
+          >
+            <motion.div
+              className="starred-panel settings-panel"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="panel-header-nav">
+                <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
+                <h3 className="panel-header-title">⚙️ Settings</h3>
+                <div className="panel-header-actions" />
+              </div>
+
+              <div className="panel-content settings-content">
+                <div className="settings-section">
+                  <h4>Ringtone</h4>
+                  <div className="settings-row">
+                    <label htmlFor="ringtone-style">Tone</label>
+                    <select
+                      id="ringtone-style"
+                      className="settings-select"
+                      value={ringtoneStyle}
+                      onChange={(e) => setRingtoneStyle(e.target.value)}
+                    >
+                      <option value="soft">Soft (recommended)</option>
+                      <option value="chime">Chime</option>
+                      <option value="pulse">Pulse</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <label htmlFor="ringtone-volume">Volume</label>
+                    <input
+                      id="ringtone-volume"
+                      className="settings-range"
+                      type="range"
+                      min="0.05"
+                      max="1"
+                      step="0.05"
+                      value={ringtoneVolume}
+                      onChange={(e) => setRingtoneVolume(Number(e.target.value))}
+                    />
+                    <span className="settings-value">{Math.round(ringtoneVolume * 100)}%</span>
+                  </div>
+                  <button
+                    className="settings-btn"
+                    onClick={() => {
+                      playRingtone();
+                      setTimeout(() => stopRingtone(), 1800);
+                    }}
+                  >
+                    Preview ringtone
+                  </button>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Theme</h4>
+                  <div className="settings-theme-grid">
+                    {[
+                      { id: 'dark', label: 'Dark' },
+                      { id: 'light', label: 'Light' },
+                      { id: 'ocean', label: 'Ocean' },
+                      { id: 'forest', label: 'Forest' },
+                      { id: 'sunset', label: 'Sunset' }
+                    ].map((themeOption) => (
+                      <button
+                        key={themeOption.id}
+                        className={`settings-chip ${theme === themeOption.id ? 'active' : ''}`}
+                        onClick={() => setTheme(themeOption.id)}
+                      >
+                        {themeOption.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Font</h4>
+                  <div className="settings-theme-grid">
+                    {[
+                      { id: 'default', label: 'Default' },
+                      { id: 'rounded', label: 'Rounded' },
+                      { id: 'serif', label: 'Serif' },
+                      { id: 'mono', label: 'Mono' }
+                    ].map((fontOption) => (
+                      <button
+                        key={fontOption.id}
+                        className={`settings-chip ${fontStyle === fontOption.id ? 'active' : ''}`}
+                        onClick={() => setFontStyle(fontOption.id)}
+                      >
+                        {fontOption.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Notifications</h4>
+                  <div className="settings-row">
+                    <label htmlFor="notif-sound">Message sounds</label>
+                    <input
+                      id="notif-sound"
+                      type="checkbox"
+                      checked={soundEnabled}
+                      onChange={(e) => setSoundEnabled(e.target.checked)}
+                    />
+                  </div>
+                </div>
               </div>
             </motion.div>
           </motion.div>
