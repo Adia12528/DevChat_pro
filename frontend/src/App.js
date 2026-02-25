@@ -3540,7 +3540,13 @@ function App() {
       }
     } catch (err) {
       console.error('Screen share error:', err);
-      setCallError('Screen sharing failed');
+      if (err?.name === 'NotSupportedError') {
+        setCallError('Screen sharing is not supported on this mobile browser. Try latest Chrome on Android or desktop.');
+      } else if (err?.name === 'NotAllowedError') {
+        setCallError('Screen share permission denied. Please allow screen sharing and try again.');
+      } else {
+        setCallError('Screen sharing failed');
+      }
     }
   }, [isScreenSharing, localStream, callType, callPeer, username]);
 

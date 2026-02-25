@@ -384,25 +384,65 @@ export class CallRecorder {
 
 // ==================== SCREEN SHARING ====================
 export async function getScreenStream(options = {}) {
-  try {
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+  const mediaDevices = navigator?.mediaDevices;
+  if (!mediaDevices || typeof mediaDevices.getDisplayMedia !== 'function') {
+    const unsupportedErr = new Error('Screen sharing is not supported on this browser/device');
+    unsupportedErr.name = 'NotSupportedError';
+    throw unsupportedErr;
+  }
+
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  if (isIOS) {
+    const iosErr = new Error('iOS browsers currently have limited screen sharing support for WebRTC calls');
+    iosErr.name = 'NotSupportedError';
+    throw iosErr;
+  }
+
+  const attempts = [
+    {
       video: {
         cursor: 'always',
+        frameRate: { ideal: 24, max: 30 },
         ...options.videoOptions
       },
       audio: false
-    });
-
-    console.log('📺 Screen sharing started');
-    return screenStream;
-  } catch (err) {
-    if (err.name === 'NotAllowedError') {
-      console.log('Screen sharing denied by user');
-    } else {
-      console.error('Error getting screen stream:', err);
+    },
+    {
+      video: {
+        frameRate: { ideal: 20, max: 24 }
+      },
+      audio: false
+    },
+    {
+      video: true,
+      audio: false
     }
-    throw err;
+  ];
+
+  let lastError = null;
+  for (const constraints of attempts) {
+    try {
+      const screenStream = await mediaDevices.getDisplayMedia(constraints);
+      console.log('📺 Screen sharing started');
+      return screenStream;
+    } catch (err) {
+      lastError = err;
+      if (err?.name === 'NotAllowedError') {
+        console.log('Screen sharing denied by user');
+        throw err;
+      }
+      if (err?.name === 'NotSupportedError') {
+        continue;
+      }
+      if (err?.name === 'AbortError') {
+        throw err;
+      }
+      continue;
+    }
   }
+
+  console.error('Error getting screen stream:', lastError);
+  throw lastError || new Error('Unable to start screen sharing');
 }
 
 export async function switchToScreenShare(peerConnection, screenStream, localStream) {
