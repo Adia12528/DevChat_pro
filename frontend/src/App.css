@@ -7105,6 +7105,123 @@ textarea.whatsapp-input {
   box-shadow: 0 0 8px rgba(244, 67, 54, 0.6);
 }
 
+.livestream-comments-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  width: min(92vw, 760px);
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(8, 8, 8, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  z-index: 19;
+}
+
+.livestream-comments-list {
+  max-height: 132px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.livestream-comments-empty {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.livestream-comment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #fff;
+  line-height: 1.35;
+}
+
+.livestream-comment-author {
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.livestream-comment-text {
+  color: rgba(255, 255, 255, 0.92);
+  word-break: break-word;
+}
+
+.livestream-comment-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.livestream-reaction-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.livestream-reaction-btn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.livestream-reaction-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.livestream-comment-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.livestream-comment-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 13px;
+}
+
+.livestream-comment-input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.livestream-comment-send {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(76, 175, 80, 0.85);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.livestream-comment-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.livestream-comment-send:not(:disabled):hover {
+  background: rgba(76, 175, 80, 1);
+}
+
 /* Call Controls - Production Enhanced */
 .call-controls {
   position: absolute;
@@ -7493,6 +7610,11 @@ textarea.whatsapp-input {
     width: min(92vw, 420px);
   }
 
+  .livestream-comments-panel {
+    bottom: 100px;
+    width: min(94vw, 680px);
+  }
+
   .call-control-btn {
     width: 48px;
     height: 48px;
@@ -7551,6 +7673,16 @@ textarea.whatsapp-input {
   .call-controls {
     gap: 8px;
     width: min(94vw, 360px);
+  }
+
+  .livestream-comments-panel {
+    bottom: 96px;
+    width: min(96vw, 360px);
+    padding: 8px;
+  }
+
+  .livestream-comments-list {
+    max-height: 108px;
   }
 
   .call-control-btn {

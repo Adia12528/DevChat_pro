@@ -35,7 +35,11 @@ const LIVESTREAM_EVENTS = Object.freeze({
     STOPPED: 'livestream:stopped',
     DECLINE: 'livestream:decline',
     LEAVE: 'livestream:leave',
-    VIEWERS_UPDATE: 'livestream:viewers-update'
+    VIEWERS_UPDATE: 'livestream:viewers-update',
+    COMMENT: 'livestream:comment',
+    COMMENTED: 'livestream:commented',
+    REACTION: 'livestream:reaction',
+    REACTED: 'livestream:reacted'
 });
 
 // CORS Configuration - Allow all Vercel deployments and localhost
@@ -278,6 +282,21 @@ io.on('connection', (socket) => {
                 emitLivestreamViewers(sessionId);
             }
         });
+    };
+
+    const emitToLivestreamParticipants = (sessionId, eventName, payload) => {
+        const session = liveStreams[sessionId];
+        if (!session) return false;
+
+        const participants = new Set([session.host, ...Array.from(session.viewers || [])]);
+        participants.forEach((participant) => {
+            const socketIds = getSocketIdsByUsername(participant);
+            socketIds.forEach((socketId) => {
+                io.to(socketId).emit(eventName, payload);
+            });
+        });
+
+        return true;
     };
 
     const emitRoomUserList = (room) => {
@@ -956,6 +975,43 @@ io.on('connection', (socket) => {
         if (session.host !== host) return;
 
         stopLivestreamSession(sessionId, 'host_stopped');
+    });
+
+    socket.on(LIVESTREAM_EVENTS.COMMENT, (data = {}) => {
+        const sessionId = data.sessionId;
+        const from = data.from || socket.username;
+        const text = typeof data.text === 'string' ? data.text.trim() : '';
+
+        if (!sessionId || !from || !text) return;
+        if (text.length > 300) return;
+
+        const payload = {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            sessionId,
+            from,
+            text,
+            time: new Date().toISOString()
+        };
+
+        emitToLivestreamParticipants(sessionId, LIVESTREAM_EVENTS.COMMENTED, payload);
+    });
+
+    socket.on(LIVESTREAM_EVENTS.REACTION, (data = {}) => {
+        const sessionId = data.sessionId;
+        const from = data.from || socket.username;
+        const emoji = typeof data.emoji === 'string' ? data.emoji.trim() : '';
+
+        if (!sessionId || !from || !emoji || emoji.length > 8) return;
+
+        const payload = {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            sessionId,
+            from,
+            emoji,
+            time: new Date().toISOString()
+        };
+
+        emitToLivestreamParticipants(sessionId, LIVESTREAM_EVENTS.REACTED, payload);
     });
 
     // ==========================

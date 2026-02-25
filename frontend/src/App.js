@@ -29,6 +29,7 @@ import {
 } from './callUtils';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
+const LIVESTREAM_REACTIONS = ['🔥', '👏', '❤️', '😂', '😮', '🎉'];
 
 const CALL_EVENTS = Object.freeze({
   OFFER: 'call:offer',
@@ -52,7 +53,11 @@ const LIVESTREAM_EVENTS = Object.freeze({
   STOPPED: 'livestream:stopped',
   DECLINE: 'livestream:decline',
   LEAVE: 'livestream:leave',
-  VIEWERS_UPDATE: 'livestream:viewers-update'
+  VIEWERS_UPDATE: 'livestream:viewers-update',
+  COMMENT: 'livestream:comment',
+  COMMENTED: 'livestream:commented',
+  REACTION: 'livestream:reaction',
+  REACTED: 'livestream:reacted'
 });
 
 const LOCAL_PREVIEW_SIZES = [
@@ -281,6 +286,8 @@ function App() {
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
   const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, source, isHost, viewers, hasAudio }
+  const [livestreamComments, setLivestreamComments] = useState([]);
+  const [livestreamCommentInput, setLivestreamCommentInput] = useState('');
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
   const [, setPeerConnectionState] = useState('new');
   const [, setIceConnectionState] = useState('new');
@@ -1616,6 +1623,8 @@ function App() {
               isHost: false,
               autoJoined: true
             });
+            setLivestreamComments([]);
+            setLivestreamCommentInput('');
             setCallType('video');
             setCallPeer({ username: `${livestreamInvite.from} • LIVE`, userId: livestreamInvite.from });
             setCallState('active');
@@ -1681,6 +1690,32 @@ function App() {
       });
     });
 
+    newSocket.on(LIVESTREAM_EVENTS.COMMENTED, (data) => {
+      if (!data?.sessionId || !data?.from || !data?.text) return;
+      if (liveStreamInfoRef.current?.sessionId !== data.sessionId) return;
+
+      setLivestreamComments((prev) => [...prev, {
+        id: data.id || `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'comment',
+        from: data.from,
+        text: data.text,
+        time: data.time || new Date().toISOString()
+      }].slice(-80));
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.REACTED, (data) => {
+      if (!data?.sessionId || !data?.from || !data?.emoji) return;
+      if (liveStreamInfoRef.current?.sessionId !== data.sessionId) return;
+
+      setLivestreamComments((prev) => [...prev, {
+        id: data.id || `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'reaction',
+        from: data.from,
+        emoji: data.emoji,
+        time: data.time || new Date().toISOString()
+      }].slice(-80));
+    });
+
     newSocket.on(LIVESTREAM_EVENTS.DECLINE, (data) => {
       if (!data?.from) return;
       closeLivestreamHostPeer(data.from);
@@ -1711,6 +1746,8 @@ function App() {
       }
 
       setLiveStreamInfo(null);
+      setLivestreamComments([]);
+      setLivestreamCommentInput('');
       setSuccessMessage(`🔴 Livestream ended (${data.reason || 'stopped'})`);
       setTimeout(() => setSuccessMessage(''), 3000);
     });
@@ -3962,6 +3999,8 @@ function App() {
     }
 
     setLiveStreamInfo(null);
+    setLivestreamComments([]);
+    setLivestreamCommentInput('');
     setSuccessMessage('Livestream stopped');
     setTimeout(() => setSuccessMessage(''), 2500);
   }, []);
@@ -4074,6 +4113,8 @@ function App() {
           viewers: [],
           viewerCount: 0
         });
+        setLivestreamComments([]);
+        setLivestreamCommentInput('');
 
         const targets = Array.isArray(ack.targets) ? ack.targets : [];
         await Promise.allSettled(targets.map((viewerUsername) => createLivestreamHostPeer(viewerUsername, ack.sessionId, stream)));
@@ -4086,6 +4127,34 @@ function App() {
       setCallError(err?.message || 'Unable to access camera/microphone for livestream');
     }
   }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream]);
+
+  const sendLivestreamComment = useCallback(() => {
+    const activeSession = liveStreamInfoRef.current;
+    const socket = socketRef.current;
+    const text = livestreamCommentInput.trim();
+
+    if (!activeSession?.sessionId || !socket || !text) return;
+
+    socket.emit(LIVESTREAM_EVENTS.COMMENT, {
+      sessionId: activeSession.sessionId,
+      from: usernameRef.current,
+      text
+    });
+    setLivestreamCommentInput('');
+  }, [livestreamCommentInput]);
+
+  const sendLivestreamReaction = useCallback((emoji) => {
+    const activeSession = liveStreamInfoRef.current;
+    const socket = socketRef.current;
+
+    if (!activeSession?.sessionId || !socket || !emoji) return;
+
+    socket.emit(LIVESTREAM_EVENTS.REACTION, {
+      sessionId: activeSession.sessionId,
+      from: usernameRef.current,
+      emoji
+    });
+  }, []);
 
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
@@ -4334,6 +4403,8 @@ function App() {
           isHost: false,
           autoJoined: false
         });
+        setLivestreamComments([]);
+        setLivestreamCommentInput('');
         setCallType('video');
         setCallPeer({ username: `${incomingCall.from} • LIVE`, userId: incomingCall.from });
         setCallState('active');
@@ -4692,6 +4763,8 @@ function App() {
     setQualityIndicator(null);
     setConnectionQuality('excellent');
     setLiveStreamInfo(null);
+    setLivestreamComments([]);
+    setLivestreamCommentInput('');
     stopCallTimer();
     stopRingtone();
   }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream]);
@@ -7819,6 +7892,67 @@ function App() {
                 </div>
 
                 {/* Call Controls */}
+                {liveStreamInfo && (
+                  <div className="livestream-comments-panel">
+                    <div className="livestream-comments-list">
+                      {livestreamComments.length === 0 ? (
+                        <div className="livestream-comments-empty">Audience comments will appear here</div>
+                      ) : (
+                        livestreamComments.slice(-6).map((entry) => (
+                          <div key={entry.id} className="livestream-comment-item">
+                            <span className="livestream-comment-author">{entry.from}</span>
+                            {entry.type === 'reaction' ? (
+                              <span className="livestream-comment-text">reacted {entry.emoji}</span>
+                            ) : (
+                              <span className="livestream-comment-text">{entry.text}</span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="livestream-comment-actions">
+                      <div className="livestream-reaction-buttons">
+                        {LIVESTREAM_REACTIONS.map((emoji) => (
+                          <button
+                            key={`live-reaction-${emoji}`}
+                            type="button"
+                            className="livestream-reaction-btn"
+                            onClick={() => sendLivestreamReaction(emoji)}
+                            title={`React ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="livestream-comment-input-row">
+                        <input
+                          type="text"
+                          className="livestream-comment-input"
+                          value={livestreamCommentInput}
+                          onChange={(event) => setLivestreamCommentInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              sendLivestreamComment();
+                            }
+                          }}
+                          maxLength={300}
+                          placeholder="Comment while watching..."
+                        />
+                        <button
+                          type="button"
+                          className="livestream-comment-send"
+                          onClick={sendLivestreamComment}
+                          disabled={!livestreamCommentInput.trim()}
+                          title="Send comment"
+                        >
+                          <Send size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="call-controls">
                   {/* Mute Button */}
                   <button
