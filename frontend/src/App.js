@@ -42,6 +42,19 @@ const CALL_EVENTS = Object.freeze({
   SCREEN_SHARE_END: 'call:screen-share-end'
 });
 
+const LIVESTREAM_EVENTS = Object.freeze({
+  START: 'livestream:start',
+  STARTED: 'livestream:started',
+  OFFER: 'livestream:offer',
+  ANSWER: 'livestream:answer',
+  ICE_CANDIDATE: 'livestream:ice-candidate',
+  STOP: 'livestream:stop',
+  STOPPED: 'livestream:stopped',
+  DECLINE: 'livestream:decline',
+  LEAVE: 'livestream:leave',
+  VIEWERS_UPDATE: 'livestream:viewers-update'
+});
+
 const LOCAL_PREVIEW_SIZES = [
   { width: 140, height: 105 },
   { width: 200, height: 150 },
@@ -85,6 +98,7 @@ function App() {
     const storedVolume = Number(localStorage.getItem('ringtoneVolume'));
     return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0.05, storedVolume)) : 0.18;
   });
+  const [autoJoinLivestream, setAutoJoinLivestream] = useState(() => localStorage.getItem('autoJoinLivestream') === 'true');
   const [unreadCount, setUnreadCount] = useState(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [userProfiles, setUserProfiles] = useState({});
@@ -266,6 +280,7 @@ function App() {
   const [callDuration, setCallDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
   const [callError, setCallError] = useState(null);
+  const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, isHost, viewers }
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
   const [, setPeerConnectionState] = useState('new');
   const [, setIceConnectionState] = useState('new');
@@ -340,8 +355,13 @@ function App() {
   const remoteStreamRef = useRef(null);
   const callStateRef = useRef(null);
   const callPeerRef = useRef(null);
+  const liveStreamInfoRef = useRef(null);
+  const autoJoinLivestreamRef = useRef(autoJoinLivestream);
   const localPreviewDragOffsetRef = useRef({ x: 0, y: 0 });
   const localPreviewMovedRef = useRef(false);
+  const livestreamHostPeersRef = useRef(new Map());
+  const livestreamViewerPeerRef = useRef(null);
+  const livestreamLocalStreamRef = useRef(null);
   
   // PREMIUM: Advanced call features refs
   const callRecorderRef = useRef(null);
@@ -422,6 +442,8 @@ function App() {
   useEffect(() => { remoteStreamRef.current = remoteStream; }, [remoteStream]);
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
+  useEffect(() => { liveStreamInfoRef.current = liveStreamInfo; }, [liveStreamInfo]);
+  useEffect(() => { autoJoinLivestreamRef.current = autoJoinLivestream; }, [autoJoinLivestream]);
   useEffect(() => { notificationPrefsRef.current = notificationPrefs; }, [notificationPrefs]);
   useEffect(() => { blockedUsersRef.current = blockedUsers; }, [blockedUsers]);
 
@@ -633,6 +655,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem('ringtoneVolume', String(ringtoneVolume));
   }, [ringtoneVolume]);
+
+  useEffect(() => {
+    localStorage.setItem('autoJoinLivestream', autoJoinLivestream ? 'true' : 'false');
+  }, [autoJoinLivestream]);
 
   useEffect(() => {
     localStorage.setItem('showDoubleTick', String(showDoubleTick));
@@ -1493,6 +1519,181 @@ function App() {
       setRemoteIsScreenSharing(false);
     });
 
+    newSocket.on(LIVESTREAM_EVENTS.STARTED, (data) => {
+      if (!data?.sessionId || !data?.host) return;
+      const visibilityLabel = data.visibility === 'public' ? 'public' : 'room';
+      setSuccessMessage(`🔴 ${data.host} started a ${visibilityLabel} livestream`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.OFFER, (data) => {
+      if (!data?.offer || !data?.from || !data?.sessionId) return;
+
+      if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+        newSocket.emit(LIVESTREAM_EVENTS.DECLINE, {
+          sessionId: data.sessionId,
+          to: data.from,
+          from: usernameRef.current
+        });
+        return;
+      }
+
+      const livestreamInvite = {
+        from: data.from,
+        callType: 'video',
+        offer: data.offer,
+        isLivestream: true,
+        sessionId: data.sessionId,
+        visibility: data.visibility || 'room',
+        room: data.room || null
+      };
+
+      if (autoJoinLivestreamRef.current) {
+        (async () => {
+          try {
+            const viewerPc = new RTCPeerConnection(iceServersConfig);
+            livestreamViewerPeerRef.current = viewerPc;
+
+            viewerPc.ontrack = (event) => {
+              const incomingStream = event.streams?.[0];
+              if (!incomingStream) return;
+              inboundRemoteStreamRef.current = incomingStream;
+              remoteStreamRef.current = incomingStream;
+              setRemoteStream(incomingStream);
+              attachRemoteStreamToElement();
+            };
+
+            viewerPc.onicecandidate = (event) => {
+              if (!event.candidate || !socketRef.current) return;
+              socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
+                sessionId: livestreamInvite.sessionId,
+                to: livestreamInvite.from,
+                from: usernameRef.current,
+                candidate: event.candidate
+              });
+            };
+
+            viewerPc.addTransceiver('video', { direction: 'recvonly' });
+            viewerPc.addTransceiver('audio', { direction: 'recvonly' });
+
+            await viewerPc.setRemoteDescription(new RTCSessionDescription(livestreamInvite.offer));
+            const answer = await viewerPc.createAnswer();
+            await viewerPc.setLocalDescription(answer);
+
+            socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
+              sessionId: livestreamInvite.sessionId,
+              to: livestreamInvite.from,
+              from: usernameRef.current,
+              answer: viewerPc.localDescription || answer
+            });
+
+            setLiveStreamInfo({
+              sessionId: livestreamInvite.sessionId,
+              host: livestreamInvite.from,
+              room: livestreamInvite.room || null,
+              visibility: livestreamInvite.visibility || 'room',
+              isHost: false,
+              autoJoined: true
+            });
+            setCallType('video');
+            setCallPeer({ username: `${livestreamInvite.from} • LIVE`, userId: livestreamInvite.from });
+            setCallState('active');
+            startCallTimer();
+            setSuccessMessage(`✅ Auto-joined livestream from ${livestreamInvite.from}`);
+            setTimeout(() => setSuccessMessage(''), 2400);
+          } catch (err) {
+            console.error('❌ Failed to auto-join livestream:', err);
+            setCallError('Failed to auto-join livestream');
+            setIncomingCall(livestreamInvite);
+            playRingtone();
+          }
+        })();
+        return;
+      }
+
+      setIncomingCall(livestreamInvite);
+      playRingtone();
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.ANSWER, async (data) => {
+      try {
+        if (!data?.sessionId || !data?.from || !data?.answer) return;
+        const hostPeer = livestreamHostPeersRef.current.get(data.from);
+        if (!hostPeer) return;
+        await hostPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } catch (err) {
+        console.error('❌ Failed to apply livestream answer:', err);
+      }
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.ICE_CANDIDATE, async (data) => {
+      try {
+        if (!data?.candidate || !data?.from || !data?.sessionId) return;
+
+        const isHostSession = liveStreamInfoRef.current?.isHost && liveStreamInfoRef.current?.sessionId === data.sessionId;
+        if (isHostSession) {
+          const hostPeer = livestreamHostPeersRef.current.get(data.from);
+          if (hostPeer && hostPeer.remoteDescription) {
+            await hostPeer.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+          return;
+        }
+
+        const viewerPeer = livestreamViewerPeerRef.current;
+        if (viewerPeer && viewerPeer.remoteDescription) {
+          await viewerPeer.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to apply livestream ICE candidate:', err?.message || err);
+      }
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.VIEWERS_UPDATE, (data) => {
+      if (!data?.sessionId) return;
+      setLiveStreamInfo((prev) => {
+        if (!prev || prev.sessionId !== data.sessionId || !prev.isHost) return prev;
+        return {
+          ...prev,
+          viewers: Array.isArray(data.viewers) ? data.viewers : [],
+          viewerCount: Number.isFinite(data.count) ? data.count : (Array.isArray(data.viewers) ? data.viewers.length : 0)
+        };
+      });
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.DECLINE, (data) => {
+      if (!data?.from) return;
+      closeLivestreamHostPeer(data.from);
+    });
+
+    newSocket.on(LIVESTREAM_EVENTS.STOPPED, (data) => {
+      if (!data?.sessionId) return;
+
+      const activeSession = liveStreamInfoRef.current;
+      if (activeSession?.sessionId !== data.sessionId) return;
+
+      if (!activeSession?.isHost) {
+        const viewerPeer = livestreamViewerPeerRef.current;
+        if (viewerPeer) {
+          try {
+            viewerPeer.close();
+          } catch {
+            // ignore close errors
+          }
+          livestreamViewerPeerRef.current = null;
+        }
+        setRemoteStream(null);
+        setCallState('idle');
+        setCallType(null);
+        setCallPeer(null);
+        setCallDuration(0);
+        stopCallTimer();
+      }
+
+      setLiveStreamInfo(null);
+      setSuccessMessage(`🔴 Livestream ended (${data.reason || 'stopped'})`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    });
+
     // Handle proper disconnect when user closes tab/browser
     const handleBeforeUnload = () => {
       if (newSocket.connected) {
@@ -1679,6 +1880,35 @@ function App() {
       // Clear pending ICE candidates
       pendingIceCandidatesRef.current = [];
       seenIceCandidateKeysRef.current.clear();
+
+      livestreamHostPeersRef.current.forEach((pc) => {
+        try {
+          pc.close();
+        } catch {
+          // ignore close errors
+        }
+      });
+      livestreamHostPeersRef.current.clear();
+
+      if (livestreamViewerPeerRef.current) {
+        try {
+          livestreamViewerPeerRef.current.close();
+        } catch {
+          // ignore close errors
+        }
+        livestreamViewerPeerRef.current = null;
+      }
+
+      if (livestreamLocalStreamRef.current) {
+        livestreamLocalStreamRef.current.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore stop errors
+          }
+        });
+        livestreamLocalStreamRef.current = null;
+      }
 
       // Clear reconnect timers
       if (reconnectCountdownRef.current) {
@@ -3105,6 +3335,49 @@ function App() {
 
   const performLogout = useCallback(() => {
     console.log('🚪 Logging out...');
+
+    const activeStream = liveStreamInfoRef.current;
+    if (socketRef.current && activeStream?.isHost) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.STOP, {
+        sessionId: activeStream.sessionId,
+        host: usernameRef.current
+      });
+    } else if (socketRef.current && activeStream && !activeStream.isHost) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.LEAVE, {
+        sessionId: activeStream.sessionId,
+        viewer: usernameRef.current
+      });
+    }
+
+    livestreamHostPeersRef.current.forEach((pc) => {
+      try {
+        pc.close();
+      } catch {
+        // ignore close errors
+      }
+    });
+    livestreamHostPeersRef.current.clear();
+
+    if (livestreamViewerPeerRef.current) {
+      try {
+        livestreamViewerPeerRef.current.close();
+      } catch {
+        // ignore close errors
+      }
+      livestreamViewerPeerRef.current = null;
+    }
+
+    if (livestreamLocalStreamRef.current) {
+      livestreamLocalStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore stop errors
+        }
+      });
+      livestreamLocalStreamRef.current = null;
+    }
+
     if (socketRef.current) {
       socketRef.current.emit('update_status', { username: usernameRef.current, status: 'offline' });
       socketRef.current.emit('user_logout', { username: usernameRef.current, room: roomRef.current });
@@ -3124,6 +3397,7 @@ function App() {
     subscribedRoomsRef.current = new Set();
     setTypingUsers(new Set());
     setConnected(false);
+    setLiveStreamInfo(null);
     setMessage('');
     setSearchQuery('');
     setShowMenuDropdown(false);
@@ -3574,6 +3848,177 @@ function App() {
     return pc;
   }, [iceServersConfig, attachRemoteStreamToElement]);
 
+  const closeLivestreamHostPeer = useCallback((viewerUsername) => {
+    if (!viewerUsername) return;
+    const pc = livestreamHostPeersRef.current.get(viewerUsername);
+    if (pc) {
+      try {
+        pc.close();
+      } catch {
+        // ignore close errors
+      }
+      livestreamHostPeersRef.current.delete(viewerUsername);
+    }
+  }, []);
+
+  const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
+    if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
+
+    const existingPeer = livestreamHostPeersRef.current.get(viewerUsername);
+    if (existingPeer) {
+      try {
+        existingPeer.close();
+      } catch {
+        // ignore close errors
+      }
+      livestreamHostPeersRef.current.delete(viewerUsername);
+    }
+
+    const pc = new RTCPeerConnection(iceServersConfig);
+    livestreamHostPeersRef.current.set(viewerUsername, pc);
+
+    stream.getTracks().forEach((track) => {
+      pc.addTrack(track, stream);
+    });
+
+    pc.onicecandidate = (event) => {
+      if (!event.candidate || !socketRef.current) return;
+      socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
+        sessionId,
+        to: viewerUsername,
+        from: usernameRef.current,
+        candidate: event.candidate
+      });
+    };
+
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === 'failed' || state === 'closed' || state === 'disconnected') {
+        closeLivestreamHostPeer(viewerUsername);
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socketRef.current.emit(LIVESTREAM_EVENTS.OFFER, {
+      sessionId,
+      to: viewerUsername,
+      from: usernameRef.current,
+      offer: pc.localDescription || offer
+    });
+  }, [closeLivestreamHostPeer, iceServersConfig]);
+
+  const stopHostedLivestream = useCallback((notifyServer = true) => {
+    const activeSession = liveStreamInfoRef.current;
+    if (!activeSession?.isHost) return;
+
+    if (notifyServer && socketRef.current && activeSession.sessionId) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.STOP, {
+        sessionId: activeSession.sessionId,
+        host: usernameRef.current
+      });
+    }
+
+    livestreamHostPeersRef.current.forEach((pc) => {
+      try {
+        pc.close();
+      } catch {
+        // ignore close errors
+      }
+    });
+    livestreamHostPeersRef.current.clear();
+
+    if (livestreamLocalStreamRef.current) {
+      livestreamLocalStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore stop errors
+        }
+      });
+      livestreamLocalStreamRef.current = null;
+    }
+
+    setLiveStreamInfo(null);
+    setSuccessMessage('Livestream stopped');
+    setTimeout(() => setSuccessMessage(''), 2500);
+  }, []);
+
+  const startLivestream = useCallback(async (visibilityMode) => {
+    const visibility = visibilityMode === 'public' ? 'public' : 'room';
+    const activeRoomId = roomRef.current || room;
+
+    if (!socketRef.current || !connected) {
+      setCallError('Connect to chat before starting a livestream');
+      return;
+    }
+
+    if (!activeRoomId || activeRoomId.includes('_dm_')) {
+      setCallError('Livestream is available only in group rooms');
+      return;
+    }
+
+    if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+      setCallError('End the current call before starting a livestream');
+      return;
+    }
+
+    if (liveStreamInfoRef.current?.isHost) {
+      setCallError('You already have an active livestream');
+      return;
+    }
+
+    try {
+      const constraints = getAdaptiveMediaConstraints({
+        callType: 'video',
+        userAgent: navigator.userAgent,
+        connectionInfo: runtimeConnectionInfo
+      });
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia(getFallbackMediaConstraints('video'));
+      }
+
+      livestreamLocalStreamRef.current = stream;
+
+      socketRef.current.emit(LIVESTREAM_EVENTS.START, {
+        host: usernameRef.current,
+        room: activeRoomId,
+        visibility
+      }, async (ack) => {
+        if (!ack?.success || !ack.sessionId) {
+          stream.getTracks().forEach((track) => track.stop());
+          livestreamLocalStreamRef.current = null;
+          setCallError(ack?.error || 'Failed to start livestream');
+          return;
+        }
+
+        setLiveStreamInfo({
+          sessionId: ack.sessionId,
+          host: usernameRef.current,
+          room: activeRoomId,
+          visibility,
+          isHost: true,
+          autoJoined: false,
+          viewers: [],
+          viewerCount: 0
+        });
+
+        const targets = Array.isArray(ack.targets) ? ack.targets : [];
+        await Promise.allSettled(targets.map((viewerUsername) => createLivestreamHostPeer(viewerUsername, ack.sessionId, stream)));
+
+        setSuccessMessage(`🔴 Livestream started (${visibility === 'public' ? 'public' : 'room-only'})`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+      });
+    } catch (err) {
+      setCallError(err?.message || 'Unable to access camera/microphone for livestream');
+    }
+  }, [room, connected, runtimeConnectionInfo, createLivestreamHostPeer]);
+
   // Start a call (voice or video) with PREMIUM features
   const startCall = useCallback(async (type, targetUser) => {
     if (!targetUser || !socketRef.current) {
@@ -3730,6 +4175,18 @@ function App() {
   const rejectCall = useCallback(() => {
     if (!incomingCall || !socketRef.current) return;
 
+    if (incomingCall.isLivestream) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.DECLINE, {
+        sessionId: incomingCall.sessionId,
+        to: incomingCall.from,
+        from: username
+      });
+      stopRingtone();
+      clearCallTimeout();
+      setIncomingCall(null);
+      return;
+    }
+
     console.log('❌ Rejecting call from:', incomingCall.from);
     socketRef.current.emit(CALL_EVENTS.REJECT, {
       to: incomingCall.from,
@@ -3744,6 +4201,66 @@ function App() {
   // Answer incoming call with premium features and robust error handling
   const answerCall = useCallback(async () => {
     if (!incomingCall || !socketRef.current) return;
+
+    if (incomingCall.isLivestream) {
+      stopRingtone();
+      try {
+        const viewerPc = new RTCPeerConnection(iceServersConfig);
+        livestreamViewerPeerRef.current = viewerPc;
+
+        viewerPc.ontrack = (event) => {
+          const incomingStream = event.streams?.[0];
+          if (!incomingStream) return;
+          inboundRemoteStreamRef.current = incomingStream;
+          remoteStreamRef.current = incomingStream;
+          setRemoteStream(incomingStream);
+          attachRemoteStreamToElement();
+        };
+
+        viewerPc.onicecandidate = (event) => {
+          if (!event.candidate || !socketRef.current) return;
+          socketRef.current.emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
+            sessionId: incomingCall.sessionId,
+            to: incomingCall.from,
+            from: username,
+            candidate: event.candidate
+          });
+        };
+
+        viewerPc.addTransceiver('video', { direction: 'recvonly' });
+        viewerPc.addTransceiver('audio', { direction: 'recvonly' });
+
+        await viewerPc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        const answer = await viewerPc.createAnswer();
+        await viewerPc.setLocalDescription(answer);
+
+        socketRef.current.emit(LIVESTREAM_EVENTS.ANSWER, {
+          sessionId: incomingCall.sessionId,
+          to: incomingCall.from,
+          from: username,
+          answer: viewerPc.localDescription || answer
+        });
+
+        setLiveStreamInfo({
+          sessionId: incomingCall.sessionId,
+          host: incomingCall.from,
+          room: incomingCall.room || null,
+          visibility: incomingCall.visibility || 'room',
+          isHost: false,
+          autoJoined: false
+        });
+        setCallType('video');
+        setCallPeer({ username: `${incomingCall.from} • LIVE`, userId: incomingCall.from });
+        setCallState('active');
+        setIncomingCall(null);
+        startCallTimer();
+      } catch (err) {
+        console.error('❌ Failed to join livestream:', err);
+        setCallError('Failed to join livestream');
+        setIncomingCall(null);
+      }
+      return;
+    }
 
     stopRingtone();
 
@@ -3950,15 +4467,28 @@ function App() {
       setCallError(errorMsg);
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, iceServersConfig, attachRemoteStreamToElement]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
     console.log('📴 Ending call');
     clearCallTimeout();
 
+    const activeStream = liveStreamInfoRef.current;
+
+    if (activeStream?.isHost) {
+      stopHostedLivestream(notifyPeer);
+    }
+
+    if (activeStream && !activeStream.isHost && notifyPeer && socketRef.current) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.LEAVE, {
+        sessionId: activeStream.sessionId,
+        viewer: usernameRef.current
+      });
+    }
+
     // Notify peer
-    if (notifyPeer && socketRef.current && callPeer) {
+    if (!activeStream && notifyPeer && socketRef.current && callPeer) {
       socketRef.current.emit(CALL_EVENTS.END, {
         to: callPeer.username,
         from: username
@@ -3977,6 +4507,15 @@ function App() {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
+    }
+
+    if (livestreamViewerPeerRef.current) {
+      try {
+        livestreamViewerPeerRef.current.close();
+      } catch {
+        // ignore close errors
+      }
+      livestreamViewerPeerRef.current = null;
     }
 
     // Stop and save call recording
@@ -4067,9 +4606,10 @@ function App() {
     setCallStats(null);
     setQualityIndicator(null);
     setConnectionQuality('excellent');
+    setLiveStreamInfo(null);
     stopCallTimer();
     stopRingtone();
-  }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone, clearCallTimeout]);
+  }, [localStream, remoteStream, callPeer, username, callType, callDuration, isCallRecording, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream]);
 
   useEffect(() => {
     endCallRef.current = endCall;
@@ -4314,6 +4854,12 @@ function App() {
   const currentRoomInfo = useMemo(() => {
     return rooms.find(r => r.id === currentRoomId) || null;
   }, [rooms, currentRoomId]);
+
+  const isGroupRoomActive = useMemo(() => {
+    return !!currentRoomId && !currentRoomId.includes('_dm_');
+  }, [currentRoomId]);
+
+  const livestreamControlsDisabled = !isGroupRoomActive || callState === 'active' || callState === 'calling' || callState === 'ringing';
 
   useEffect(() => {
     if (!showChat || !connected || !socketRef.current || !usernameRef.current) return;
@@ -4640,6 +5186,48 @@ function App() {
                     <span>Notifications {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}</span>
                   </button>
 
+                  <div className="menu-divider"></div>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      startLivestream('room');
+                      setShowMenuDropdown(false);
+                    }}
+                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                    title={isGroupRoomActive ? 'Livestream only in this room' : 'Open a group room to start livestream'}
+                  >
+                    <Radio size={18}/>
+                    <span>Start Livestream (Room Only)</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      startLivestream('public');
+                      setShowMenuDropdown(false);
+                    }}
+                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
+                    title="Livestream to everyone online"
+                  >
+                    <Disc3 size={18}/>
+                    <span>Start Livestream (Public)</span>
+                  </button>
+
+                  {liveStreamInfo?.isHost && (
+                    <button
+                      className="menu-item menu-item-danger"
+                      onClick={() => {
+                        stopHostedLivestream(true);
+                        setShowMenuDropdown(false);
+                      }}
+                      title="Stop your active livestream"
+                    >
+                      <StopCircle size={18}/>
+                      <span>Stop Livestream</span>
+                    </button>
+                  )}
+
                   <button 
                     className="menu-item"
                     onClick={() => setShowQuickReplies(!showQuickReplies)}
@@ -4741,6 +5329,22 @@ function App() {
             )}
           </div>
         </div>
+
+        {liveStreamInfo?.isHost && (
+          <div className="livestream-pill" title="Your livestream is active">
+            <span className="livestream-dot" />
+            <span>
+              LIVE {liveStreamInfo.visibility === 'public' ? 'Public' : 'Room'} · {liveStreamInfo.viewerCount || liveStreamInfo.viewers?.length || 0} viewers
+            </span>
+            <button
+              className="livestream-stop-btn"
+              onClick={() => stopHostedLivestream(true)}
+              title="Stop livestream"
+            >
+              Stop
+            </button>
+          </div>
+        )}
         
         {/* Call Buttons - Only show when a user is selected in DM */}
         {selectedUser && isSelectedUserOnline && callState !== 'active' && (
@@ -6762,6 +7366,15 @@ function App() {
                       onChange={(e) => setNotificationPrefs((prev) => ({ ...prev, quietHoursEnabled: e.target.checked }))}
                     />
                   </div>
+                  <div className="settings-row">
+                    <label htmlFor="setting-auto-join-livestream">Auto-join livestream invites</label>
+                    <input
+                      id="setting-auto-join-livestream"
+                      type="checkbox"
+                      checked={autoJoinLivestream}
+                      onChange={(e) => setAutoJoinLivestream(e.target.checked)}
+                    />
+                  </div>
                   {notificationPrefs.quietHoursEnabled && (
                     <div className="settings-row" style={{ gap: 8 }}>
                       <label>From</label>
@@ -6865,7 +7478,12 @@ function App() {
                 <User size={40} />
               </div>
               <h3>
-                {incomingCall.callType === 'video' ? (
+                {incomingCall.isLivestream ? (
+                  <>
+                    <Radio size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
+                    Live Stream Invite
+                  </>
+                ) : incomingCall.callType === 'video' ? (
                   <>
                     <Video size={24} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '8px' }} />
                     Video Call
@@ -6878,7 +7496,9 @@ function App() {
                 )}
               </h3>
               <div className="incoming-call-name">
-                {incomingCall.from}
+                {incomingCall.isLivestream
+                  ? `${incomingCall.from} is live (${incomingCall.visibility === 'public' ? 'Public' : 'Room'})`
+                  : incomingCall.from}
               </div>
               <div className="incoming-call-actions">
                 <button className="incoming-call-btn reject-btn" onClick={rejectCall}>
@@ -6887,7 +7507,7 @@ function App() {
                 </button>
                 <button className="incoming-call-btn accept-btn" onClick={answerCall}>
                   <Phone size={24} />
-                  <span>Accept</span>
+                  <span>{incomingCall.isLivestream ? 'Join Stream' : 'Accept'}</span>
                 </button>
               </div>
             </motion.div>
@@ -6976,7 +7596,7 @@ function App() {
                 />
 
                 {/* Local Video (only for video calls) */}
-                {callType === 'video' && (
+                {callType === 'video' && localStream && (
                   <div
                     className={`local-video-shell ${isDraggingLocalPreview ? 'dragging' : ''}`}
                     onTouchStart={startLocalPreviewDrag}
@@ -7053,6 +7673,9 @@ function App() {
                         ? `Reconnecting (${reconnectInfo.attempt}/${reconnectInfo.max})`
                         : (callState === 'active' ? 'Connected' : 'Connecting')}
                     </span>
+                    {liveStreamInfo && !liveStreamInfo.isHost && liveStreamInfo.autoJoined && (
+                      <span className="call-status-badge">AUTO</span>
+                    )}
                     {reconnectInfo && Number.isFinite(reconnectInfo.secondsLeft) && (
                       <span className="reconnect-countdown-badge">
                         Retry in {reconnectInfo.secondsLeft}s
