@@ -557,24 +557,26 @@ function App() {
   }, [remoteStream, callState, isCallMinimized, attachRemoteStreamToElement]);
 
   useEffect(() => {
-    const videoEl = remoteVideoRef.current;
-    if (!videoEl || !remoteStream) return;
-
-    if (videoEl.srcObject !== remoteStream) {
-      videoEl.srcObject = remoteStream;
-    }
-    videoEl.muted = false;
-    videoEl.play().catch((e) => console.log('⚠️ Remote video play failed:', e));
-
-    const audioEl = remoteAudioRef.current;
-    if (audioEl && audioEl.srcObject !== remoteStream) {
-      audioEl.srcObject = remoteStream;
-      audioEl.play().catch((e) => console.log('⚠️ Remote audio play failed:', e));
-    }
-
-    if (videoEl.srcObject) {
-      console.log('📹 Remote video element now has stream');
-    }
+    // Debounce stream attachment to prevent AbortError
+    const attach = () => {
+      const videoEl = remoteVideoRef.current;
+      if (!videoEl || !remoteStream) return;
+      if (videoEl.srcObject !== remoteStream) {
+        videoEl.srcObject = remoteStream;
+      }
+      videoEl.muted = false;
+      videoEl.play().catch((e) => console.log('⚠️ Remote video play failed:', e));
+      const audioEl = remoteAudioRef.current;
+      if (audioEl && audioEl.srcObject !== remoteStream) {
+        audioEl.srcObject = remoteStream;
+        audioEl.play().catch((e) => console.log('⚠️ Remote audio play failed:', e));
+      }
+      if (videoEl.srcObject) {
+        console.log('📹 Remote video element now has stream');
+      }
+    };
+    const timeout = setTimeout(attach, 300);
+    return () => clearTimeout(timeout);
   }, [remoteStream]);
 
   // Attach local stream whenever stream changes or local video element mounts
