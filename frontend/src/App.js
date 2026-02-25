@@ -388,7 +388,9 @@ function App() {
       if (videoElement.srcObject !== stream) {
         videoElement.srcObject = stream;
       }
-      videoElement.muted = false;
+      // Keep video muted so autoplay is reliable; audio is handled by remoteAudioRef.
+      videoElement.muted = true;
+      videoElement.defaultMuted = true;
       videoElement.play().catch((e) => debugLog('⚠️ Remote video autoplay blocked:', e));
     }
 
