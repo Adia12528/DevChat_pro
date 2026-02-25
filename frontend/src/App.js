@@ -117,6 +117,7 @@ function App() {
   const [rooms, setRooms] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
   const [groupRoomId, setGroupRoomId] = useState('');
+  const [newRoomIdInput, setNewRoomIdInput] = useState('');
   
   // Starred messages (localStorage-backed, per session)
   const [starredMsgIds, setStarredMsgIds] = useState(() => {
@@ -344,29 +345,48 @@ function App() {
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
 
+  const getLocalPreviewSize = useCallback((sizeIndex = localPreviewSizeIndex) => {
+    const baseSize = LOCAL_PREVIEW_SIZES[sizeIndex] || LOCAL_PREVIEW_SIZES[1];
+    if (!isMobile) return baseSize;
+
+    const maxMobileWidth = Math.max(112, Math.floor(window.innerWidth * 0.5));
+    const width = Math.min(baseSize.width, maxMobileWidth);
+    return { width, height: Math.round(width * 0.75) };
+  }, [isMobile, localPreviewSizeIndex]);
+
+  const clampLocalPreviewPosition = useCallback((x, y, size = getLocalPreviewSize()) => {
+    const padding = isMobile ? 6 : 8;
+    const maxX = Math.max(padding, window.innerWidth - size.width - padding);
+    const maxY = Math.max(padding, window.innerHeight - size.height - padding);
+    return {
+      x: Math.min(Math.max(padding, x), maxX),
+      y: Math.min(Math.max(padding, y), maxY)
+    };
+  }, [getLocalPreviewSize, isMobile]);
+
   useEffect(() => {
     if (callState === 'active' && callType === 'video' && !isCallMinimized && !localPreviewMovedRef.current) {
-      const previewSize = LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1];
+      const previewSize = getLocalPreviewSize(localPreviewSizeIndex);
       const padding = 20;
       const initialX = Math.max(padding, window.innerWidth - previewSize.width - padding);
       setLocalPreviewPosition({ x: initialX, y: 20 });
     }
-  }, [callState, callType, isCallMinimized, localPreviewSizeIndex]);
+  }, [callState, callType, isCallMinimized, localPreviewSizeIndex, getLocalPreviewSize]);
+
+  useEffect(() => {
+    if (callState !== 'active' || callType !== 'video' || isCallMinimized) return;
+
+    const handleViewportResize = () => {
+      const previewSize = getLocalPreviewSize(localPreviewSizeIndex);
+      setLocalPreviewPosition((position) => clampLocalPreviewPosition(position.x, position.y, previewSize));
+    };
+
+    window.addEventListener('resize', handleViewportResize);
+    return () => window.removeEventListener('resize', handleViewportResize);
+  }, [callState, callType, isCallMinimized, localPreviewSizeIndex, getLocalPreviewSize, clampLocalPreviewPosition]);
 
   useEffect(() => {
     if (!isDraggingLocalPreview) return;
-
-    const clampPosition = (x, y) => {
-      const previewSize = LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1];
-      const padding = 8;
-      const maxX = Math.max(padding, window.innerWidth - previewSize.width - padding);
-      const maxY = Math.max(padding, window.innerHeight - previewSize.height - padding);
-
-      return {
-        x: Math.min(Math.max(padding, x), maxX),
-        y: Math.min(Math.max(padding, y), maxY)
-      };
-    };
 
     const extractPoint = (event) => {
       if (event.touches && event.touches.length > 0) {
@@ -381,7 +401,7 @@ function App() {
       const offset = localPreviewDragOffsetRef.current;
       const nextX = point.x - offset.x;
       const nextY = point.y - offset.y;
-      setLocalPreviewPosition(clampPosition(nextX, nextY));
+      setLocalPreviewPosition(clampLocalPreviewPosition(nextX, nextY));
     };
 
     const onPointerUp = () => {
@@ -399,7 +419,7 @@ function App() {
       window.removeEventListener('touchmove', onPointerMove);
       window.removeEventListener('touchend', onPointerUp);
     };
-  }, [isDraggingLocalPreview, localPreviewSizeIndex]);
+  }, [isDraggingLocalPreview, clampLocalPreviewPosition]);
 
   // Attach remote stream whenever stream changes or call UI mounts/toggles
   useEffect(() => {
@@ -2434,6 +2454,29 @@ function App() {
     setShowMenuDropdown(false);
   }, []);
 
+  const joinGroupRoomFromPanel = useCallback(() => {
+    const nextRoomId = newRoomIdInput.trim();
+    if (!nextRoomId) return;
+
+    if (nextRoomId.includes('_dm_')) {
+      setErrorMessage('Use Conversations tab for DM chats. Enter a group Room ID here.');
+      setTimeout(() => setErrorMessage(''), 2600);
+      return;
+    }
+
+    setRooms((prev) => {
+      if (prev.some((roomEntry) => roomEntry.id === nextRoomId)) {
+        return prev;
+      }
+      return [{ id: nextRoomId, name: nextRoomId, type: 'group' }, ...prev];
+    });
+
+    setGroupRoomId(nextRoomId);
+    setNewRoomIdInput('');
+    switchRoom(nextRoomId);
+    goBack();
+  }, [newRoomIdInput, switchRoom, goBack]);
+
   const handleInstallClick = useCallback(async () => {
     if (!deferredPrompt) return;
     
@@ -3528,6 +3571,8 @@ function App() {
   const startLocalPreviewDrag = useCallback((event) => {
     if (callType !== 'video') return;
     if (event.button != null && event.button !== 0) return;
+    if (event.target && typeof event.target.closest === 'function' && event.target.closest('.local-video-size-btn')) return;
+    if (event.cancelable) event.preventDefault();
 
     const point = event.touches?.[0]
       ? { x: event.touches[0].clientX, y: event.touches[0].clientY }
@@ -3548,19 +3593,17 @@ function App() {
         ? Math.min(prev + 1, LOCAL_PREVIEW_SIZES.length - 1)
         : Math.max(prev - 1, 0);
 
-      const nextSize = LOCAL_PREVIEW_SIZES[next] || LOCAL_PREVIEW_SIZES[1];
-      const padding = 8;
-      const maxX = Math.max(padding, window.innerWidth - nextSize.width - padding);
-      const maxY = Math.max(padding, window.innerHeight - nextSize.height - padding);
+      const nextSize = getLocalPreviewSize(next);
 
       setLocalPreviewPosition((position) => ({
-        x: Math.min(Math.max(padding, position.x), maxX),
-        y: Math.min(Math.max(padding, position.y), maxY)
+        ...clampLocalPreviewPosition(position.x, position.y, nextSize)
       }));
 
       return next;
     });
-  }, []);
+  }, [getLocalPreviewSize, clampLocalPreviewPosition]);
+
+  const localPreviewSize = getLocalPreviewSize(localPreviewSizeIndex);
 
   // Toggle call recording
   const toggleRecording = useCallback(async () => {
@@ -3703,6 +3746,10 @@ function App() {
     });
   }, [groupRoomId, rooms, normalizedOnlineUsers, username]);
 
+  const groupRoomSummaries = useMemo(() => {
+    return roomSummaries.filter((roomEntry) => roomEntry.type !== 'dm');
+  }, [roomSummaries]);
+
   if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -3835,7 +3882,7 @@ function App() {
                     }}
                   >
                     <Hash size={18}/>
-                    <span>Rooms {roomSummaries.length > 0 && <span className="menu-badge">{roomSummaries.length}</span>}</span>
+                    <span>Rooms {groupRoomSummaries.length > 0 && <span className="menu-badge">{groupRoomSummaries.length}</span>}</span>
                   </button>
 
                   <button
@@ -5383,19 +5430,41 @@ function App() {
                 <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
                 <h3 className="panel-header-title"># Rooms</h3>
                 <div className="panel-header-actions">
-                  <span className="starred-count-badge">{roomSummaries.length}</span>
+                  <span className="starred-count-badge">{groupRoomSummaries.length}</span>
                 </div>
               </div>
 
               <div className="panel-content">
-                {roomSummaries.length === 0 ? (
+                <div className="rooms-join-row">
+                  <input
+                    className="rooms-join-input"
+                    placeholder="Enter Room ID"
+                    value={newRoomIdInput}
+                    onChange={(event) => setNewRoomIdInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        joinGroupRoomFromPanel();
+                      }
+                    }}
+                  />
+                  <button
+                    className="rooms-join-btn"
+                    onClick={joinGroupRoomFromPanel}
+                    disabled={!newRoomIdInput.trim()}
+                  >
+                    Join
+                  </button>
+                </div>
+
+                {groupRoomSummaries.length === 0 ? (
                   <div className="starred-panel-empty">
                     <Hash size={40} color="var(--txt-muted, #8696a0)" />
                     <p>No rooms yet</p>
-                    <span>Create a DM or join a room to see it here</span>
+                    <span>Join a group room using Room ID</span>
                   </div>
                 ) : (
-                  roomSummaries.map((roomEntry) => (
+                  groupRoomSummaries.map((roomEntry) => (
                     <button
                       key={`room-summary-${roomEntry.id}`}
                       className={`starred-panel-item room-summary-item ${(activeRoom || room) === roomEntry.id ? 'active' : ''}`}
@@ -5405,9 +5474,7 @@ function App() {
                       }}
                     >
                       <div className="starred-item-meta">
-                        <span className="starred-item-sender">
-                          {roomEntry.type === 'dm' ? 'Direct' : 'Group'}
-                        </span>
+                        <span className="starred-item-sender">Group</span>
                         <span className={`room-status-badge ${roomEntry.isActive ? 'active' : 'inactive'}`}>
                           {roomEntry.isActive ? 'Active' : 'Inactive'}
                         </span>
@@ -5720,12 +5787,13 @@ function App() {
                 {callType === 'video' && (
                   <div
                     className={`local-video-shell ${isDraggingLocalPreview ? 'dragging' : ''}`}
+                    onTouchStart={startLocalPreviewDrag}
                     style={{
                       position: 'absolute',
                       left: `${localPreviewPosition.x}px`,
                       top: `${localPreviewPosition.y}px`,
-                      width: `${(LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1]).width}px`,
-                      height: `${(LOCAL_PREVIEW_SIZES[localPreviewSizeIndex] || LOCAL_PREVIEW_SIZES[1]).height}px`
+                      width: `${localPreviewSize.width}px`,
+                      height: `${localPreviewSize.height}px`
                     }}
                   >
                     <div
