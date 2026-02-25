@@ -96,7 +96,7 @@ function App() {
   const [showDoubleTick, setShowDoubleTick] = useState(localStorage.getItem('showDoubleTick') !== 'false');
   const [showBlueTick, setShowBlueTick] = useState(localStorage.getItem('showBlueTick') !== 'false');
   const [copiedMsgId, setCopiedMsgId] = useState(null);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 600);
+  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 600);
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [deletingMsgId, setDeletingMsgId] = useState(null);
@@ -477,22 +477,22 @@ function App() {
 
   const getLocalPreviewSize = useCallback((sizeIndex = localPreviewSizeIndex) => {
     const baseSize = LOCAL_PREVIEW_SIZES[sizeIndex] || LOCAL_PREVIEW_SIZES[1];
-    if (!isMobile) return baseSize;
+    if (!isMobileView) return baseSize;
 
     const maxMobileWidth = Math.max(112, Math.floor(window.innerWidth * 0.5));
     const width = Math.min(baseSize.width, maxMobileWidth);
     return { width, height: Math.round(width * 0.75) };
-  }, [isMobile, localPreviewSizeIndex]);
+  }, [isMobileView, localPreviewSizeIndex]);
 
   const clampLocalPreviewPosition = useCallback((x, y, size = getLocalPreviewSize()) => {
-    const padding = isMobile ? 6 : 8;
+    const padding = isMobileView ? 6 : 8;
     const maxX = Math.max(padding, window.innerWidth - size.width - padding);
     const maxY = Math.max(padding, window.innerHeight - size.height - padding);
     return {
       x: Math.min(Math.max(padding, x), maxX),
       y: Math.min(Math.max(padding, y), maxY)
     };
-  }, [getLocalPreviewSize, isMobile]);
+  }, [getLocalPreviewSize, isMobileView]);
 
   useEffect(() => {
     if (callState === 'active' && callType === 'video' && !isCallMinimized && !localPreviewMovedRef.current) {
@@ -778,7 +778,7 @@ function App() {
 
   // Mobile detection
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 600);
+    const handleResize = () => setIsMobileView(window.innerWidth < 600);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -7804,8 +7804,8 @@ function App() {
                       onChange={e => setStreamSource(e.target.value)}
                     >
                       <option value="camera">Camera</option>
-                      {!isMobile && isWindows && <option value="screen">Screen</option>}
-                      {!isMobile && isWindows && <option value="both">Both (Camera + Screen)</option>}
+                      {!isMobileView && isWindows && <option value="screen">Screen</option>}
+                      {!isMobileView && isWindows && <option value="both">Both (Camera + Screen)</option>}
                     </select>
                   </div>
                   <button
