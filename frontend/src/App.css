@@ -3117,6 +3117,37 @@ body {
   padding: 8px 10px;
   font-size: 12px;
   font-weight: 600;
+.notifications-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.notification-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+}
+.notification-source {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.notification-source.dm {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+.notification-source.group {
+  color: var(--primary, #00a884);
+  background: rgba(0, 168, 132, 0.14);
+  border-color: rgba(0, 168, 132, 0.35);
+}
   cursor: pointer;
 }
 

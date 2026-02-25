@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3 } from 'lucide-react';
+import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3, Bell } from 'lucide-react';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -110,7 +110,7 @@ function App() {
   
   // Navigation & UI State (Breadcrumb/Back button system)
   const [navigationStack, setNavigationStack] = useState([]); // Track navigation history
-  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'settings'
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'notifications', 'settings'
   
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
@@ -118,6 +118,8 @@ function App() {
   const [activeRoom, setActiveRoom] = useState(null);
   const [groupRoomId, setGroupRoomId] = useState('');
   const [newRoomIdInput, setNewRoomIdInput] = useState('');
+  const [roomUserMap, setRoomUserMap] = useState({});
+  const [notificationItems, setNotificationItems] = useState([]);
   
   // Starred messages (localStorage-backed, per session)
   const [starredMsgIds, setStarredMsgIds] = useState(() => {
@@ -249,6 +251,8 @@ function App() {
   const audioRef = useRef(null);
   const usernameRef = useRef("");
   const roomRef = useRef("");
+  const roomsRef = useRef([]);
+  const subscribedRoomsRef = useRef(new Set());
   const soundEnabledRef = useRef(true);
   const pendingIceCandidatesRef = useRef([]);
   const seenIceCandidateKeysRef = useRef(new Set());
@@ -338,6 +342,7 @@ function App() {
 
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { roomsRef.current = rooms; }, [rooms]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   useEffect(() => { isAtBottomRef.current = isAtBottom; }, [isAtBottom]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -724,7 +729,8 @@ function App() {
     const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || (isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000");
 
     const newSocket = io(BACKEND_URL, {
-      transports: ['polling', 'websocket'],
+      transports: ['websocket', 'polling'],
+      rememberUpgrade: true,
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
@@ -740,7 +746,13 @@ function App() {
       setConnected(true);
       if (roomRef.current && usernameRef.current) {
         console.log("🔄 Re-joining room after reconnect:", roomRef.current);
-        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current });
+        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current, active: true, fetchHistory: true });
+        const allRooms = Array.from(subscribedRoomsRef.current);
+        allRooms
+          .filter((joinedRoom) => joinedRoom && joinedRoom !== roomRef.current)
+          .forEach((joinedRoom) => {
+            newSocket.emit("join_room", { room: joinedRoom, username: usernameRef.current, active: false, fetchHistory: false });
+          });
         newSocket.emit("update_status", { username: usernameRef.current, status: 'online' });
       }
     });
@@ -791,6 +803,48 @@ function App() {
       // Prevent duplicate messages
       if (lastMessageIdRef.current === data._id) return;
       lastMessageIdRef.current = data._id;
+
+      const messageRoom = data.room;
+      const activeRoomId = roomRef.current;
+      const isDifferentRoom = messageRoom && activeRoomId && messageRoom !== activeRoomId;
+
+      if (isDifferentRoom && data.sender !== usernameRef.current) {
+        const source = messageRoom.includes('_dm_') ? 'DM' : 'Group';
+        const previewText =
+          data.type === 'image' ? '📷 Photo' :
+          data.type === 'voice' ? '🎤 Voice message' :
+          data.type === 'file' ? `📎 ${data.fileName || 'File'}` :
+          (data.text || '').trim() || 'New message';
+
+        setNotificationItems((prev) => {
+          if (prev.some((entry) => entry.id === data._id)) return prev;
+          return [
+            {
+              id: data._id,
+              room: messageRoom,
+              sender: data.sender,
+              source,
+              preview: previewText,
+              time: data.time || new Date().toISOString()
+            },
+            ...prev
+          ].slice(0, 100);
+        });
+
+        if (soundEnabledRef.current) {
+          try {
+            if (!audioContextRef.current) {
+              audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            playNotificationSound(audioContextRef.current);
+          } catch (e) {
+            console.log('Sound playback failed:', e);
+          }
+        }
+
+        removeTypingUser(data.sender);
+        return;
+      }
       
       setChat((prev) => {
         // Double-check for duplicates in array
@@ -823,15 +877,38 @@ function App() {
     newSocket.on("user_joined", (data) => {
       console.log("👤 User joined:", data.username);
       const users = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
-      setOnlineUsers(users);
+      const targetRoom = data.room || roomRef.current;
+      setRoomUserMap((prev) => ({ ...prev, [targetRoom]: users }));
+      if (targetRoom === roomRef.current) {
+        setOnlineUsers(users);
+      }
+      setUserStatus((prev) => {
+        const next = { ...prev };
+        users.forEach((user) => {
+          next[user] = 'online';
+        });
+        return next;
+      });
     });
 
     newSocket.on("user_left", (data) => {
       console.log("👤 User left:", data.username);
+      const targetRoom = data.room || roomRef.current;
       if (Array.isArray(data.users)) {
-        setOnlineUsers([...new Set(data.users.filter(Boolean))]);
+        const users = [...new Set(data.users.filter(Boolean))];
+        setRoomUserMap((prev) => ({ ...prev, [targetRoom]: users }));
+        if (targetRoom === roomRef.current) {
+          setOnlineUsers(users);
+        }
       } else {
-        setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+        setRoomUserMap((prev) => {
+          const currentRoomUsers = prev[targetRoom] || [];
+          const users = currentRoomUsers.filter((user) => user !== data.username);
+          if (targetRoom === roomRef.current) {
+            setOnlineUsers(users);
+          }
+          return { ...prev, [targetRoom]: users };
+        });
       }
       setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
@@ -841,13 +918,31 @@ function App() {
     newSocket.on("user_list_updated", (data) => {
       console.log("📋 User list updated:", data.users);
       const activeUsers = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
-      setOnlineUsers(activeUsers);
+      const targetRoom = data.room || roomRef.current;
+      setRoomUserMap((prev) => ({ ...prev, [targetRoom]: activeUsers }));
+      if (targetRoom === roomRef.current) {
+        setOnlineUsers(activeUsers);
+      }
+      setUserStatus((prev) => {
+        const next = { ...prev };
+        activeUsers.forEach((user) => {
+          next[user] = 'online';
+        });
+        return next;
+      });
     });
 
     // Handle when user goes offline/disconnects
     newSocket.on("user_offline", (data) => {
       console.log("🔌 User went offline:", data.username);
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      setRoomUserMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((roomKey) => {
+          next[roomKey] = (next[roomKey] || []).filter((user) => user !== data.username);
+        });
+        return next;
+      });
       setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
@@ -856,6 +951,13 @@ function App() {
     newSocket.on("user_logout", (data) => {
       console.log("🚪 User logged out:", data.username);
       setOnlineUsers((prev) => prev.filter(u => u !== data.username));
+      setRoomUserMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((roomKey) => {
+          next[roomKey] = (next[roomKey] || []).filter((user) => user !== data.username);
+        });
+        return next;
+      });
       setUserStatus(prev => ({ ...prev, [data.username]: 'offline' }));
       removeTypingUser(data.username);
     });
@@ -1417,13 +1519,15 @@ function App() {
       
       setChat([]);
       setOnlineUsers([]);
+      setRoomUserMap({});
       setTypingUsers(new Set());
       setSearchQuery("");
       setDebouncedSearchQuery("");
       setGroupRoomId(room);
       setRooms([{ id: room, name: room, type: 'group' }]);
       setActiveRoom(room);
-      socketRef.current.emit("join_room", { room, username }); 
+      subscribedRoomsRef.current = new Set([room]);
+      socketRef.current.emit("join_room", { room, username, active: true, fetchHistory: true }); 
       socketRef.current.emit("update_status", { username, status: 'online' });
       setShowChat(true); 
     } 
@@ -2419,7 +2523,8 @@ function App() {
       setRooms(prev => [...prev, { id: dmRoom, name: targetUser, type: 'dm', with: targetUser }]);
     }
     setActiveRoom(dmRoom);
-    socketRef.current.emit("join_room", { room: dmRoom, username: usernameRef.current });
+    subscribedRoomsRef.current.add(dmRoom);
+    socketRef.current.emit("join_room", { room: dmRoom, username: usernameRef.current, active: true, fetchHistory: true });
     setRoom(dmRoom);
     setShowRoomSidebar(false);
     setShowMenuDropdown(false);
@@ -2429,11 +2534,14 @@ function App() {
   const switchRoom = useCallback((roomId) => {
     setActiveRoom(roomId);
     setRoom(roomId);
-    socketRef.current.emit("join_room", { room: roomId, username: usernameRef.current });
+    subscribedRoomsRef.current.add(roomId);
+    socketRef.current.emit("join_room", { room: roomId, username: usernameRef.current, active: true, fetchHistory: true });
     setChat([]);
+    const roomUsers = roomUserMap[roomId];
+    setOnlineUsers(Array.isArray(roomUsers) ? roomUsers : []);
     setShowRoomSidebar(false);
     setShowMenuDropdown(false);
-  }, []);
+  }, [roomUserMap]);
 
   const joinGroupRoomFromPanel = useCallback(() => {
     const nextRoomId = newRoomIdInput.trim();
@@ -2488,6 +2596,9 @@ function App() {
     setShowChat(false);
     setChat([]);
     setOnlineUsers([]);
+    setRoomUserMap({});
+    setNotificationItems([]);
+    subscribedRoomsRef.current = new Set();
     setTypingUsers(new Set());
     setConnected(false);
     setMessage('');
@@ -3681,6 +3792,22 @@ function App() {
     return rooms.find(r => r.id === currentRoomId) || null;
   }, [rooms, currentRoomId]);
 
+  useEffect(() => {
+    if (!showChat || !connected || !socketRef.current || !usernameRef.current) return;
+
+    const roomIds = roomsRef.current.map((entry) => entry.id).filter(Boolean);
+    roomIds.forEach((roomId) => {
+      if (subscribedRoomsRef.current.has(roomId)) return;
+      socketRef.current.emit('join_room', {
+        room: roomId,
+        username: usernameRef.current,
+        active: roomId === roomRef.current,
+        fetchHistory: false
+      });
+      subscribedRoomsRef.current.add(roomId);
+    });
+  }, [showChat, connected, rooms, currentRoomId]);
+
   const mediaMessages = useMemo(() => {
     return [...chat]
       .filter(m => ['image', 'voice', 'file'].includes(m.type) && (m.fileUrl || m.text))
@@ -3881,6 +4008,17 @@ function App() {
                   >
                     <ImageIcon size={18}/>
                     <span>Media {mediaMessages.length > 0 && <span className="menu-badge">{mediaMessages.length}</span>}</span>
+                  </button>
+
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      navigateTo('notifications');
+                      setShowMenuDropdown(false);
+                    }}
+                  >
+                    <Bell size={18}/>
+                    <span>Notifications {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}</span>
                   </button>
 
                   <button 
@@ -5470,6 +5608,83 @@ function App() {
                         {roomEntry.name}
                         {roomEntry.peerCount > 0 ? ` • ${roomEntry.peerCount} online` : ''}
                       </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {currentView === 'notifications' && (
+          <motion.div
+            className="starred-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => goBack()}
+          >
+            <motion.div
+              className="starred-panel settings-panel"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="panel-header-nav">
+                <button onClick={() => goBack()} className="panel-back-btn" title="Go back">← Back</button>
+                <h3 className="panel-header-title">🔔 Notifications</h3>
+                <div className="panel-header-actions">
+                  <span className="starred-count-badge">{notificationItems.length}</span>
+                </div>
+              </div>
+
+              <div className="panel-content">
+                {notificationItems.length > 0 && (
+                  <div className="notifications-toolbar">
+                    <button
+                      className="media-panel-btn"
+                      onClick={() => setNotificationItems([])}
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+
+                {notificationItems.length === 0 ? (
+                  <div className="starred-panel-empty">
+                    <Bell size={40} color="var(--txt-muted, #8696a0)" />
+                    <p>No notifications</p>
+                    <span>Messages from other chats will appear here</span>
+                  </div>
+                ) : (
+                  notificationItems.map((notification) => (
+                    <button
+                      key={`notification-${notification.id}`}
+                      className="starred-panel-item notification-item"
+                      onClick={() => {
+                        setRooms((prev) => {
+                          if (prev.some((roomEntry) => roomEntry.id === notification.room)) return prev;
+                          if (notification.room.includes('_dm_')) {
+                            const participants = notification.room.split('_dm_');
+                            const peer = participants.find((participant) => participant && participant !== usernameRef.current) || notification.sender;
+                            return [...prev, { id: notification.room, name: peer, type: 'dm', with: peer }];
+                          }
+                          return [...prev, { id: notification.room, name: notification.room, type: 'group' }];
+                        });
+
+                        setNotificationItems((prev) => prev.filter((entry) => entry.id !== notification.id));
+                        switchRoom(notification.room);
+                        goBack();
+                      }}
+                    >
+                      <div className="starred-item-meta">
+                        <span className="starred-item-sender">{notification.sender}</span>
+                        <span className={`notification-source ${notification.source === 'DM' ? 'dm' : 'group'}`}>{notification.source}</span>
+                        <span className="starred-item-time">{formatRelativeTime(notification.time)}</span>
+                      </div>
+                      <div className="starred-item-preview">{notification.preview}</div>
                     </button>
                   ))
                 )}

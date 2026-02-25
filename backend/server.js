@@ -150,7 +150,7 @@ io.on('connection', (socket) => {
     const emitRoomUserList = (room) => {
         if (!room) return;
         const users = getUniqueRoomUsers(room);
-        io.to(room).emit('user_list_updated', { users, count: users.length });
+        io.to(room).emit('user_list_updated', { room, users, count: users.length });
     };
 
     const cleanupRoomIfEmpty = async (room) => {
@@ -174,7 +174,7 @@ io.on('connection', (socket) => {
         const count = remainingUsers.length;
 
         io.to(room).emit('user_stopped_typing', username);
-        io.to(room).emit('user_left', { username, users: remainingUsers, count });
+        io.to(room).emit('user_left', { room, username, users: remainingUsers, count });
         emitRoomUserList(room);
 
         if (emitOffline) {
@@ -189,29 +189,44 @@ io.on('connection', (socket) => {
     socket.on('join_room', async (data) => {
         const room = typeof data === 'string' ? data : data.room;
         const username = (typeof data === 'object' ? data.username : '') || 'Anonymous';
+        const shouldFetchHistory = typeof data === 'object' ? data.fetchHistory !== false : true;
+        const setActiveRoom = typeof data === 'object' ? data.active !== false : true;
+
+        if (!room) return;
 
         const previousRoom = socket.room;
         if (previousRoom && previousRoom !== room) {
             socket.leave(previousRoom);
-            await removeSocketFromRoom({ room: previousRoom, username, emitOffline: false });
+            removeSocketFromRoom({ room: previousRoom, username, emitOffline: false })
+                .catch((err) => console.error('Cleanup error while switching rooms:', err));
         }
         
         socket.join(room);
         socket.username = username;
-        socket.room = room;
+        if (setActiveRoom) {
+            socket.room = room;
+            socket.activeRoom = room;
+        }
         
         // Initialize room if doesn't exist
         if (!roomUsers[room]) roomUsers[room] = {};
+        const isNewJoin = !roomUsers[room][socket.id];
         roomUsers[room][socket.id] = username;
 
         // Broadcast presence immediately (don't wait for DB history load)
-        const users = getUniqueRoomUsers(room);
-        io.to(room).emit('user_joined', { username, users, count: users.length });
-        emitRoomUserList(room);
+        if (isNewJoin) {
+            const users = getUniqueRoomUsers(room);
+            io.to(room).emit('user_joined', { room, username, users, count: users.length });
+            emitRoomUserList(room);
+        } else {
+            emitRoomUserList(room);
+        }
         
         // Send chat history
-        const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
-        socket.emit('load_history', history.map(serializeMessage));
+        if (shouldFetchHistory) {
+            const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
+            socket.emit('load_history', history.map(serializeMessage));
+        }
     });
 
     socket.on('leave_room', async (data) => {
@@ -376,10 +391,11 @@ io.on('connection', (socket) => {
 
     socket.on('update_status', (data) => {
         const { username, status } = data;
-        if (socket.room) {
-            socket.to(socket.room).emit('user_status_changed', { username, status });
+        const activeRoom = socket.activeRoom || socket.room;
+        if (activeRoom) {
+            socket.to(activeRoom).emit('user_status_changed', { username, status });
             if (status === 'online') {
-                emitRoomUserList(socket.room);
+                emitRoomUserList(activeRoom);
             }
         }
     });
@@ -395,8 +411,9 @@ io.on('connection', (socket) => {
     // ==========================
 
     const resolveCallTargetSocket = (toUsername) => {
-        if (!socket.room || !roomUsers[socket.room] || !toUsername) return null;
-        return findTargetSocketInRoom(socket.room, toUsername);
+        const activeRoom = socket.activeRoom || socket.room;
+        if (!activeRoom || !roomUsers[activeRoom] || !toUsername) return null;
+        return findTargetSocketInRoom(activeRoom, toUsername);
     };
 
     const notifyCallerUnavailable = (reason = 'User not found or offline') => {
@@ -423,7 +440,7 @@ io.on('connection', (socket) => {
                 });
                 signalLog(`✅ Call offer forwarded to ${data.to} (socket: ${targetSocket})`);
             } else {
-                signalLog(`❌ Target user ${data.to} not found in room ${socket.room}`);
+                signalLog(`❌ Target user ${data.to} not found in room ${socket.activeRoom || socket.room}`);
                 notifyCallerUnavailable('User not found or offline');
             }
         } catch (err) {
@@ -521,10 +538,11 @@ io.on('connection', (socket) => {
         // Ensure socket has proper username even if not set
         const username = socket.username || 'User';
         
-        if (socket.room && roomUsers[socket.room]) {
-            removeSocketFromRoom({ room: socket.room, username, emitOffline: true })
+        const joinedRooms = Object.keys(roomUsers).filter((room) => roomUsers[room] && roomUsers[room][socket.id]);
+        joinedRooms.forEach((room) => {
+            removeSocketFromRoom({ room, username, emitOffline: true })
                 .catch((err) => console.error('Cleanup error on disconnect:', err));
-        }
+        });
         
         // If user was closing browser without calling user_leaving, clean up typing
         if (socket.username) {
