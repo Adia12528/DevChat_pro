@@ -74,6 +74,13 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+    // Device detection for streaming controls
+    const isWindows = /Windows/i.test(navigator.userAgent);
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // Stream settings state
+    const [streamVisibility, setStreamVisibility] = useState('room');
+    const [streamSource, setStreamSource] = useState('camera');
   // Existing state
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
@@ -4278,12 +4285,37 @@ function App() {
   const buildLivestreamSourceStream = useCallback(async (sourceMode) => {
 
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-    let source = sourceMode === 'screen' ? 'screen' : 'camera';
+    let source = sourceMode === 'screen' ? 'screen' : (sourceMode === 'both' ? 'both' : 'camera');
 
     // Defensive: Always check for mediaDevices
     if (!navigator.mediaDevices) {
       alert('Your browser does not support media devices.');
       throw new Error('Media devices not supported');
+    }
+
+    // 'Both' streaming: Windows only, combine camera and screen tracks
+    if (source === 'both' && !isMobile && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
+      try {
+        const cameraConstraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
+          callType: 'video',
+          userAgent: navigator.userAgent,
+          connectionInfo: runtimeConnectionInfo
+        }));
+        const cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const composedStream = new MediaStream();
+        // Add camera tracks
+        cameraStream.getVideoTracks().forEach(track => composedStream.addTrack(track));
+        cameraStream.getAudioTracks().forEach(track => composedStream.addTrack(track));
+        // Add screen tracks
+        displayStream.getVideoTracks().forEach(track => composedStream.addTrack(track));
+        displayStream.getAudioTracks().forEach(track => composedStream.addTrack(track));
+        refreshVideoInputs();
+        return { stream: composedStream, source: 'both' };
+      } catch (err) {
+        alert('Both streaming failed. Falling back to camera.');
+        source = 'camera';
+      }
     }
 
     if (source === 'screen') {
@@ -4319,6 +4351,7 @@ function App() {
             }
           }
 
+          refreshVideoInputs();
           return { stream: composedStream, source };
         } catch (err) {
           alert('Screen sharing failed. Falling back to camera.');
@@ -4327,7 +4360,7 @@ function App() {
       }
     }
 
-    // Always fallback to camera if screen is not possible
+    // Always fallback to camera if screen/both is not possible
     const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
       callType: 'video',
       userAgent: navigator.userAgent,
@@ -5718,71 +5751,18 @@ function App() {
 
                   <div className="menu-divider"></div>
 
+
                   <button
-                    className={`menu-item menu-item-expand ${showStreamingTab ? 'expanded' : ''}`}
-                    onClick={() => setShowStreamingTab((prev) => !prev)}
-                    title="Open streaming options"
+                    className="menu-item"
+                    onClick={() => {
+                      navigateTo('stream-settings');
+                      setShowMenuDropdown(false);
+                    }}
+                    title="Stream settings and start streaming"
                   >
                     <Disc3 size={18}/>
-                    <span>Streaming</span>
-                    <ChevronDown size={16} className={`menu-expand-icon ${showStreamingTab ? 'open' : ''}`} />
+                    <span>Stream</span>
                   </button>
-
-                  {showStreamingTab && (
-                    <div className="menu-subsection">
-                      <button
-                        className="menu-item menu-item-sub"
-                        onClick={() => {
-                          startLivestream('room', 'camera');
-                          setShowMenuDropdown(false);
-                        }}
-                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                        title={isGroupRoomActive ? 'Camera livestream only in this room' : 'Open a group room to start livestream'}
-                      >
-                        <Camera size={16}/>
-                        <span>Camera Livestream (Room)</span>
-                      </button>
-
-                      <button
-                        className="menu-item menu-item-sub"
-                        onClick={() => {
-                          startLivestream('public', 'camera');
-                          setShowMenuDropdown(false);
-                        }}
-                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                        title="Camera livestream to everyone online"
-                      >
-                        <Disc3 size={16}/>
-                        <span>Camera Livestream (Public)</span>
-                      </button>
-
-                      <button
-                        className="menu-item menu-item-sub"
-                        onClick={() => {
-                          startLivestream('room', 'screen');
-                          setShowMenuDropdown(false);
-                        }}
-                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                        title={isGroupRoomActive ? 'Screen livestream only in this room' : 'Open a group room to start livestream'}
-                      >
-                        <Monitor size={16}/>
-                        <span>Screen Livestream (Room)</span>
-                      </button>
-
-                      <button
-                        className="menu-item menu-item-sub"
-                        onClick={() => {
-                          startLivestream('public', 'screen');
-                          setShowMenuDropdown(false);
-                        }}
-                        disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
-                        title="Screen livestream to everyone online"
-                      >
-                        <Radio size={16}/>
-                        <span>Screen Livestream (Public)</span>
-                      </button>
-                    </div>
-                  )}
 
                   {liveStreamInfo?.isHost && (
                     <button
@@ -7800,45 +7780,52 @@ function App() {
               </div>
 
               <div className="panel-content settings-content">
+
                 <div className="settings-section">
-                  <h4>Ringtone</h4>
+                  <h4>Stream Settings</h4>
                   <div className="settings-row">
-                    <label htmlFor="ringtone-style">Tone</label>
+                    <label htmlFor="stream-visibility">Visibility</label>
                     <select
-                      id="ringtone-style"
+                      id="stream-visibility"
                       className="settings-select"
-                      value={ringtoneStyle}
-                      onChange={(e) => setRingtoneStyle(e.target.value)}
+                      value={streamVisibility || 'room'}
+                      onChange={e => setStreamVisibility(e.target.value)}
                     >
-                      <option value="soft">Soft (recommended)</option>
-                      <option value="chime">Chime</option>
-                      <option value="pulse">Pulse</option>
-                      <option value="off">Off</option>
+                      <option value="room">Room Only</option>
+                      <option value="public">Public</option>
                     </select>
                   </div>
                   <div className="settings-row">
-                    <label htmlFor="ringtone-volume">Volume</label>
-                    <input
-                      id="ringtone-volume"
-                      className="settings-range"
-                      type="range"
-                      min="0.05"
-                      max="1"
-                      step="0.05"
-                      value={ringtoneVolume}
-                      onChange={(e) => setRingtoneVolume(Number(e.target.value))}
-                    />
-                    <span className="settings-value">{Math.round(ringtoneVolume * 100)}%</span>
+                    <label htmlFor="stream-source">Source</label>
+                    <select
+                      id="stream-source"
+                      className="settings-select"
+                      value={streamSource || 'camera'}
+                      onChange={e => setStreamSource(e.target.value)}
+                    >
+                      <option value="camera">Camera</option>
+                      {!isMobile && isWindows && <option value="screen">Screen</option>}
+                      {!isMobile && isWindows && <option value="both">Both (Camera + Screen)</option>}
+                    </select>
                   </div>
                   <button
                     className="settings-btn"
-                    onClick={() => {
-                      playRingtone();
-                      setTimeout(() => stopRingtone(), 1800);
-                    }}
+                    onClick={() => startLivestream(streamVisibility, streamSource)}
+                    disabled={livestreamControlsDisabled || !!liveStreamInfo?.isHost}
                   >
-                    Preview ringtone
+                    Start Stream
                   </button>
+                  {liveStreamInfo?.isHost && (
+                    <button
+                      className="settings-btn settings-btn-danger"
+                      onClick={() => stopHostedLivestream(true)}
+                    >
+                      Stop Stream
+                    </button>
+                  )}
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                    <span>Camera only is available on mobile. Screen and Both are available on Windows.</span>
+                  </div>
                 </div>
 
                 <div className="settings-section">
