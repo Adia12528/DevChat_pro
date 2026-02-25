@@ -2470,33 +2470,29 @@ function App() {
     }
   }, []);
 
-  const waitForIceGatheringComplete = useCallback((pc, timeoutMs = 2500) => {
+  const waitForIceGatheringComplete = useCallback((pc, timeoutMs = 3500) => {
+    if (!pc || pc.iceGatheringState === 'complete') {
+      return Promise.resolve();
+    }
+
     return new Promise((resolve) => {
-      if (!pc || pc.iceGatheringState === 'complete') {
-        resolve();
-        return;
-      }
-
       let settled = false;
-      const cleanup = () => {
-        pc.removeEventListener('icegatheringstatechange', handleStateChange);
-      };
-
       const finish = () => {
         if (settled) return;
         settled = true;
-        cleanup();
+        pc.removeEventListener('icegatheringstatechange', onStateChange);
+        clearTimeout(timer);
         resolve();
       };
 
-      const handleStateChange = () => {
+      const onStateChange = () => {
         if (pc.iceGatheringState === 'complete') {
           finish();
         }
       };
 
-      pc.addEventListener('icegatheringstatechange', handleStateChange);
-      setTimeout(finish, timeoutMs);
+      const timer = setTimeout(finish, timeoutMs);
+      pc.addEventListener('icegatheringstatechange', onStateChange);
     });
   }, []);
 
@@ -2564,15 +2560,11 @@ function App() {
   const createPeerConnection = useCallback((targetUsername, options = {}) => {
     debugLog('🔧 Creating PREMIUM peer connection for:', targetUsername);
     const callKind = options.callKind || 'video';
-    const peerConfig = {
-      ...iceServersConfig,
-      iceTransportPolicy: options.forceRelay ? 'relay' : iceServersConfig.iceTransportPolicy
-    };
     inboundRemoteStreamRef.current = new MediaStream();
     remoteStreamRef.current = inboundRemoteStreamRef.current;
     setRemoteStream(inboundRemoteStreamRef.current);
     
-    const pc = new RTCPeerConnection(peerConfig);
+    const pc = new RTCPeerConnection(iceServersConfig);
     
     // PREMIUM: Initialize call statistics
     const stats = new CallStatistics();
@@ -2870,8 +2862,7 @@ function App() {
       }
 
       // Create peer connection with premium features
-      const isMobileCaller = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-      const pc = createPeerConnection(targetUser, { callKind: type, forceRelay: isMobileCaller });
+      const pc = createPeerConnection(targetUser, { callKind: type });
 
       // Add local stream tracks
       stream.getTracks().forEach(track => {
@@ -2903,8 +2894,14 @@ function App() {
         offer = await pc.createOffer();
         debugLog('🎤 [CALLER] Created offer');
         await pc.setLocalDescription(offer);
-        await waitForIceGatheringComplete(pc, isMobileCaller ? 3500 : 2000);
         debugLog('🎤 [CALLER] Set local description');
+
+        const isMobileCaller = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+        if (isMobileCaller) {
+          debugLog('⏳ [CALLER] Mobile detected, waiting for ICE gathering completion before sending offer');
+          await waitForIceGatheringComplete(pc, 4000);
+          offer = pc.localDescription || offer;
+        }
       } catch (offerErr) {
         throw new Error(`Failed to create call offer: ${offerErr.message}`);
       }
@@ -3093,7 +3090,6 @@ function App() {
         answer = await pc.createAnswer();
         console.log('🎤 [RECEIVER] Setting local description with answer');
         await pc.setLocalDescription(answer);
-        await waitForIceGatheringComplete(pc, 2000);
         console.log('✅ [RECEIVER] Local description set');
       } catch (answerErr) {
         throw new Error(`Failed to create answer: ${answerErr.message}`);
@@ -3182,7 +3178,7 @@ function App() {
       setCallError(errorMsg);
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, waitForIceGatheringComplete]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo]);
 
   // End call with premium cleanup
   const endCall = useCallback((notifyPeer = true) => {
