@@ -13,18 +13,6 @@
   overflow: hidden;
 }
 
-/* Responsive: livestream container */
-@media (max-width: 600px) {
-  .livestream-fullscreen-container {
-    padding: 0;
-    min-width: 0;
-    min-height: 0;
-    border-radius: 0;
-    width: 100vw;
-    height: 100vh;
-  }
-}
-
 .livestream-header {
   position: absolute;
   top: 0;
@@ -37,54 +25,6 @@
   background: var(--header);
   border-bottom: 1px solid var(--border);
   box-sizing: border-box;
-}
-
-@media (max-width: 600px) {
-  .livestream-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 8px 4px;
-    font-size: 14px;
-  }
-  .livestream-header h2 {
-    font-size: 15px !important;
-  }
-  .livestream-header button {
-    padding: 7px 12px !important;
-    font-size: 14px !important;
-    border-radius: 7px !important;
-  }
-}
-/* Stream toast for streaming errors/success */
-.stream-toast {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  background: #00a884;
-  color: #fff;
-  padding: 12px 24px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  font-weight: 600;
-  font-size: 16px;
-  min-width: 220px;
-  text-align: center;
-  max-width: 90vw;
-  word-break: break-word;
-}
-.stream-toast.error {
-  background: #ff4d4f;
-}
-@media (max-width: 600px) {
-  .stream-toast {
-    font-size: 14px;
-    padding: 10px 10px;
-    min-width: 120px;
-    max-width: 98vw;
-  }
 }
 
 /* Responsive adjustments for mobile and tablets */
