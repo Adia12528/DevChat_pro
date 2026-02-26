@@ -76,6 +76,14 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+      // Blocked users state (localStorage-backed)
+      const [blockedUsers, setBlockedUsers] = useState(() => {
+        try {
+          return JSON.parse(localStorage.getItem('devchatBlockedUsers') || '[]');
+        } catch {
+          return [];
+        }
+      });
     // Device detection for streaming controls
     const isWindows = /Windows/i.test(navigator.userAgent);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
