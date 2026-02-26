@@ -76,6 +76,14 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+        // Reported users state (localStorage-backed)
+        const [reportedUsers, setReportedUsers] = useState(() => {
+          try {
+            return JSON.parse(localStorage.getItem('devchatReportedUsers') || '[]');
+          } catch {
+            return [];
+          }
+        });
       // Blocked users state (localStorage-backed)
       const [blockedUsers, setBlockedUsers] = useState(() => {
         try {
