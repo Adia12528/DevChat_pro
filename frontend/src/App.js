@@ -76,6 +76,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+            // Error message state
+            const [errorMessage, setErrorMessage] = useState('');
           // Success and error message states
           const [successMessage, setSuccessMessage] = useState('');
 
