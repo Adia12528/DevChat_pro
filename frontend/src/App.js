@@ -77,7 +77,19 @@ const LOCAL_PREVIEW_SIZES = [
 
 function App() {
 
-  // Host: viewer join/leave notifications
+  // --- Streaming enhancement states ---
+  const [activeStreams, setActiveStreams] = useState([]);
+  const [streamJoinModal, setStreamJoinModal] = useState({ visible: false, streams: [] });
+  const [streamSearchQuery, setStreamSearchQuery] = useState('');
+  const [streamSuggestions, setStreamSuggestions] = useState([]);
+  const [streamViewers, setStreamViewers] = useState([]);
+  const [showViewersList, setShowViewersList] = useState(false);
+  const [streamComments, setStreamComments] = useState([]);
+  const [streamCommentInput, setStreamCommentInput] = useState('');
+  const [streamReactions, setStreamReactions] = useState([]);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [streamNotifications, setStreamNotifications] = useState([]);
+  // ...existing code...
   useEffect(() => {
     if (!socketRef.current || !liveStreamInfo?.isHost) return;
 
@@ -271,11 +283,12 @@ const ViewersList = ({ viewers, onClose }) => {
   );
 };
                     // Helper function to generate unique stream ID
-                    const generateStreamUniqueId = (host, sessionId) => {
+                    const generateStreamUniqueId = useCallback((host, sessionId) => {
                       const timestamp = Date.now().toString(36);
                       const random = Math.random().toString(36).substring(2, 6);
                       return `${host.substring(0, 3)}-${timestamp}-${random}`.toUpperCase();
-                    };
+                    }, []);
+                    // ...existing code...
                   // Stream notifications and events
                   useEffect(() => {
                     if (!socketRef.current) return;
@@ -483,163 +496,9 @@ const ViewersList = ({ viewers, onClose }) => {
   // Streaming enhancement states
   const [activeStreams, setActiveStreams] = useState([]); // All active streams in the app
   const [streamJoinModal, setStreamJoinModal] = useState({ visible: false, streams: [] });
-  const [streamSearchQuery, setStreamSearchQuery] = useState('');
-  const [streamSuggestions, setStreamSuggestions] = useState([]);
-  const [streamViewers, setStreamViewers] = useState([]);
-  const [showViewersList, setShowViewersList] = useState(false);
-  const [streamComments, setStreamComments] = useState([]);
-  const [streamCommentInput, setStreamCommentInput] = useState('');
-  const [streamReactions, setStreamReactions] = useState([]);
-  const [viewerCount, setViewerCount] = useState(0);
-  const [streamNotifications, setStreamNotifications] = useState([]);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState('');
-  // (successMessage, errorMessage) state already declared above
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
-  const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
-  const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
-  const [ringtoneVolume, setRingtoneVolume] = useState(() => {
-    const storedVolume = Number(localStorage.getItem('ringtoneVolume'));
-    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0.05, storedVolume)) : 0.18;
-  });
-  const [autoJoinLivestream, setAutoJoinLivestream] = useState(() => localStorage.getItem('autoJoinLivestream') === 'true');
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const [userProfiles, setUserProfiles] = useState({});
-  const [showProfileModal, setShowProfileModal] = useState(null);
-  const [userStatus, setUserStatus] = useState({});
-  const [pinnedMessages, setPinnedMessages] = useState([]);
-  const [showMarkdown, setShowMarkdown] = useState(true);
-  
-  // Voice message states
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [playingVoiceId, setPlayingVoiceId] = useState(null);
-  const [recordingLocked, setRecordingLocked] = useState(false);
-  const [slideDistance, setSlideDistance] = useState(0);
-  const [startX, setStartX] = useState(0);
-  
-  // Image preview states
-  const [imageCaption, setImageCaption] = useState('');
-  const [showImagePreview, setShowImagePreview] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]); // Multiple images: [{file, preview, id}]
-  const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
-  const [isDragging, setIsDragging] = useState(false); // Drag and drop state
-  
-  // Navigation & UI State (Breadcrumb/Back button system)
-  const [navigationStack, setNavigationStack] = useState([]); // Track navigation history
-  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'notifications', 'settings'
-  
-  // Private chat/DM states
-  const [showRoomSidebar, setShowRoomSidebar] = useState(false);
-  const [rooms, setRooms] = useState([]);
-  const [activeRoom, setActiveRoom] = useState(null);
-  const [groupRoomId, setGroupRoomId] = useState('');
-  const [newRoomIdInput, setNewRoomIdInput] = useState('');
-  const [roomUserMap, setRoomUserMap] = useState({});
-  const [activeRoomRegistry, setActiveRoomRegistry] = useState([]);
-  const [globalPresenceUsers, setGlobalPresenceUsers] = useState([]);
-  const [notificationItems, setNotificationItems] = useState([]);
-  const [videoInputDevices, setVideoInputDevices] = useState([]);
-  const [selectedVideoInputId, setSelectedVideoInputId] = useState(() => localStorage.getItem('devchatPreferredCameraId') || '');
-  const [notificationPrefs, setNotificationPrefs] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('devchatNotificationPrefs') || '{}');
-      return {
-        mutedRooms: Array.isArray(parsed.mutedRooms) ? parsed.mutedRooms : [],
-        dmOnlyPriority: !!parsed.dmOnlyPriority,
-        mentionOnly: !!parsed.mentionOnly,
-        quietHoursEnabled: !!parsed.quietHoursEnabled,
-        quietStart: parsed.quietStart || '22:00',
-        quietEnd: parsed.quietEnd || '07:00'
-      };
-    } catch {
-      return {
-        mutedRooms: [],
-        dmOnlyPriority: false,
-        mentionOnly: false,
-        quietHoursEnabled: false,
-        quietStart: '22:00',
-        quietEnd: '07:00'
-      };
-    }
-  });
-  const [outgoingQueue, setOutgoingQueue] = useState([]);
-  const [roomDrafts, setRoomDrafts] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('devchatRoomDrafts') || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const [dmSearchQuery, setDmSearchQuery] = useState('');
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
-  const [searchFilters, setSearchFilters] = useState({
-    sender: '',
-    fromDate: '',
-    toDate: '',
-    mediaType: 'all',
-    mentionsOnly: false
-  });
-  const [typingTimeoutByRoom, setTypingTimeoutByRoom] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem('devchatTypingTimeoutByRoom') || '{}');
-      return {
-        defaultGroup: Number(parsed.defaultGroup) || 3000,
-        defaultDm: Number(parsed.defaultDm) || 1800,
-        ...parsed
-      };
-    } catch {
-      return { defaultGroup: 3000, defaultDm: 1800 };
-    }
-  });
-  const [roomPolicies, setRoomPolicies] = useState({});
-  const [roomInviteTarget, setRoomInviteTarget] = useState('');
-  const [showRoomAdminTools, setShowRoomAdminTools] = useState(false);
-  
-  // Starred messages (localStorage-backed, per session)
-  const [starredMsgIds, setStarredMsgIds] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('devChatStarred') || '[]')); }
-    catch { return new Set(); }
-  });
-  const [showStarredPanel, setShowStarredPanel] = useState(false);
 
-  // Read receipts & last seen
-  const [userLastSeen, setUserLastSeen] = useState({}); // { username: timestamp }
-  const [reactionCounts, setReactionCounts] = useState({}); // { msgId: { emoji: count } }
-  
-  // Quick reply templates
-  const [quickReplyTemplates, setQuickReplyTemplates] = useState([
-    'Got it! 👍',
-    'Thanks for the info!',
-    'Let me look into it 🔍',
-    'I agree 💯',
-    'Not sure, let me check 🤔',
-    'ASAP! ⚡'
-  ]);
-  const [showQuickReplies, setShowQuickReplies] = useState(false);
-  const [threadRootId, setThreadRootId] = useState(null);
-  
-  // Mention notifications
-  const [mentionedMessages, setMentionedMessages] = useState([]);
-  const [recentMentions, setRecentMentions] = useState(0);
-
-  // Conversation stats
-  const [conversationStats, setConversationStats] = useState({
-    totalMessages: 0,
-    totalUsers: 0,
-    avgMessageLength: 0,
-    mostActiveMember: null
-  });
-
-  // PWA Install prompt
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
-  const [isAppInstalled, setIsAppInstalled] = useState(false);
-  
+  // --- Move these component definitions to the bottom of the file, outside App ---
+  // ...existing code...
   // Menu dropdown state
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
   const [showStreamingTab, setShowStreamingTab] = useState(false);
