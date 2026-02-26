@@ -4,42 +4,8 @@ const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 const cors = require('cors');
 
-// CORS Configuration - Allow all Vercel deployments and localhost
-const frontendOrigin = process.env.FRONTEND_ORIGIN;
-const allowedOrigins = [
-    'https://devchat-pro-frontend.vercel.app',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    frontendOrigin
-].filter(Boolean);
 
-const isAllowedOrigin = (origin) => {
-    if (!origin) return true;
-    return allowedOrigins.includes(origin) || origin.endsWith('.vercel.app');
-};
-
-const getOriginLabel = (origin) => origin || 'no-origin';
-
-const corsOriginHandler = (origin, callback) => {
-    if (isAllowedOrigin(origin)) {
-        callback(null, true);
-    } else {
-        console.log('⚠️ CORS blocked origin:', getOriginLabel(origin));
-        callback(new Error('Not allowed by CORS'));
-    }
-};
-
-const corsOptions = {
-    origin: corsOriginHandler,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-app.use(express.json());
+// ...existing code...
 
 // Debug endpoint to check CORS headers and confirm backend code version
 app.get('/cors-debug', (req, res) => {
