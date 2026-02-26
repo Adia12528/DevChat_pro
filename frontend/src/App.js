@@ -199,7 +199,17 @@ function App() {
         quietStart: parsed.quietStart || '22:00',
         quietEnd: parsed.quietEnd || '07:00'
       };
-                  {/* ...existing code... */}
+    } catch {
+      return {
+        mutedRooms: [],
+        dmOnlyPriority: false,
+        mentionOnly: false,
+        quietHoursEnabled: false,
+        quietStart: '22:00',
+        quietEnd: '07:00'
+      };
+    }
+  });
   const [outgoingQueue, setOutgoingQueue] = useState([]);
   const [roomDrafts, setRoomDrafts] = useState(() => {
     try {

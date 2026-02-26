@@ -10,6 +10,7 @@
     "emoji-picker-react": "^4.5.16",
     "framer-motion": "^10.0.0",
     "livekit-client": "^2.17.2",
+    "livekit-server-sdk": "^2.15.0",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
