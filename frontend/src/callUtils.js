@@ -822,25 +822,3 @@ export async function waitForIceGatheringComplete(pc, timeoutMs = 3000) {
   });
 }
 
-export default {
-  OPTIMAL_AUDIO_CONSTRAINTS,
-  OPTIMAL_VIDEO_CONSTRAINTS,
-  OPTIMAL_AUDIO_ONLY_CONSTRAINTS,
-  MOBILE_VIDEO_CONSTRAINTS,
-  ICE_SERVERS,
-  detectDeviceProfile,
-  getAdaptiveMediaConstraints,
-  getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
-  optimizeRtpSenders,
-  CallStatistics,
-  CallRecorder,
-  VideoEffectsProcessor,
-  CallHistory,
-  AdaptiveQualityController,
-  getScreenStream,
-  switchToScreenShare,
-  switchBackToCamera,
-  getQualityIndicator,
-  waitForIceGatheringComplete
-};
