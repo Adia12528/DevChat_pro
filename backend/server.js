@@ -1,6 +1,45 @@
-﻿const express = require('express');
+﻿
+const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
 const app = express();
+const cors = require('cors');
+
+// CORS Configuration - Allow all Vercel deployments and localhost
+const frontendOrigin = process.env.FRONTEND_ORIGIN;
+const allowedOrigins = [
+    'https://devchat-pro-frontend.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    frontendOrigin
+].filter(Boolean);
+
+const isAllowedOrigin = (origin) => {
+    if (!origin) return true;
+    return allowedOrigins.includes(origin) || origin.endsWith('.vercel.app');
+};
+
+const getOriginLabel = (origin) => origin || 'no-origin';
+
+const corsOriginHandler = (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+        callback(null, true);
+    } else {
+        console.log('⚠️ CORS blocked origin:', getOriginLabel(origin));
+        callback(new Error('Not allowed by CORS'));
+    }
+};
+
+const corsOptions = {
+    origin: corsOriginHandler,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+app.use(express.json());
 
 // Debug endpoint to check CORS headers and confirm backend code version
 app.get('/cors-debug', (req, res) => {
@@ -17,10 +56,9 @@ app.get('/cors-debug', (req, res) => {
         host: req.headers.host,
         time: new Date().toISOString(),
         env: process.env.NODE_ENV || 'not set',
-        allowedOrigins: typeof allowedOrigins !== 'undefined' ? allowedOrigins : 'not defined'
+        allowedOrigins
     });
 });
-const cors = require('cors');
 
 // 🌟 NEW: LiveKit Token Generator
 app.get('/api/livekit/token', async (req, res) => {
@@ -306,43 +344,15 @@ io.on('connection', (socket) => {
 
     const getSocketIdsByUsername = (targetUsername) => {
         if (!targetUsername) return [];
-        const sockets = new Set();
-        Object.values(roomUsers).forEach((roomMap) => {
+        const ids = [];
+        Object.entries(roomUsers).forEach(([room, roomMap]) => {
             if (!roomMap) return;
-            Object.entries(roomMap).forEach(([socketId, username]) => {
-                if (username === targetUsername) sockets.add(socketId);
+            Object.entries(roomMap).forEach(([sid, username]) => {
+                if (username === targetUsername) ids.push(sid);
             });
         });
-        return Array.from(sockets);
+        return [...new Set(ids)];
     };
-
-    const emitLivestreamViewers = (sessionId) => {
-        const session = liveStreams[sessionId];
-        if (!session) return;
-
-        const hostSocketIds = getSocketIdsByUsername(session.host);
-        hostSocketIds.forEach((hostSocketId) => {
-            io.to(hostSocketId).emit(LIVESTREAM_EVENTS.VIEWERS_UPDATE, {
-                sessionId,
-                viewers: Array.from(session.viewers || []),
-                count: (session.viewers || new Set()).size
-            });
-        });
-    };
-
-    const stopLivestreamSession = (sessionId, reason = 'host_stopped') => {
-        const session = liveStreams[sessionId];
-        if (!session) return;
-
-        io.emit(LIVESTREAM_EVENTS.STOPPED, {
-            sessionId,
-            host: session.host,
-            reason
-        });
-
-        delete liveStreams[sessionId];
-    };
-
     const removeViewerFromLiveStreams = (username) => {
         if (!username) return;
         Object.entries(liveStreams).forEach(([sessionId, session]) => {
