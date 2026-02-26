@@ -78,6 +78,8 @@ const LOCAL_PREVIEW_SIZES = [
 function App() {
               // Stream visibility state
               const [streamVisibility, setStreamVisibility] = useState('public');
+              // Stream source state for livestream (camera/screen)
+              const [streamSource, setStreamSource] = useState('camera');
             // Error message state
             const [errorMessage, setErrorMessage] = useState('');
           // Success and error message states
