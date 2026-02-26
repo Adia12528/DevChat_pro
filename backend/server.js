@@ -1,7 +1,11 @@
-﻿// --- LiveKit Webhook Endpoint (Future Feature) ---
-const { WebhookReceiver } = require('livekit-server-sdk');
-const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+﻿
+const express = require('express');
+const cors = require('cors');
+const { AccessToken, WebhookReceiver } = require('livekit-server-sdk');
+const app = express();
 
+// --- LiveKit Webhook Endpoint (Future Feature) ---
+const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
 app.post('/api/livekit/webhook', express.json({ type: '*/*' }), async (req, res) => {
     try {
         const event = receiver.receive(req.body, req.get('Authorization'));
@@ -15,11 +19,6 @@ app.post('/api/livekit/webhook', express.json({ type: '*/*' }), async (req, res)
         res.status(400).send();
     }
 });
-
-const express = require('express');
-const cors = require('cors');
-const { AccessToken } = require('livekit-server-sdk');
-const app = express();
 
 
 // ...existing code...
