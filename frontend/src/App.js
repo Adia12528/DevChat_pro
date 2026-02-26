@@ -74,146 +74,9 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
-        // --- Professional Streaming: Persistent Stream Status & Viewer Count ---
-        const [streamStatus, setStreamStatus] = useState('idle'); // idle | starting | live | reconnecting | error
-        const [viewerCount, setViewerCount] = useState(0);
-
-        // Update viewer count and stream status on events
-        useEffect(() => {
-          if (!socketRef.current) return;
-          const socket = socketRef.current;
-          function handleViewersUpdate(data) {
-            if (data?.sessionId && liveStreamInfo?.sessionId === data.sessionId) {
-              setViewerCount(Number.isFinite(data.count) ? data.count : (Array.isArray(data.viewers) ? data.viewers.length : 0));
-            }
-          }
-          function handleStarted(data) {
-            if (data?.sessionId && liveStreamInfo?.sessionId === data.sessionId) {
-              setStreamStatus('live');
-            }
-          }
-          function handleStopped(data) {
-            if (data?.sessionId && liveStreamInfo?.sessionId === data.sessionId) {
-              setStreamStatus('idle');
-              setViewerCount(0);
-            }
-          }
-          socket.on(LIVESTREAM_EVENTS.VIEWERS_UPDATE, handleViewersUpdate);
-          socket.on(LIVESTREAM_EVENTS.STARTED, handleStarted);
-          socket.on(LIVESTREAM_EVENTS.STOPPED, handleStopped);
-          return () => {
-            socket.off(LIVESTREAM_EVENTS.VIEWERS_UPDATE, handleViewersUpdate);
-            socket.off(LIVESTREAM_EVENTS.STARTED, handleStarted);
-            socket.off(LIVESTREAM_EVENTS.STOPPED, handleStopped);
-          };
-        }, [liveStreamInfo]);
-
-        // --- Professional Streaming: Enhanced Host Controls & Status UI ---
-        const renderStreamStatus = () => {
-          if (streamStatus === 'live') {
-            return <div className="stream-status-live">🔴 Live &bull; Viewers: {viewerCount}</div>;
-          }
-          if (streamStatus === 'starting') {
-            return <div className="stream-status-starting">🟡 Starting stream...</div>;
-          }
-          if (streamStatus === 'reconnecting') {
-            return <div className="stream-status-reconnecting">🟠 Reconnecting stream...</div>;
-          }
-          if (streamStatus === 'error') {
-            return <div className="stream-status-error">⚠️ Streaming error</div>;
-          }
-          return null;
-        };
-
-        // --- Professional Streaming: Robust Reconnection for Host/Viewer ---
-        useEffect(() => {
-          if (!socketRef.current) return;
-          const socket = socketRef.current;
-          function handleDisconnect() {
-            if (liveStreamInfo?.sessionId) {
-              setStreamStatus('reconnecting');
-            }
-          }
-          function handleConnect() {
-            if (liveStreamInfo?.sessionId) {
-              setStreamStatus('live');
-            }
-          }
-          socket.on('disconnect', handleDisconnect);
-          socket.on('connect', handleConnect);
-          return () => {
-            socket.off('disconnect', handleDisconnect);
-            socket.off('connect', handleConnect);
-          };
-        }, [liveStreamInfo]);
-
-        // --- Professional Streaming: UX - Show status and controls in main render ---
-        // Place this in your main render, above the video/stream area:
-        // {renderStreamStatus()}
-        // {liveStreamInfo?.isHost && streamStatus === 'live' && (
-        //   <button onClick={() => stopHostedLivestream(true)} className="settings-btn settings-btn-danger">Stop Stream</button>
-        // )}
-      // --- Enhancement: Analytics/Telemetry Hook ---
-      function logStreamingEvent(event, details = {}) {
-        // Example: send to backend or analytics service
-        // fetch('/api/streaming-log', { method: 'POST', body: JSON.stringify({ event, ...details }) });
-        console.info('[Analytics]', event, details);
-      }
-
-      // --- Enhancement: Browser/Device Compatibility Check ---
-      function isStreamingSupported() {
-        const isSupported = !!(navigator.mediaDevices && window.RTCPeerConnection);
-        const isOldEdge = /Edge\/(1[0-7]|[0-9])\./.test(navigator.userAgent);
-        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-        if (!isSupported || isOldEdge) return false;
-        // Optionally, block old Safari versions
-        return true;
-      }
-
-      // --- Enhancement: User-Facing Error UI ---
-      const [streamingError, setStreamingError] = useState('');
-      function showStreamingError(msg) {
-        setStreamingError(msg);
-        setCallError(msg); // Also set existing call error for legacy UI
-        logStreamingEvent('error', { message: msg });
-        setTimeout(() => setStreamingError(''), 5000);
-      }
-
-      // --- Enhancement: TURN Server Fallback Check ---
-      function hasTurnServer(iceServers) {
-        return Array.isArray(iceServers) && iceServers.some(s => s.urls && s.urls.toString().toLowerCase().includes('turn:'));
-      }
-
-      // --- Enhancement: Graceful Degradation (audio-only fallback) ---
-      async function tryGetUserMediaWithFallback(constraints) {
-        try {
-          return await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (err) {
-          if (constraints.video) {
-            // Try audio-only
-            try {
-              showStreamingError('Video failed, trying audio-only.');
-              return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            } catch (err2) {
-              throw err2;
-            }
-          }
-          throw err;
-        }
-      }
     // Device detection for streaming controls
     const isWindows = /Windows/i.test(navigator.userAgent);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    // ...existing code...
-
-    // --- Enhancement: User-Facing Error UI (render) ---
-    // Place this in your main render return, above the main chat/call UI:
-    const streamingErrorBanner = streamingError ? (
-      <div className="streaming-error-banner" style={{ background: '#ffdddd', color: '#a00', padding: '8px', textAlign: 'center', zIndex: 1000 }}>
-        {streamingError}
-      </div>
-    ) : null;
 
     // Stream settings state
     const [streamVisibility, setStreamVisibility] = useState('room');
@@ -298,10 +161,10 @@ function App() {
     try {
       const parsed = JSON.parse(localStorage.getItem('devchatNotificationPrefs') || '{}');
       return {
-        mutedRooms: parsed.mutedRooms || [],
-        dmOnlyPriority: parsed.dmOnlyPriority || false,
-        mentionOnly: parsed.mentionOnly || false,
-        quietHoursEnabled: parsed.quietHoursEnabled || false,
+        mutedRooms: Array.isArray(parsed.mutedRooms) ? parsed.mutedRooms : [],
+        dmOnlyPriority: !!parsed.dmOnlyPriority,
+        mentionOnly: !!parsed.mentionOnly,
+        quietHoursEnabled: !!parsed.quietHoursEnabled,
         quietStart: parsed.quietStart || '22:00',
         quietEnd: parsed.quietEnd || '07:00'
       };
@@ -1190,14 +1053,212 @@ function App() {
   }, [chat, username]);
 
   // Socket setup
-  // ...existing code...
-
-  // Move the large socket setup useEffect to the end, just before the 'if (!showChat) return ...' line
-
   useEffect(() => {
-    // ...socket setup code (moved from above)...
-    // (Copy the entire useEffect body from the previous location here)
-  }, []);
+    const isProduction = window.location.hostname !== 'localhost';
+    const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || (isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000");
+
+    const newSocket = io(BACKEND_URL, {
+      transports: ['websocket', 'polling'],
+      rememberUpgrade: true,
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: Infinity,
+        upgrade: true,
+      withCredentials: true,
+      timeout: 20000
+    });
+    socketRef.current = newSocket;
+
+    newSocket.on("connect", () => {
+      console.log("✅ Connected to server, id:", newSocket.id);
+      setConnected(true);
+      if (roomRef.current && usernameRef.current) {
+        console.log("🔄 Re-joining room after reconnect:", roomRef.current);
+        newSocket.emit("join_room", { room: roomRef.current, username: usernameRef.current, active: true, fetchHistory: true });
+        const allRooms = Array.from(subscribedRoomsRef.current);
+        allRooms
+          .filter((joinedRoom) => joinedRoom && joinedRoom !== roomRef.current)
+          .forEach((joinedRoom) => {
+            newSocket.emit("join_room", { room: joinedRoom, username: usernameRef.current, active: false, fetchHistory: false });
+          });
+        newSocket.emit("update_status", { username: usernameRef.current, status: 'online' });
+      }
+    });
+
+    newSocket.on("disconnect", () => {
+      console.log("❌ Disconnected from server");
+      setConnected(false);
+    });
+
+    newSocket.on("connect_error", (error) => {
+      console.error("⚠️ Connection error:", error.message);
+      setConnected(false);
+    });
+
+    newSocket.io.on("reconnect_attempt", (attempt) => {
+      console.log("🔄 Reconnect attempt #" + attempt);
+    });
+
+    newSocket.on("load_history", (data) => {
+      console.log("📥 Loaded history:", data);
+      const messages = Array.isArray(data) ? data : [];
+      setChat(messages);
+      setPinnedMessages(messages.filter(m => m.isPinned));
+    });
+
+    const removeTypingUser = (user) => {
+      const timers = typingTimersRef.current;
+      if (timers.has(user)) {
+        clearTimeout(timers.get(user));
+        timers.delete(user);
+      }
+      setTypingUsers((prev) => {
+        if (!prev.has(user)) return prev;
+        const updated = new Set(prev);
+        updated.delete(user);
+        return updated;
+      });
+    };
+
+    newSocket.on("receive_message", (data) => {
+      console.log("💬 Received message:", {
+        type: data.type,
+        sender: data.sender,
+        hasFileUrl: !!data.fileUrl,
+        text: data.text?.substring(0, 30)
+      });
+      
+      // Prevent duplicate messages
+      if (lastMessageIdRef.current === data._id) return;
+      lastMessageIdRef.current = data._id;
+
+      if (blockedUsersRef.current.includes(data.sender)) {
+        return;
+      }
+
+      if (data.clientMessageId) {
+        setOutgoingQueue((prev) => prev.map((entry) => (
+          entry.id === data.clientMessageId ? { ...entry, status: 'sent', error: null } : entry
+        )));
+      }
+
+      const messageRoom = data.room;
+      const activeRoomId = roomRef.current;
+      const isDifferentRoom = messageRoom && activeRoomId && messageRoom !== activeRoomId;
+
+      if (isDifferentRoom) {
+        const shouldNotify = shouldNotifyForMessage(data, isDifferentRoom);
+        if (shouldNotify) {
+        const source = messageRoom.includes('_dm_') ? 'DM' : 'Group';
+        const previewText =
+          data.type === 'image' ? '📷 Photo' :
+          data.type === 'voice' ? '🎤 Voice message' :
+          data.type === 'file' ? `📎 ${data.fileName || 'File'}` :
+          (data.text || '').trim() || 'New message';
+
+        setNotificationItems((prev) => {
+          if (prev.some((entry) => entry.id === data._id)) return prev;
+          return [
+            {
+              id: data._id,
+              room: messageRoom,
+              sender: data.sender,
+              source,
+              preview: previewText,
+              time: data.time || new Date().toISOString()
+            },
+            ...prev
+          ].slice(0, 100);
+        });
+
+        if (soundEnabledRef.current) {
+          try {
+            if (!audioContextRef.current) {
+              audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            playNotificationSound(audioContextRef.current);
+          } catch (e) {
+            console.log('Sound playback failed:', e);
+          }
+        }
+        }
+
+        removeTypingUser(data.sender);
+        return;
+      }
+      
+      setChat((prev) => {
+        // Double-check for duplicates in array
+        if (prev.some(m => m._id === data._id)) return prev;
+        return [...prev, data];
+      });
+      removeTypingUser(data.sender);
+      
+      if (!isAtBottomRef.current && data.sender !== usernameRef.current) {
+        setUnreadCount(c => c + 1);
+      }
+      
+      if (soundEnabledRef.current && data.sender !== usernameRef.current && !notificationPrefsRef.current.mutedRooms.includes(messageRoom) && !isWithinQuietHours()) {
+        try {
+          if (!audioContextRef.current)
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+          playNotificationSound(audioContextRef.current);
+        } catch (e) {
+          console.log('Sound playback failed:', e);
+        }
+      }
+    });
+
+    newSocket.on("chat_cleared", () => {
+      console.log("🗑️ Chat cleared");
+      setChat([]);
+      setPinnedMessages([]);
+    });
+
+    newSocket.on("user_joined", (data) => {
+      console.log("👤 User joined:", data.username);
+      const users = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
+      const targetRoom = data.room || roomRef.current;
+      setRoomUserMap((prev) => ({ ...prev, [targetRoom]: users }));
+      if (targetRoom === roomRef.current) {
+        setOnlineUsers(users);
+      }
+      setUserStatus((prev) => {
+        const next = { ...prev };
+        users.forEach((user) => {
+          next[user] = 'online';
+        });
+        return next;
+      });
+    });
+
+    newSocket.on("user_left", (data) => {
+      console.log("👤 User left:", data.username);
+      const targetRoom = data.room || roomRef.current;
+      if (Array.isArray(data.users)) {
+        const users = [...new Set(data.users.filter(Boolean))];
+        setRoomUserMap((prev) => ({ ...prev, [targetRoom]: users }));
+        if (targetRoom === roomRef.current) {
+          setOnlineUsers(users);
+        }
+      } else {
+        setRoomUserMap((prev) => {
+          const currentRoomUsers = prev[targetRoom] || [];
+          const users = currentRoomUsers.filter((user) => user !== data.username);
+          if (targetRoom === roomRef.current) {
+            setOnlineUsers(users);
+          }
+          return { ...prev, [targetRoom]: users };
+        });
+      }
+      removeTypingUser(data.username);
+    });
+
+    // Handle user list updates from server
+    newSocket.on("user_list_updated", (data) => {
+      console.log("📋 User list updated:", data.users);
+      const activeUsers = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
       const targetRoom = data.room || roomRef.current;
       setRoomUserMap((prev) => ({ ...prev, [targetRoom]: activeUsers }));
       if (targetRoom === roomRef.current) {
@@ -4340,37 +4401,23 @@ function App() {
   }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
-        // --- Enhancement: Compatibility Check ---
-        if (!isStreamingSupported()) {
-          showStreamingError('Your browser does not support livestreaming. Please use a modern browser.');
-          return;
-        }
-        // --- Enhancement: TURN Server Check ---
-        if (!hasTurnServer(ICE_SERVERS)) {
-          showStreamingError('Warning: No TURN server configured. Streaming may fail on restricted networks.');
-          logStreamingEvent('missing_turn_server', { ICE_SERVERS });
-        }
     // Defensive: Prevent duplicate or stale streams
-    console.log('[Livestream] Attempting to start livestream:', { visibilityMode, sourceMode });
     if (livestreamLocalStreamRef.current) {
-      console.log('[Livestream] Stopping previous local stream');
-      livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch (err) { console.warn('[Livestream] Error stopping local track:', err); } });
+      livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
       livestreamLocalStreamRef.current = null;
     }
     if (remoteStreamRef.current) {
-      console.log('[Livestream] Stopping previous remote stream');
-      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch (err) { console.warn('[Livestream] Error stopping remote track:', err); } });
+      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch {} });
       remoteStreamRef.current = null;
       setRemoteStream(null);
     }
     const visibility = visibilityMode === 'public' ? 'public' : 'room';
-    const source = sourceMode === 'screen' ? 'screen' : (sourceMode === 'both' ? 'both' : 'camera');
+    const source = sourceMode === 'screen' ? 'screen' : 'camera';
     let activeRoomId = roomRef.current || room;
 
     // Auto-join room if not connected or not in a valid group room
     if (!socketRef.current || !connected) {
-      showStreamingError('Connecting to chat...');
-      console.error('[Livestream] Socket not connected. Attempting to connect...');
+      setCallError('Connecting to chat...');
       // Attempt to connect
       if (socketRef.current) {
         socketRef.current.connect();
@@ -4379,66 +4426,34 @@ function App() {
     }
 
     if (!activeRoomId || activeRoomId.includes('_dm_')) {
-      showStreamingError('Livestream is available only in group rooms');
-      console.error('[Livestream] Livestream is only available in group rooms. Current room:', activeRoomId);
+      setCallError('Livestream is available only in group rooms');
       return;
     }
 
-    // Ensure we are connected and in a group room
-    if (!socketRef.current || !connected) {
-      showStreamingError('Not connected to server.');
-      return;
-    }
-
-    if (!activeRoomId || activeRoomId.includes('_dm_')) {
-      showStreamingError('Livestream is only available in group rooms');
-      console.error('[Livestream] Livestream is only available in group rooms. Current room:', activeRoomId);
+    // Auto-join room if not already joined
+    if (socketRef.current && activeRoomId && !rooms.includes(activeRoomId)) {
+      socketRef.current.emit('join_room', { room: activeRoomId, username: usernameRef.current, active: true, fetchHistory: true }, () => {
+        // After join completes, retry streaming
+        setTimeout(() => {
+          startLivestream(visibilityMode, sourceMode);
+        }, 300);
+      });
+      setCallError('Joining room... Please wait...');
       return;
     }
 
     if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
-      showStreamingError('End the current call before starting a livestream');
-      console.error('[Livestream] Cannot start livestream during active call.');
+      setCallError('End the current call before starting a livestream');
       return;
     }
 
     if (liveStreamInfoRef.current?.isHost) {
-      showStreamingError('You already have an active livestream');
-      console.error('[Livestream] Already hosting a livestream.');
+      setCallError('You already have an active livestream');
       return;
     }
 
-    // Defensive: Prevent duplicate or stale streams
-    console.log('[Livestream] Attempting to start livestream:', { visibilityMode, sourceMode });
-    if (livestreamLocalStreamRef.current) {
-      console.log('[Livestream] Stopping previous local stream');
-      livestreamLocalStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch (err) { console.warn('[Livestream] Error stopping local track:', err); } });
-      livestreamLocalStreamRef.current = null;
-    }
-    if (remoteStreamRef.current) {
-      console.log('[Livestream] Stopping previous remote stream');
-      remoteStreamRef.current.getTracks().forEach(track => { try { track.stop(); } catch (err) { console.warn('[Livestream] Error stopping remote track:', err); } });
-      remoteStreamRef.current = null;
-      setRemoteStream(null);
-    }
-
     try {
-      console.log('[Livestream] Acquiring media stream for source:', source);
-      logStreamingEvent('start_attempt', { visibilityMode, sourceMode });
-      // Use graceful fallback for user media
-      const { stream } = await (async () => {
-        try {
-          // Try normal build
-          return await buildLivestreamSourceStream(source);
-        } catch (err) {
-          // Try audio-only fallback
-          if (source === 'camera' || source === 'screen') {
-            const fallbackStream = await tryGetUserMediaWithFallback({ audio: true, video: false });
-            return { stream: fallbackStream, source };
-          }
-          throw err;
-        }
-      })();
+      const { stream } = await buildLivestreamSourceStream(source);
 
       // Attach onended handler for screen sharing
       if (source === 'screen') {
@@ -4446,7 +4461,6 @@ function App() {
         if (displayTrack) {
           displayTrack.onended = () => {
             if (liveStreamInfoRef.current?.isHost) {
-              console.log('[Livestream] Screen share ended by user. Stopping livestream.');
               stopHostedLivestream(true);
             }
           };
@@ -4457,7 +4471,6 @@ function App() {
       setLocalStream(stream);
       setRemoteStream(stream);
       inboundRemoteStreamRef.current = stream;
-      logStreamingEvent('media_acquired', { tracks: stream.getTracks().map(t => t.kind) });
 
       // If already hosting, update all peer connections with new tracks using replaceTrack for seamless switching
       if (liveStreamInfoRef.current?.isHost) {
@@ -4468,10 +4481,10 @@ function App() {
           // Replace tracks instead of removing/adding for smoother transitions
           senders.forEach(sender => {
             if (sender.track && sender.track.kind === 'video' && videoTrack) {
-              try { sender.replaceTrack(videoTrack); } catch (err) { console.warn('[Livestream] Error replacing video track:', err); }
+              try { sender.replaceTrack(videoTrack); } catch {}
             }
             if (sender.track && sender.track.kind === 'audio' && audioTrack) {
-              try { sender.replaceTrack(audioTrack); } catch (err) { console.warn('[Livestream] Error replacing audio track:', err); }
+              try { sender.replaceTrack(audioTrack); } catch {}
             }
           });
         });
@@ -4480,11 +4493,9 @@ function App() {
       // Reconnection logic for unstable networks (mobile)
       window.addEventListener('offline', () => {
         setCallError('Network connection lost. Trying to reconnect...');
-        console.warn('[Livestream] Network connection lost.');
       });
       window.addEventListener('online', () => {
         setCallError(null);
-        console.log('[Livestream] Network connection restored.');
         // Optionally, trigger a reconnection or refresh
       });
 
@@ -4496,8 +4507,6 @@ function App() {
       }
       setTimeout(() => setSuccessMessage(''), 2000);
 
-      console.log('[Livestream] Emitting LIVESTREAM_EVENTS.START', { host: usernameRef.current, room: activeRoomId, visibility, source });
-      logStreamingEvent('emit_start', { host: usernameRef.current, room: activeRoomId, visibility, source });
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
         room: activeRoomId,
@@ -4507,12 +4516,9 @@ function App() {
         if (!ack?.success || !ack.sessionId) {
           stream.getTracks().forEach((track) => track.stop());
           livestreamLocalStreamRef.current = null;
-          showStreamingError(ack?.error || 'Failed to start livestream');
-          logStreamingEvent('start_failed', { error: ack?.error });
-          console.error('[Livestream] Failed to start livestream:', ack?.error);
+          setCallError(ack?.error || 'Failed to start livestream');
           return;
         }
-  logStreamingEvent('start_success', { sessionId: ack.sessionId });
 
         setLiveStreamInfo({
           sessionId: ack.sessionId,
@@ -4537,48 +4543,15 @@ function App() {
         setLivestreamCommentInput('');
 
         const targets = Array.isArray(ack.targets) ? ack.targets : [];
-        if (targets.length > 0) {
-          console.log('[Livestream] Creating host peers for viewers:', targets);
-        }
         await Promise.allSettled(targets.map((viewerUsername) => createLivestreamHostPeer(viewerUsername, ack.sessionId, stream)));
 
         const sourceLabel = source === 'screen' ? 'screen' : 'camera';
         setSuccessMessage(`🔴 ${sourceLabel} livestream started (${visibility === 'public' ? 'public' : 'room-only'})`);
         setTimeout(() => setSuccessMessage(''), 3000);
-        console.log('[Livestream] Livestream started successfully. Session ID:', ack.sessionId);
       });
     } catch (err) {
-      showStreamingError(err?.message || 'Unable to access camera/microphone for livestream');
-      logStreamingEvent('start_exception', { error: err?.message || err });
-      console.error('[Livestream] Error starting livestream:', err);
+      setCallError(err?.message || 'Unable to access camera/microphone for livestream');
     }
-    // --- Enhancement: Automatic Recovery (network drop) ---
-    useEffect(() => {
-      function handleNetworkChange() {
-        if (!navigator.onLine) {
-          showStreamingError('Network connection lost. Trying to reconnect...');
-          logStreamingEvent('network_offline');
-        } else {
-          setCallError(null);
-          setStreamingError('');
-          logStreamingEvent('network_online');
-          // Optionally, trigger a reconnection or refresh here
-        }
-      }
-      window.addEventListener('offline', handleNetworkChange);
-      window.addEventListener('online', handleNetworkChange);
-      return () => {
-        window.removeEventListener('offline', handleNetworkChange);
-        window.removeEventListener('online', handleNetworkChange);
-      };
-    }, []);
-    // --- Enhancement: User-Facing Error UI (render) ---
-    // Place this in your main render return, near the top or above the main chat/call UI:
-    // {streamingError && (
-    //   <div className="streaming-error-banner" style={{ background: '#ffdddd', color: '#a00', padding: '8px', textAlign: 'center', zIndex: 1000 }}>
-    //     {streamingError}
-    //   </div>
-    // )}
   }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer]);
 
   const sendLivestreamComment = useCallback(() => {
