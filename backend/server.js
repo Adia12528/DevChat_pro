@@ -1,4 +1,89 @@
-﻿const express = require('express');
+﻿// --- GLOBAL STREAM REGISTRY ---
+const { v4: uuidv4 } = require('uuid');
+const activeStreams = {};
+// Structure: { [streamId]: { id, hostName, hostUserId, room, startedAt, viewers: Set, comments: [], reactions: [] } }
+
+// --- SOCKET.IO STREAM EVENTS ---
+io.on('connection', (socket) => {
+    // ...existing code...
+
+    // Start streaming
+    socket.on('start_stream', ({ hostName, room }) => {
+        const streamId = uuidv4();
+        activeStreams[streamId] = {
+            id: streamId,
+            hostName,
+            hostUserId: socket.id,
+            room,
+            startedAt: Date.now(),
+            viewers: new Set(),
+            comments: [],
+            reactions: []
+        };
+        io.emit('stream_started', { id: streamId, hostName, room, startedAt: activeStreams[streamId].startedAt });
+        socket.join(`stream_${streamId}`);
+        socket.streamId = streamId;
+    });
+
+    // Stop streaming
+    socket.on('stop_stream', () => {
+        const streamId = socket.streamId;
+        if (streamId && activeStreams[streamId]) {
+            io.emit('stream_stopped', { id: streamId, hostName: activeStreams[streamId].hostName });
+            delete activeStreams[streamId];
+        }
+    });
+
+    // Join a stream as viewer
+    socket.on('join_stream', ({ streamId, viewerName }) => {
+        if (activeStreams[streamId]) {
+            activeStreams[streamId].viewers.add(viewerName);
+            socket.join(`stream_${streamId}`);
+            io.to(activeStreams[streamId].hostUserId).emit('viewer_joined', { streamId, viewerName, viewerCount: activeStreams[streamId].viewers.size });
+            io.to(`stream_${streamId}`).emit('viewer_list', Array.from(activeStreams[streamId].viewers));
+        }
+    });
+
+    // Leave a stream as viewer
+    socket.on('leave_stream', ({ streamId, viewerName }) => {
+        if (activeStreams[streamId]) {
+            activeStreams[streamId].viewers.delete(viewerName);
+            socket.leave(`stream_${streamId}`);
+            io.to(activeStreams[streamId].hostUserId).emit('viewer_left', { streamId, viewerName, viewerCount: activeStreams[streamId].viewers.size });
+            io.to(`stream_${streamId}`).emit('viewer_list', Array.from(activeStreams[streamId].viewers));
+        }
+    });
+
+    // Comment in stream
+    socket.on('stream_comment', ({ streamId, commenter, text }) => {
+        if (activeStreams[streamId]) {
+            const comment = { commenter, text, time: Date.now() };
+            activeStreams[streamId].comments.push(comment);
+            io.to(`stream_${streamId}`).emit('stream_comment', comment);
+        }
+    });
+
+    // React in stream
+    socket.on('stream_reaction', ({ streamId, reactor, emoji }) => {
+        if (activeStreams[streamId]) {
+            const reaction = { reactor, emoji, time: Date.now() };
+            activeStreams[streamId].reactions.push(reaction);
+            io.to(`stream_${streamId}`).emit('stream_reaction', reaction);
+        }
+    });
+
+    // On disconnect, clean up host streams
+    socket.on('disconnect', () => {
+        Object.keys(activeStreams).forEach((streamId) => {
+            if (activeStreams[streamId].hostUserId === socket.id) {
+                io.emit('stream_stopped', { id: streamId, hostName: activeStreams[streamId].hostName });
+                delete activeStreams[streamId];
+            }
+        });
+    });
+
+});
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');

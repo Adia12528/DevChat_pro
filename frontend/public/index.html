@@ -22,10 +22,30 @@
     <meta name="msapplication-config" content="/browserconfig.xml" />
     <meta name="msapplication-tap-highlight" content="no" />
     
-    <!-- Android Specific -->
+    <!-- Theme Color for All Browsers -->
+    <!--
+      NOTE: The following meta[name=theme-color] tags use the media attribute for Chrome/Edge, but Firefox, Firefox for Android, and Opera do not support the media attribute as of 2026.
+      The fallback meta tag and the script below ensure correct theme color for those browsers.
+      The warning from Edge Tools can be safely ignored as this is the best-practice cross-browser solution.
+    -->
+    <meta name="theme-color" content="#00a884" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b141a" media="(prefers-color-scheme: dark)" />
+    <!-- Fallback for browsers that do not support media attribute (e.g., Firefox, Opera) -->
     <meta name="theme-color" content="#00a884" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b141a" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <script>
+      // Dynamically set theme-color for browsers that do not support media attribute (e.g., Firefox, Opera)
+      (function() {
+        var darkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var metaThemeColor = document.querySelector('meta[name="theme-color"]:not([media])');
+        if (metaThemeColor) {
+          if (darkScheme) {
+            metaThemeColor.setAttribute('content', '#0b141a');
+          } else {
+            metaThemeColor.setAttribute('content', '#00a884');
+          }
+        }
+      })();
+    </script>
     
     <!-- Performance & Caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
