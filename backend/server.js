@@ -1,8 +1,25 @@
-﻿
+﻿// --- LiveKit Webhook Endpoint (Future Feature) ---
+const { WebhookReceiver } = require('livekit-server-sdk');
+const receiver = new WebhookReceiver(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET);
+
+app.post('/api/livekit/webhook', express.json({ type: '*/*' }), async (req, res) => {
+    try {
+        const event = receiver.receive(req.body, req.get('Authorization'));
+        if (event.event === 'room_started') {
+            io.emit('global_notification', `${event.room.name} just went live!`);
+        }
+        // Add more event handling as needed
+        res.status(200).send();
+    } catch (err) {
+        console.error('LiveKit webhook error:', err);
+        res.status(400).send();
+    }
+});
+
 const express = require('express');
+const cors = require('cors');
 const { AccessToken } = require('livekit-server-sdk');
 const app = express();
-const cors = require('cors');
 
 
 // ...existing code...
@@ -81,24 +98,6 @@ const CALL_EVENTS = Object.freeze({
     ENDED: 'call:ended'
 });
 
-const LIVESTREAM_EVENTS = Object.freeze({
-    START: 'livestream:start',
-    STARTED: 'livestream:started',
-    AVAILABLE: 'livestream:available',
-    JOIN_REQUEST: 'livestream:join-request',
-    OFFER: 'livestream:offer',
-    ANSWER: 'livestream:answer',
-    ICE_CANDIDATE: 'livestream:ice-candidate',
-    STOP: 'livestream:stop',
-    STOPPED: 'livestream:stopped',
-    DECLINE: 'livestream:decline',
-    LEAVE: 'livestream:leave',
-    VIEWERS_UPDATE: 'livestream:viewers-update',
-    COMMENT: 'livestream:comment',
-    COMMENTED: 'livestream:commented',
-    REACTION: 'livestream:reaction',
-    REACTED: 'livestream:reacted'
-});
 
 const ROOM_EVENTS = Object.freeze({
     REGISTRY_UPDATED: 'room_registry_updated'
@@ -167,8 +166,11 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 5000;
-// Using your provided MongoDB URI as the fallback
-const dbURI = process.env.MONGO_URI || 'mongodb+srv://adia12528_db_user:Adi12528%40as@cluster0.da3qkei.mongodb.net/devchat?retryWrites=true&w=majority';
+const dbURI = process.env.MONGO_URI;
+if (!dbURI) {
+    console.error("FATAL ERROR: MONGO_URI is not defined in environment variables.");
+    process.exit(1);
+}
 console.log("📍 Using DB URI:", dbURI.replace(/:.+@/, ':****@'));
 
 mongoose.connect(dbURI)
@@ -211,7 +213,6 @@ const roomUsers = {};
 const roomPolicies = {};
 const blockedUsers = {};
 const userReports = [];
-const liveStreams = {};
 
 const toSet = (list = []) => [...new Set((Array.isArray(list) ? list : []).filter(Boolean))];
 
@@ -318,49 +319,6 @@ io.on('connection', (socket) => {
             });
         });
         return [...new Set(ids)];
-    };
-    const removeViewerFromLiveStreams = (username) => {
-        if (!username) return;
-        Object.entries(liveStreams).forEach(([sessionId, session]) => {
-            if (!session || session.host === username) return;
-            if ((session.viewers || new Set()).has(username)) {
-                session.viewers.delete(username);
-                emitLivestreamViewers(sessionId);
-            }
-        });
-    };
-
-    const emitToLivestreamParticipants = (sessionId, eventName, payload) => {
-        const session = liveStreams[sessionId];
-        if (!session) return false;
-
-        const participants = new Set([session.host, ...Array.from(session.viewers || [])]);
-        participants.forEach((participant) => {
-            const socketIds = getSocketIdsByUsername(participant);
-            socketIds.forEach((socketId) => {
-                io.to(socketId).emit(eventName, payload);
-            });
-        });
-
-        return true;
-    };
-
-    const getVisibleLivestreamSessionsForUser = ({ username, room }) => {
-        if (!username) return [];
-        return Object.values(liveStreams)
-            .filter((session) => {
-                if (!session || session.host === username) return false;
-                if (session.visibility === 'public') return true;
-                return !!room && session.room === room;
-            })
-            .map((session) => ({
-                sessionId: session.id,
-                host: session.host,
-                room: session.room,
-                visibility: session.visibility,
-                source: session.source,
-                startedAt: session.startedAt
-            }));
     };
 
     const emitRoomUserList = (room) => {
@@ -486,10 +444,6 @@ io.on('connection', (socket) => {
             emitRoomPolicy(room);
         }
 
-        const visibleSessions = getVisibleLivestreamSessionsForUser({ username, room });
-        visibleSessions.forEach((sessionInfo) => {
-            socket.emit(LIVESTREAM_EVENTS.AVAILABLE, sessionInfo);
-        });
         
         // Send chat history
         if (shouldFetchHistory) {
@@ -1022,13 +976,7 @@ io.on('connection', (socket) => {
             console.log(`🔴 User ${socket.username} fully disconnected without explicit leave`);
         }
 
-        if (socket.username) {
-            removeViewerFromLiveStreams(socket.username);
-            const hostedSessionId = Object.keys(liveStreams).find((sessionId) => liveStreams[sessionId]?.host === socket.username);
-            if (hostedSessionId) {
-                stopLivestreamSession(hostedSessionId, 'host_disconnected');
-            }
-        }
+        // LiveKit now handles stream/host disconnects. Legacy code removed.
     });
 });
 
