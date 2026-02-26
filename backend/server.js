@@ -1,22 +1,4 @@
-﻿// Debug endpoint to check CORS headers and confirm backend code version
-app.get('/cors-debug', (req, res) => {
-    console.log('CORS DEBUG:', {
-        origin: req.headers.origin,
-        referer: req.headers.referer,
-        host: req.headers.host,
-        time: new Date().toISOString()
-    });
-    res.json({
-        message: 'CORS debug endpoint',
-        origin: req.headers.origin,
-        referer: req.headers.referer,
-        host: req.headers.host,
-        time: new Date().toISOString(),
-        env: process.env.NODE_ENV || 'not set',
-        allowedOrigins: typeof allowedOrigins !== 'undefined' ? allowedOrigins : 'not defined'
-    });
-});
-const express = require('express');
+﻿const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 
