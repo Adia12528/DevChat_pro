@@ -76,6 +76,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+              // Stream visibility state
+              const [streamVisibility, setStreamVisibility] = useState('public');
             // Error message state
             const [errorMessage, setErrorMessage] = useState('');
           // Success and error message states

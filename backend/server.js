@@ -1,6 +1,10 @@
 ﻿const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
 const app = express();
+const cors = require('cors');
+
+// Allow CORS for frontend domain
+app.use(cors({ origin: 'https://devchat-pro-frontend.vercel.app', credentials: true }));
 
 // 🌟 NEW: LiveKit Token Generator
 app.get('/api/livekit/token', async (req, res) => {
