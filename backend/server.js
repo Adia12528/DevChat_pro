@@ -1,5 +1,7 @@
 ﻿const express = require('express');
 const { AccessToken } = require('livekit-server-sdk');
+const app = express();
+
 // 🌟 NEW: LiveKit Token Generator
 app.get('/api/livekit/token', async (req, res) => {
     const roomName = req.query.room;
@@ -37,8 +39,6 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
-
-const app = express();
 
 const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
 const configuredLogLevel = (process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'debug')).toLowerCase();
