@@ -1198,8 +1198,6 @@ function App() {
     // ...socket setup code (moved from above)...
     // (Copy the entire useEffect body from the previous location here)
   }, []);
-      console.log("📋 User list updated:", data.users);
-      const activeUsers = Array.isArray(data.users) ? [...new Set(data.users.filter(Boolean))] : [];
       const targetRoom = data.room || roomRef.current;
       setRoomUserMap((prev) => ({ ...prev, [targetRoom]: activeUsers }));
       if (targetRoom === roomRef.current) {
