@@ -112,163 +112,164 @@ function App() {
     };
   }, [liveStreamInfo]);
 
-                      // Stream Join Modal Component
-                      const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
-                        const [search, setSearch] = useState('');
-                        const [suggestions, setSuggestions] = useState([]);
-                        const [selectedStream, setSelectedStream] = useState(null);
 
-                        const filteredStreams = streams.filter(stream => {
-                          const searchLower = search.toLowerCase();
-                          return stream.host.toLowerCase().includes(searchLower) ||
-                                 stream.uniqueId.toLowerCase().includes(searchLower) ||
-                                 stream.room.toLowerCase().includes(searchLower);
-                        });
+// Stream Join Modal Component
+const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
+  const [search, setSearch] = React.useState('');
+  const [suggestions, setSuggestions] = React.useState([]);
+  const [selectedStream, setSelectedStream] = React.useState(null);
 
-                        const handleSearchChange = (e) => {
-                          const value = e.target.value;
-                          setSearch(value);
-                          // Generate suggestions based on partial matches
-                          if (value.length > 1) {
-                            const matches = streams.filter(s =>
-                              s.host.toLowerCase().includes(value.toLowerCase()) ||
-                              s.uniqueId.toLowerCase().includes(value.toLowerCase())
-                            ).map(s => ({
-                              text: `${s.host} (${s.uniqueId})`,
-                              stream: s
-                            }));
-                            setSuggestions(matches.slice(0, 5));
-                          } else {
-                            setSuggestions([]);
-                          }
-                        };
+  const filteredStreams = streams.filter(stream => {
+    const searchLower = search.toLowerCase();
+    return stream.host.toLowerCase().includes(searchLower) ||
+      stream.uniqueId.toLowerCase().includes(searchLower) ||
+      stream.room.toLowerCase().includes(searchLower);
+  });
 
-                        const handleSuggestionClick = (stream) => {
-                          setSearch(stream.host);
-                          setSelectedStream(stream);
-                          setSuggestions([]);
-                        };
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearch(value);
+    // Generate suggestions based on partial matches
+    if (value.length > 1) {
+      const matches = streams.filter(s =>
+        s.host.toLowerCase().includes(value.toLowerCase()) ||
+        s.uniqueId.toLowerCase().includes(value.toLowerCase())
+      ).map(s => ({
+        text: `${s.host} (${s.uniqueId})`,
+        stream: s
+      }));
+      setSuggestions(matches.slice(0, 5));
+    } else {
+      setSuggestions([]);
+    }
+  };
 
-                        if (!visible) return null;
+  const handleSuggestionClick = (stream) => {
+    setSearch(stream.host);
+    setSelectedStream(stream);
+    setSuggestions([]);
+  };
 
-                        return (
-                          <motion.div 
-                            className="stream-join-modal-overlay"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={onClose}
-                          >
-                            <motion.div 
-                              className="stream-join-modal"
-                              initial={{ scale: 0.9, y: 20 }}
-                              animate={{ scale: 1, y: 0 }}
-                              exit={{ scale: 0.9, y: 20 }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <div className="stream-join-header">
-                                <h3>Join Live Stream</h3>
-                                <button className="modal-close-btn" onClick={onClose}>
-                                  <X size={20} />
-                                </button>
-                              </div>
-                              <div className="stream-search-container">
-                                <div className="search-input-wrapper">
-                                  <Search size={18} />
-                                  <input
-                                    type="text"
-                                    placeholder="Search by host name or unique ID..."
-                                    value={search}
-                                    onChange={handleSearchChange}
-                                    className="stream-search-input"
-                                    autoFocus
-                                  />
-                                </div>
-                                {suggestions.length > 0 && (
-                                  <div className="stream-suggestions">
-                                    {suggestions.map((s, i) => (
-                                      <button
-                                        key={i}
-                                        className="stream-suggestion-item"
-                                        onClick={() => handleSuggestionClick(s.stream)}
-                                      >
-                                        <User size={14} />
-                                        <span>{s.text}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="stream-list">
-                                {filteredStreams.length === 0 ? (
-                                  <div className="stream-empty-state">
-                                    <Radio size={40} />
-                                    <p>No active streams found</p>
-                                    {search && <span>Try a different search term</span>}
-                                  </div>
-                                ) : (
-                                  filteredStreams.map(stream => (
-                                    <div key={stream.id} className="stream-item">
-                                      <div className="stream-item-info">
-                                        <div className="stream-item-header">
-                                          <span className="stream-host">
-                                            <User size={14} />
-                                            {stream.host}
-                                          </span>
-                                          <span className="stream-badge">{stream.source}</span>
-                                        </div>
-                                        <div className="stream-item-details">
-                                          <span className="stream-unique-id">ID: {stream.uniqueId}</span>
-                                          <span className="stream-viewers">
-                                            <Users size={12} />
-                                            {stream.viewerCount} watching
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <button
-                                        className="stream-join-btn"
-                                        onClick={() => onJoin(stream)}
-                                      >
-                                        Join
-                                      </button>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </motion.div>
-                          </motion.div>
-                        );
-                      };
+  if (!visible) return null;
 
-                      // Viewers List Component
-                      const ViewersList = ({ viewers, onClose }) => {
-                        if (!viewers.length) return null;
-                        return (
-                          <motion.div 
-                            className="viewers-list-modal"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                          >
-                            <div className="viewers-list-header">
-                              <h4>Viewers ({viewers.length})</h4>
-                              <button onClick={onClose}>
-                                <X size={16} />
-                              </button>
-                            </div>
-                            <div className="viewers-list-content">
-                              {viewers.map((viewer, i) => (
-                                <div key={i} className="viewer-item">
-                                  <div className="viewer-avatar">
-                                    {getInitials(viewer)}
-                                  </div>
-                                  <span className="viewer-name">{viewer}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </motion.div>
-                        );
-                      };
+  return (
+    <motion.div
+      className="stream-join-modal-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="stream-join-modal"
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="stream-join-header">
+          <h3>Join Live Stream</h3>
+          <button className="modal-close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+        <div className="stream-search-container">
+          <div className="search-input-wrapper">
+            <Search size={18} />
+            <input
+              type="text"
+              placeholder="Search by host name or unique ID..."
+              value={search}
+              onChange={handleSearchChange}
+              className="stream-search-input"
+              autoFocus
+            />
+          </div>
+          {suggestions.length > 0 && (
+            <div className="stream-suggestions">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  className="stream-suggestion-item"
+                  onClick={() => handleSuggestionClick(s.stream)}
+                >
+                  <User size={14} />
+                  <span>{s.text}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="stream-list">
+          {filteredStreams.length === 0 ? (
+            <div className="stream-empty-state">
+              <Radio size={40} />
+              <p>No active streams found</p>
+              {search && <span>Try a different search term</span>}
+            </div>
+          ) : (
+            filteredStreams.map(stream => (
+              <div key={stream.id} className="stream-item">
+                <div className="stream-item-info">
+                  <div className="stream-item-header">
+                    <span className="stream-host">
+                      <User size={14} />
+                      {stream.host}
+                    </span>
+                    <span className="stream-badge">{stream.source}</span>
+                  </div>
+                  <div className="stream-item-details">
+                    <span className="stream-unique-id">ID: {stream.uniqueId}</span>
+                    <span className="stream-viewers">
+                      <Users size={12} />
+                      {stream.viewerCount} watching
+                    </span>
+                  </div>
+                </div>
+                <button
+                  className="stream-join-btn"
+                  onClick={() => onJoin(stream)}
+                >
+                  Join
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+// Viewers List Component
+const ViewersList = ({ viewers, onClose }) => {
+  if (!viewers.length) return null;
+  return (
+    <motion.div
+      className="viewers-list-modal"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+    >
+      <div className="viewers-list-header">
+        <h4>Viewers ({viewers.length})</h4>
+        <button onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="viewers-list-content">
+        {viewers.map((viewer, i) => (
+          <div key={i} className="viewer-item">
+            <div className="viewer-avatar">
+              {getInitials(viewer)}
+            </div>
+            <span className="viewer-name">{viewer}</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
                     // Helper function to generate unique stream ID
                     const generateStreamUniqueId = (host, sessionId) => {
                       const timestamp = Date.now().toString(36);
