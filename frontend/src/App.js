@@ -76,6 +76,306 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+
+  // Host: viewer join/leave notifications
+  useEffect(() => {
+    if (!socketRef.current || !liveStreamInfo?.isHost) return;
+
+    const handleViewerJoined = (data) => {
+      if (data.sessionId === liveStreamInfo.sessionId) {
+        setStreamViewers(prev => [...prev, data.viewer]);
+        setViewerCount(prev => prev + 1);
+        // Show temporary notification
+        const notification = document.createElement('div');
+        notification.className = 'viewer-notification';
+        notification.textContent = `${data.viewer} joined the stream`;
+        document.body.appendChild(notification);
+        setTimeout(() => {
+          notification.remove();
+        }, 3000);
+      }
+    };
+
+    const handleViewerLeft = (data) => {
+      if (data.sessionId === liveStreamInfo.sessionId) {
+        setStreamViewers(prev => prev.filter(v => v !== data.viewer));
+        setViewerCount(prev => Math.max(0, prev - 1));
+      }
+    };
+
+    socketRef.current.on('stream:viewer-joined', handleViewerJoined);
+    socketRef.current.on('stream:viewer-left', handleViewerLeft);
+
+    return () => {
+      socketRef.current?.off('stream:viewer-joined', handleViewerJoined);
+      socketRef.current?.off('stream:viewer-left', handleViewerLeft);
+    };
+  }, [liveStreamInfo]);
+
+                      // Stream Join Modal Component
+                      const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
+                        const [search, setSearch] = useState('');
+                        const [suggestions, setSuggestions] = useState([]);
+                        const [selectedStream, setSelectedStream] = useState(null);
+
+                        const filteredStreams = streams.filter(stream => {
+                          const searchLower = search.toLowerCase();
+                          return stream.host.toLowerCase().includes(searchLower) ||
+                                 stream.uniqueId.toLowerCase().includes(searchLower) ||
+                                 stream.room.toLowerCase().includes(searchLower);
+                        });
+
+                        const handleSearchChange = (e) => {
+                          const value = e.target.value;
+                          setSearch(value);
+                          // Generate suggestions based on partial matches
+                          if (value.length > 1) {
+                            const matches = streams.filter(s =>
+                              s.host.toLowerCase().includes(value.toLowerCase()) ||
+                              s.uniqueId.toLowerCase().includes(value.toLowerCase())
+                            ).map(s => ({
+                              text: `${s.host} (${s.uniqueId})`,
+                              stream: s
+                            }));
+                            setSuggestions(matches.slice(0, 5));
+                          } else {
+                            setSuggestions([]);
+                          }
+                        };
+
+                        const handleSuggestionClick = (stream) => {
+                          setSearch(stream.host);
+                          setSelectedStream(stream);
+                          setSuggestions([]);
+                        };
+
+                        if (!visible) return null;
+
+                        return (
+                          <motion.div 
+                            className="stream-join-modal-overlay"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={onClose}
+                          >
+                            <motion.div 
+                              className="stream-join-modal"
+                              initial={{ scale: 0.9, y: 20 }}
+                              animate={{ scale: 1, y: 0 }}
+                              exit={{ scale: 0.9, y: 20 }}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <div className="stream-join-header">
+                                <h3>Join Live Stream</h3>
+                                <button className="modal-close-btn" onClick={onClose}>
+                                  <X size={20} />
+                                </button>
+                              </div>
+                              <div className="stream-search-container">
+                                <div className="search-input-wrapper">
+                                  <Search size={18} />
+                                  <input
+                                    type="text"
+                                    placeholder="Search by host name or unique ID..."
+                                    value={search}
+                                    onChange={handleSearchChange}
+                                    className="stream-search-input"
+                                    autoFocus
+                                  />
+                                </div>
+                                {suggestions.length > 0 && (
+                                  <div className="stream-suggestions">
+                                    {suggestions.map((s, i) => (
+                                      <button
+                                        key={i}
+                                        className="stream-suggestion-item"
+                                        onClick={() => handleSuggestionClick(s.stream)}
+                                      >
+                                        <User size={14} />
+                                        <span>{s.text}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="stream-list">
+                                {filteredStreams.length === 0 ? (
+                                  <div className="stream-empty-state">
+                                    <Radio size={40} />
+                                    <p>No active streams found</p>
+                                    {search && <span>Try a different search term</span>}
+                                  </div>
+                                ) : (
+                                  filteredStreams.map(stream => (
+                                    <div key={stream.id} className="stream-item">
+                                      <div className="stream-item-info">
+                                        <div className="stream-item-header">
+                                          <span className="stream-host">
+                                            <User size={14} />
+                                            {stream.host}
+                                          </span>
+                                          <span className="stream-badge">{stream.source}</span>
+                                        </div>
+                                        <div className="stream-item-details">
+                                          <span className="stream-unique-id">ID: {stream.uniqueId}</span>
+                                          <span className="stream-viewers">
+                                            <Users size={12} />
+                                            {stream.viewerCount} watching
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <button
+                                        className="stream-join-btn"
+                                        onClick={() => onJoin(stream)}
+                                      >
+                                        Join
+                                      </button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </motion.div>
+                          </motion.div>
+                        );
+                      };
+
+                      // Viewers List Component
+                      const ViewersList = ({ viewers, onClose }) => {
+                        if (!viewers.length) return null;
+                        return (
+                          <motion.div 
+                            className="viewers-list-modal"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                          >
+                            <div className="viewers-list-header">
+                              <h4>Viewers ({viewers.length})</h4>
+                              <button onClick={onClose}>
+                                <X size={16} />
+                              </button>
+                            </div>
+                            <div className="viewers-list-content">
+                              {viewers.map((viewer, i) => (
+                                <div key={i} className="viewer-item">
+                                  <div className="viewer-avatar">
+                                    {getInitials(viewer)}
+                                  </div>
+                                  <span className="viewer-name">{viewer}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        );
+                      };
+                    // Helper function to generate unique stream ID
+                    const generateStreamUniqueId = (host, sessionId) => {
+                      const timestamp = Date.now().toString(36);
+                      const random = Math.random().toString(36).substring(2, 6);
+                      return `${host.substring(0, 3)}-${timestamp}-${random}`.toUpperCase();
+                    };
+                  // Stream notifications and events
+                  useEffect(() => {
+                    if (!socketRef.current) return;
+
+                    // Listen for new streams
+                    socketRef.current.on('stream:started', (data) => {
+                      const newStream = {
+                        id: data.sessionId,
+                        host: data.host,
+                        room: data.room,
+                        visibility: data.visibility,
+                        source: data.source,
+                        startedAt: data.startedAt,
+                        uniqueId: generateStreamUniqueId(data.host, data.sessionId),
+                        viewerCount: 0
+                      };
+                      setActiveStreams(prev => [...prev, newStream]);
+                      // Add to notifications
+                      const notification = {
+                        id: `stream-${data.sessionId}`,
+                        type: 'stream',
+                        streamId: data.sessionId,
+                        host: data.host,
+                        message: `${data.host} started a ${data.source} stream`,
+                        time: new Date().toISOString(),
+                        read: false
+                      };
+                      setStreamNotifications(prev => [notification, ...prev].slice(0, 50));
+                      setNotificationItems(prev => [{
+                        id: `live-${data.sessionId}`,
+                        type: 'livestream',
+                        sessionId: data.sessionId,
+                        sender: data.host,
+                        source: 'LIVE',
+                        visibility: data.visibility,
+                        streamSource: data.source,
+                        preview: `${data.host} is live now (${data.source})`,
+                        time: data.startedAt,
+                        uniqueId: generateStreamUniqueId(data.host, data.sessionId)
+                      }, ...prev].slice(0, 100));
+                    });
+
+                    // Listen for stream updates
+                    socketRef.current.on('stream:updated', (data) => {
+                      setActiveStreams(prev => prev.map(stream =>
+                        stream.id === data.sessionId
+                          ? { ...stream, viewerCount: data.viewerCount }
+                          : stream
+                      ));
+                      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
+                        setViewerCount(data.viewerCount);
+                        setStreamViewers(data.viewers || []);
+                      }
+                    });
+
+                    // Listen for stream ended
+                    socketRef.current.on('stream:ended', (data) => {
+                      setActiveStreams(prev => prev.filter(s => s.id !== data.sessionId));
+                      setStreamNotifications(prev => prev.filter(n => n.streamId !== data.sessionId));
+                      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
+                        setLiveStreamInfo(null);
+                        setStreamViewers([]);
+                        setViewerCount(0);
+                      }
+                    });
+
+                    // Listen for comments
+                    socketRef.current.on('stream:comment', (data) => {
+                      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
+                        setStreamComments(prev => [...prev, {
+                          id: data.id,
+                          user: data.from,
+                          text: data.text,
+                          time: data.time
+                        }].slice(-50));
+                      }
+                    });
+
+                    // Listen for reactions
+                    socketRef.current.on('stream:reaction', (data) => {
+                      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
+                        setStreamReactions(prev => [...prev, {
+                          id: data.id,
+                          user: data.from,
+                          emoji: data.emoji,
+                          time: data.time
+                        }].slice(-20));
+                        setTimeout(() => {
+                          setStreamReactions(prev => prev.filter(r => r.id !== data.id));
+                        }, 3000);
+                      }
+                    });
+
+                    return () => {
+                      socketRef.current?.off('stream:started');
+                      socketRef.current?.off('stream:updated');
+                      socketRef.current?.off('stream:ended');
+                      socketRef.current?.off('stream:comment');
+                      socketRef.current?.off('stream:reaction');
+                    };
+                  }, []);
                 // Detect iOS for screen sharing support
                 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
               // Stream visibility state
@@ -178,6 +478,19 @@ function App() {
     };
 
   // New feature states
+
+  // Streaming enhancement states
+  const [activeStreams, setActiveStreams] = useState([]); // All active streams in the app
+  const [streamJoinModal, setStreamJoinModal] = useState({ visible: false, streams: [] });
+  const [streamSearchQuery, setStreamSearchQuery] = useState('');
+  const [streamSuggestions, setStreamSuggestions] = useState([]);
+  const [streamViewers, setStreamViewers] = useState([]);
+  const [showViewersList, setShowViewersList] = useState(false);
+  const [streamComments, setStreamComments] = useState([]);
+  const [streamCommentInput, setStreamCommentInput] = useState('');
+  const [streamReactions, setStreamReactions] = useState([]);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [streamNotifications, setStreamNotifications] = useState([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -4206,7 +4519,13 @@ function App() {
       visibility,
       source,
       isHost: false,
-      autoJoined
+      autoJoined,
+      uniqueId: activeStreams.find(s => s.id === sessionId)?.uniqueId
+    });
+    // Notify host that viewer joined
+    socketRef.current.emit('stream:viewer-joined', {
+      sessionId,
+      viewer: usernameRef.current
     });
     setLivestreamComments([]);
     setLivestreamCommentInput('');
@@ -4571,7 +4890,8 @@ function App() {
         host: usernameRef.current,
         room: activeRoomId,
         visibility,
-        source
+        source,
+        uniqueId: generateStreamUniqueId(usernameRef.current, Date.now().toString())
       }, async (ack) => {
         if (!ack?.success || !ack.sessionId) {
           stream.getTracks().forEach((track) => track.stop());
@@ -4586,6 +4906,7 @@ function App() {
           room: activeRoomId,
           visibility,
           source,
+          uniqueId: ack.uniqueId,
           hasAudio: stream.getAudioTracks().length > 0,
           isHost: true,
           autoJoined: false,
@@ -5690,6 +6011,83 @@ function App() {
 
   return (
     <div className="chat-container">
+            {/* Stream Join Modal */}
+            <AnimatePresence>
+              {streamJoinModal.visible && (
+                <StreamJoinModal
+                  visible={streamJoinModal.visible}
+                  streams={activeStreams}
+                  onClose={() => setStreamJoinModal({ visible: false, streams: [] })}
+                  onJoin={(stream) => {
+                    setStreamJoinModal({ visible: false, streams: [] });
+                    handleJoinStream(stream.room, false);
+                  }}
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Stream Notifications */}
+            <AnimatePresence>
+              {streamNotifications.slice(0, 3).map((notification, index) => (
+                <motion.div
+                  key={notification.id}
+                  className="viewer-notification"
+                  initial={{ x: 100, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: 100, opacity: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  onClick={() => {
+                    const stream = activeStreams.find(s => s.id === notification.streamId);
+                    if (stream) {
+                      setStreamJoinModal({ visible: true, streams: [stream] });
+                    }
+                  }}
+                >
+                  <span>🔴 {notification.message}</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Host Controls - show viewer count and list for host */}
+            {liveStreamInfo?.isHost && (
+              <div className="host-controls">
+                <div 
+                  className="viewer-count-badge"
+                  onClick={() => setShowViewersList(!showViewersList)}
+                >
+                  <Users size={18} />
+                  <span className="count">{viewerCount}</span>
+                  <span className="label">watching</span>
+                </div>
+                <AnimatePresence>
+                  {showViewersList && (
+                    <ViewersList
+                      viewers={streamViewers}
+                      onClose={() => setShowViewersList(false)}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Reactions display for viewers */}
+            <AnimatePresence>
+              {streamReactions.length > 0 && (
+                <div className="reaction-bubbles">
+                  {streamReactions.slice(-5).map(reaction => (
+                    <motion.div
+                      key={reaction.id}
+                      className="reaction-bubble"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                    >
+                      {reaction.emoji}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </AnimatePresence>
       {/* 🌟 NEW: LiveKit UI Engine */}
       {liveKitToken && (
         <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
@@ -5887,28 +6285,41 @@ function App() {
                   <div className="menu-divider"></div>
 
 
+
                   <button
                     className="menu-item"
                     onClick={() => {
-                      handleJoinStream(`${room}-stream`, true);
+                      if (activeStreams.length > 0) {
+                        setStreamJoinModal({ visible: true, streams: activeStreams });
+                      } else {
+                        handleJoinStream(`${room}-stream`, true);
+                      }
                       setShowMenuDropdown(false);
                     }}
-                    title="Start streaming with LiveKit"
+                    title={activeStreams.length > 0 ? `${activeStreams.length} active stream(s)` : "Start streaming"}
                   >
                     <Disc3 size={18}/>
-                    <span>Start Stream</span>
+                    <span>Stream {activeStreams.length > 0 && <span className="menu-badge">{activeStreams.length}</span>}</span>
                   </button>
 
                   <button
                     className="menu-item"
                     onClick={() => {
-                      handleJoinStream(`${room}-stream`, false);
+                      if (activeStreams.length > 0) {
+                        setStreamJoinModal({ visible: true, streams: activeStreams });
+                      } else {
+                        setErrorMessage('No active streams available');
+                      }
                       setShowMenuDropdown(false);
                     }}
-                    title="Join a LiveKit stream"
+                    disabled={activeStreams.length === 0}
+                    style={{
+                      opacity: activeStreams.length === 0 ? 0.6 : 1,
+                      cursor: activeStreams.length === 0 ? 'not-allowed' : 'pointer'
+                    }}
                   >
                     <PlayCircle size={18}/>
-                    <span>Join Stream</span>
+                    <span>Join Stream {activeStreams.length > 0 && <span className="menu-badge">{activeStreams.length}</span>}</span>
                   </button>
 
                   <button 
