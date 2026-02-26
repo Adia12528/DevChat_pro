@@ -76,6 +76,11 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+          // Success and error message states
+          const [successMessage, setSuccessMessage] = useState('');
+
+          // Screen share stream ref
+          const screenShareStreamRef = useRef(null);
         // Reported users state (localStorage-backed)
         const [reportedUsers, setReportedUsers] = useState(() => {
           try {
