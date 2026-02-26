@@ -3,9 +3,6 @@ const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 const cors = require('cors');
 
-// Allow CORS for frontend domain
-app.use(cors({ origin: 'https://devchat-pro-frontend.vercel.app', credentials: true }));
-
 // 🌟 NEW: LiveKit Token Generator
 app.get('/api/livekit/token', async (req, res) => {
     const roomName = req.query.room;
@@ -41,7 +38,6 @@ app.get('/api/livekit/token', async (req, res) => {
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-const cors = require('cors');
 require('dotenv').config();
 
 const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
