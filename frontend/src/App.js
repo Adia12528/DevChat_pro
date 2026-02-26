@@ -76,6 +76,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+                // Detect iOS for screen sharing support
+                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
               // Stream visibility state
               const [streamVisibility, setStreamVisibility] = useState('public');
               // Stream source state for livestream (camera/screen)
@@ -133,10 +135,16 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // 🌟 NEW: Unified Stream Connection Logic
+    // Prevent multiple stream sessions per device/tab
     const handleJoinStream = async (roomName, asHost = false) => {
+      if (liveKitToken) {
+        console.warn("[LiveKit] Already in a stream session. Ignoring join request.");
+        return;
+      }
       try {
         const isProduction = window.location.hostname !== 'localhost';
         const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
+        console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
         const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
         const data = await response.json();
         if (data.token) {
@@ -145,6 +153,9 @@ function App() {
           setLiveKitToken(data.token);
           setSuccessMessage(asHost ? "🔴 Stream Started!" : "✅ Joined Stream");
           setTimeout(() => setSuccessMessage(''), 2000);
+        } else {
+          setErrorMessage("Failed to get LiveKit token");
+          setTimeout(() => setErrorMessage(''), 3000);
         }
       } catch (error) {
         console.error("Failed to connect to stream:", error);
@@ -154,6 +165,11 @@ function App() {
     };
 
     const handleLeaveStream = () => {
+      if (!liveKitToken) {
+        console.warn("[LiveKit] Not in a stream session. Ignoring leave request.");
+        return;
+      }
+      console.log(`[LiveKit] Leaving stream:`, currentStreamRoom, username, isStreamHost ? 'Host' : 'Viewer');
       setLiveKitToken(null);
       setCurrentStreamRoom("");
       setIsStreamHost(false);
@@ -7907,8 +7923,9 @@ function App() {
                       onChange={e => setStreamSource(e.target.value)}
                     >
                       <option value="camera">Camera</option>
-                      {!isMobileView && isWindows && <option value="screen">Screen</option>}
-                      {!isMobileView && isWindows && <option value="both">Both (Camera + Screen)</option>}
+                      {/* Only show screen/both if not iOS and not mobile view */}
+                      {!isMobileView && !isIOS && isWindows && <option value="screen">Screen</option>}
+                      {!isMobileView && !isIOS && isWindows && <option value="both">Both (Camera + Screen)</option>}
                     </select>
                   </div>
                   <button
