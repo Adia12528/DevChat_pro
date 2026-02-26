@@ -765,36 +765,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('devchatRoomDrafts', JSON.stringify(roomDrafts));
   }, [roomDrafts]);
-      {/* 🌟 NEW: LiveKit UI Engine */}
-      {liveKitToken && (
-        <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
-          <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Radio size={24} color="var(--error)" className="pulse-animation" />
-                  <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
-                      {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
-                  </h2>
-              </div>
-              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Leave Stream
-              </button>
-          </div>
-
-          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
-              <LiveKitRoom
-                video={isStreamHost}
-                audio={isStreamHost}
-                token={liveKitToken}
-                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
-                data-lk-theme="default"
-                onDisconnected={handleLeaveStream}
-              >
-                <VideoConference />
-                <RoomAudioRenderer />
-              </LiveKitRoom>
-          </div>
-        </div>
-      )}
 
   useEffect(() => {
     localStorage.setItem('devchatTypingTimeoutByRoom', JSON.stringify(typingTimeoutByRoom));
@@ -5704,6 +5674,36 @@ function App() {
 
   return (
     <div className="chat-container">
+      {/* 🌟 NEW: LiveKit UI Engine */}
+      {liveKitToken && (
+        <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
+          <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Radio size={24} color="var(--error)" className="pulse-animation" />
+                  <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
+                      {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
+                  </h2>
+              </div>
+              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Leave Stream
+              </button>
+          </div>
+
+          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
+              <LiveKitRoom
+                video={isStreamHost}
+                audio={isStreamHost}
+                token={liveKitToken}
+                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+                data-lk-theme="default"
+                onDisconnected={handleLeaveStream}
+              >
+                <VideoConference />
+                <RoomAudioRenderer />
+              </LiveKitRoom>
+          </div>
+        </div>
+      )}
       {/* Streaming error/success toast */}
       {(callError || successMessage) && (
         <div className="stream-toast" style={{
