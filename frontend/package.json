@@ -3,10 +3,13 @@
   "version": "2.10.8",
   "private": true,
   "dependencies": {
+    "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.2.0",
     "@types/recordrtc": "^5.6.15",
     "cloudinary": "^1.41.0",
     "emoji-picker-react": "^4.5.16",
     "framer-motion": "^10.0.0",
+    "livekit-client": "^2.17.2",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

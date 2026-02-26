@@ -1,4 +1,37 @@
 ﻿const express = require('express');
+const { AccessToken } = require('livekit-server-sdk');
+// 🌟 NEW: LiveKit Token Generator
+app.get('/api/livekit/token', async (req, res) => {
+    const roomName = req.query.room;
+    const participantName = req.query.username;
+    const isHost = req.query.isHost === 'true';
+
+    if (!roomName || !participantName) {
+        return res.status(400).json({ error: 'room and username are required' });
+    }
+
+    try {
+        const at = new AccessToken(
+            process.env.LIVEKIT_API_KEY, 
+            process.env.LIVEKIT_API_SECRET, 
+            { identity: participantName }
+        );
+
+        at.addGrant({ 
+            roomJoin: true, 
+            room: roomName,
+            canPublish: isHost,
+            canPublishData: true,
+            canSubscribe: true
+        });
+
+        const token = await at.toJwt();
+        res.json({ token });
+    } catch (error) {
+        console.error("Error generating LiveKit token:", error);
+        res.status(500).json({ error: "Failed to generate token" });
+    }
+});
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
@@ -849,238 +882,7 @@ io.on('connection', (socket) => {
         socket.to(socket.room).emit('profile_updated', { username, avatar, bio });
     });
 
-    // ==========================
-    // Livestream Signaling (one-to-many)
-    // ==========================
-
-    socket.on(LIVESTREAM_EVENTS.START, (data = {}, callback) => {
-        try {
-            const host = data.host || socket.username;
-            const visibility = data.visibility === 'public' ? 'public' : 'room';
-            const source = data.source === 'screen' ? 'screen' : 'camera';
-            const room = data.room || socket.activeRoom || socket.room;
-
-            if (!host || !room) {
-                callback?.({ error: 'Missing host or room for livestream' });
-                return;
-            }
-
-            if (room.includes('_dm_')) {
-                callback?.({ error: 'Livestream is only supported in group rooms' });
-                return;
-            }
-
-            const existingSessionId = Object.keys(liveStreams).find((sessionId) => liveStreams[sessionId]?.host === host);
-            if (existingSessionId) {
-                stopLivestreamSession(existingSessionId, 'host_restarted');
-            }
-
-            const sessionId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-            const targetUsers = visibility === 'public'
-                ? getAllConnectedUsers().filter((username) => username && username !== host)
-                : getUniqueRoomUsers(room).filter((username) => username && username !== host);
-
-            liveStreams[sessionId] = {
-                id: sessionId,
-                host,
-                room,
-                visibility,
-                source,
-                startedAt: new Date().toISOString(),
-                viewers: new Set()
-            };
-
-            const sentTo = new Set();
-            targetUsers.forEach((targetUsername) => {
-                const targetSocketIds = getSocketIdsByUsername(targetUsername);
-                targetSocketIds.forEach((targetSocketId) => {
-                    if (sentTo.has(targetSocketId)) return;
-                    sentTo.add(targetSocketId);
-                    io.to(targetSocketId).emit(LIVESTREAM_EVENTS.STARTED, {
-                        sessionId,
-                        host,
-                        room,
-                        visibility,
-                        source
-                    });
-                });
-            });
-
-            emitLivestreamViewers(sessionId);
-            callback?.({ success: true, sessionId, host, room, visibility, source, targets: targetUsers });
-        } catch (err) {
-            console.error('❌ Failed to start livestream:', err);
-            callback?.({ error: 'Failed to start livestream' });
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.OFFER, (data = {}) => {
-        try {
-            const { sessionId, to, from, offer } = data;
-            const session = liveStreams[sessionId];
-            if (!session || !to || !from || !offer) return;
-            if (session.host !== from) return;
-
-            const targetSocketIds = getSocketIdsByUsername(to);
-            targetSocketIds.forEach((targetSocketId) => {
-                io.to(targetSocketId).emit(LIVESTREAM_EVENTS.OFFER, {
-                    sessionId,
-                    from,
-                    offer,
-                    visibility: session.visibility,
-                    source: session.source,
-                    room: session.room
-                });
-            });
-        } catch (err) {
-            console.error('❌ Failed to forward livestream offer:', err);
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.ANSWER, (data = {}) => {
-        try {
-            const { sessionId, to, from, answer } = data;
-            const session = liveStreams[sessionId];
-            if (!session || !to || !from || !answer) return;
-
-            const targetSocketIds = getSocketIdsByUsername(to);
-            targetSocketIds.forEach((targetSocketId) => {
-                io.to(targetSocketId).emit(LIVESTREAM_EVENTS.ANSWER, {
-                    sessionId,
-                    from,
-                    answer
-                });
-            });
-
-            if (session.host === to) {
-                session.viewers = session.viewers || new Set();
-                session.viewers.add(from);
-                emitLivestreamViewers(sessionId);
-            }
-        } catch (err) {
-            console.error('❌ Failed to forward livestream answer:', err);
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.ICE_CANDIDATE, (data = {}) => {
-        try {
-            const { sessionId, to, from, candidate } = data;
-            if (!sessionId || !to || !candidate) return;
-            if (!liveStreams[sessionId]) return;
-
-            const targetSocketIds = getSocketIdsByUsername(to);
-            targetSocketIds.forEach((targetSocketId) => {
-                io.to(targetSocketId).emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
-                    sessionId,
-                    from,
-                    candidate
-                });
-            });
-        } catch (err) {
-            console.error('❌ Failed to forward livestream ICE candidate:', err);
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.DECLINE, (data = {}) => {
-        try {
-            const { sessionId, to, from } = data;
-            if (!sessionId || !to || !from) return;
-
-            const targetSocketIds = getSocketIdsByUsername(to);
-            targetSocketIds.forEach((targetSocketId) => {
-                io.to(targetSocketId).emit(LIVESTREAM_EVENTS.DECLINE, {
-                    sessionId,
-                    from
-                });
-            });
-        } catch (err) {
-            console.error('❌ Failed to forward livestream decline:', err);
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.LEAVE, (data = {}) => {
-        const sessionId = data.sessionId;
-        const viewer = data.viewer || socket.username;
-        const session = liveStreams[sessionId];
-        if (!session || !viewer) return;
-
-        if ((session.viewers || new Set()).has(viewer)) {
-            session.viewers.delete(viewer);
-            emitLivestreamViewers(sessionId);
-        }
-    });
-
-    socket.on(LIVESTREAM_EVENTS.STOP, (data = {}) => {
-        const sessionId = data.sessionId;
-        const host = data.host || socket.username;
-        const session = liveStreams[sessionId];
-        if (!session || !host) return;
-        if (session.host !== host) return;
-
-        stopLivestreamSession(sessionId, 'host_stopped');
-    });
-
-    socket.on(LIVESTREAM_EVENTS.JOIN_REQUEST, (data = {}) => {
-        const sessionId = data.sessionId;
-        const viewer = data.from || socket.username;
-        const session = liveStreams[sessionId];
-
-        if (!session || !viewer || viewer === session.host) return;
-
-        if (session.visibility === 'room') {
-            const roomUsersList = getUniqueRoomUsers(session.room);
-            if (!roomUsersList.includes(viewer)) return;
-        }
-
-        const hostSocketIds = getSocketIdsByUsername(session.host);
-        hostSocketIds.forEach((hostSocketId) => {
-            io.to(hostSocketId).emit(LIVESTREAM_EVENTS.JOIN_REQUEST, {
-                sessionId,
-                from: viewer,
-                host: session.host,
-                room: session.room,
-                visibility: session.visibility,
-                source: session.source
-            });
-        });
-    });
-
-    socket.on(LIVESTREAM_EVENTS.COMMENT, (data = {}) => {
-        const sessionId = data.sessionId;
-        const from = data.from || socket.username;
-        const text = typeof data.text === 'string' ? data.text.trim() : '';
-
-        if (!sessionId || !from || !text) return;
-        if (text.length > 300) return;
-
-        const payload = {
-            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            sessionId,
-            from,
-            text,
-            time: new Date().toISOString()
-        };
-
-        emitToLivestreamParticipants(sessionId, LIVESTREAM_EVENTS.COMMENTED, payload);
-    });
-
-    socket.on(LIVESTREAM_EVENTS.REACTION, (data = {}) => {
-        const sessionId = data.sessionId;
-        const from = data.from || socket.username;
-        const emoji = typeof data.emoji === 'string' ? data.emoji.trim() : '';
-
-        if (!sessionId || !from || !emoji || emoji.length > 8) return;
-
-        const payload = {
-            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            sessionId,
-            from,
-            emoji,
-            time: new Date().toISOString()
-        };
-
-        emitToLivestreamParticipants(sessionId, LIVESTREAM_EVENTS.REACTED, payload);
-    });
+    // ...existing code...
 
     // ==========================
     // WebRTC Video/Voice Calling Signaling

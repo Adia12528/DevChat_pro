@@ -28,6 +28,8 @@ import {
   switchBackToCamera,
   getQualityIndicator
 } from './callUtils';
+import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
+import '@livekit/components-styles';
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 const LIVESTREAM_REACTIONS = ['🔥', '👏', '❤️', '😂', '😮', '🎉'];
@@ -78,9 +80,10 @@ function App() {
     const isWindows = /Windows/i.test(navigator.userAgent);
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // Stream settings state
-    const [streamVisibility, setStreamVisibility] = useState('room');
-    const [streamSource, setStreamSource] = useState('camera');
+    // ...existing code...
+      const [liveKitToken, setLiveKitToken] = useState(null);
+      const [currentStreamRoom, setCurrentStreamRoom] = useState("");
+      const [isStreamHost, setIsStreamHost] = useState(false);
   // Existing state
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
@@ -102,14 +105,42 @@ function App() {
   const [deletingMsgId, setDeletingMsgId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    // 🌟 NEW: Unified Stream Connection Logic
+    const handleJoinStream = async (roomName, asHost = false) => {
+      try {
+        const isProduction = window.location.hostname !== 'localhost';
+        const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
+        const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
+        const data = await response.json();
+        if (data.token) {
+          setCurrentStreamRoom(roomName);
+          setIsStreamHost(asHost);
+          setLiveKitToken(data.token);
+          setSuccessMessage(asHost ? "🔴 Stream Started!" : "✅ Joined Stream");
+          setTimeout(() => setSuccessMessage(''), 2000);
+        }
+      } catch (error) {
+        console.error("Failed to connect to stream:", error);
+        setErrorMessage("Failed to connect to livestream");
+        setTimeout(() => setErrorMessage(''), 3000);
+      }
+    };
+
+    const handleLeaveStream = () => {
+      setLiveKitToken(null);
+      setCurrentStreamRoom("");
+      setIsStreamHost(false);
+      setSuccessMessage("Stream Ended");
+      setTimeout(() => setSuccessMessage(''), 2000);
+    };
+
   // New feature states
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  // (successMessage, errorMessage) state already declared above
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
   const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
@@ -168,31 +199,7 @@ function App() {
         quietStart: parsed.quietStart || '22:00',
         quietEnd: parsed.quietEnd || '07:00'
       };
-    } catch {
-      return {
-        mutedRooms: [],
-        dmOnlyPriority: false,
-        mentionOnly: false,
-        quietHoursEnabled: false,
-        quietStart: '22:00',
-        quietEnd: '07:00'
-      };
-    }
-  });
-  const [blockedUsers, setBlockedUsers] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('devchatBlockedUsers') || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [reportedUsers, setReportedUsers] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('devchatReportedUsers') || '[]');
-    } catch {
-      return [];
-    }
-  });
+                  {/* ...existing code... */}
   const [outgoingQueue, setOutgoingQueue] = useState([]);
   const [roomDrafts, setRoomDrafts] = useState(() => {
     try {
@@ -721,6 +728,36 @@ function App() {
   useEffect(() => {
     localStorage.setItem('devchatRoomDrafts', JSON.stringify(roomDrafts));
   }, [roomDrafts]);
+      {/* 🌟 NEW: LiveKit UI Engine */}
+      {liveKitToken && (
+        <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
+          <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Radio size={24} color="var(--error)" className="pulse-animation" />
+                  <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
+                      {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
+                  </h2>
+              </div>
+              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Leave Stream
+              </button>
+          </div>
+
+          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
+              <LiveKitRoom
+                video={isStreamHost}
+                audio={isStreamHost}
+                token={liveKitToken}
+                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+                data-lk-theme="default"
+                onDisconnected={handleLeaveStream}
+              >
+                <VideoConference />
+                <RoomAudioRenderer />
+              </LiveKitRoom>
+          </div>
+        </div>
+      )}
 
   useEffect(() => {
     localStorage.setItem('devchatTypingTimeoutByRoom', JSON.stringify(typingTimeoutByRoom));
@@ -5800,28 +5837,26 @@ function App() {
                   <button
                     className="menu-item"
                     onClick={() => {
-                      startLivestream(streamVisibility, streamSource);
+                      handleJoinStream(`${room}-stream`, true);
                       setShowMenuDropdown(false);
                     }}
-                    title="Start streaming with current settings"
+                    title="Start streaming with LiveKit"
                   >
                     <Disc3 size={18}/>
-                    <span>Stream</span>
+                    <span>Start Stream</span>
                   </button>
 
-                  {liveStreamInfo?.isHost && (
-                    <button
-                      className="menu-item menu-item-danger"
-                      onClick={() => {
-                        stopHostedLivestream(true);
-                        setShowMenuDropdown(false);
-                      }}
-                      title="Stop your active livestream"
-                    >
-                      <StopCircle size={18}/>
-                      <span>Stop Livestream</span>
-                    </button>
-                  )}
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      handleJoinStream(`${room}-stream`, false);
+                      setShowMenuDropdown(false);
+                    }}
+                    title="Join a LiveKit stream"
+                  >
+                    <PlayCircle size={18}/>
+                    <span>Join Stream</span>
+                  </button>
 
                   <button 
                     className="menu-item"
@@ -5925,21 +5960,7 @@ function App() {
           </div>
         </div>
 
-        {liveStreamInfo?.isHost && (
-          <div className="livestream-pill" title="Your livestream is active">
-            <span className="livestream-dot" />
-            <span>
-              LIVE {liveStreamInfo.visibility === 'public' ? 'Public' : 'Room'} · {liveStreamInfo.viewerCount || liveStreamInfo.viewers?.length || 0} viewers
-            </span>
-            <button
-              className="livestream-stop-btn"
-              onClick={() => stopHostedLivestream(true)}
-              title="Stop livestream"
-            >
-              Stop
-            </button>
-          </div>
-        )}
+        {/* ...existing code... */}
         
         {/* Call Buttons - Only show when a user is selected in DM */}
         {selectedUser && isSelectedUserOnline && callState !== 'active' && (
