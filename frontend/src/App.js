@@ -113,7 +113,8 @@ function App() {
   }, [liveStreamInfo]);
 
 
-// Stream Join Modal Component
+
+// --- Move these component definitions to the top of the file ---
 const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
   const [search, setSearch] = React.useState('');
   const [suggestions, setSuggestions] = React.useState([]);
@@ -241,7 +242,6 @@ const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
   );
 };
 
-// Viewers List Component
 const ViewersList = ({ viewers, onClose }) => {
   if (!viewers.length) return null;
   return (
