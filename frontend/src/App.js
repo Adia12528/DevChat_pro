@@ -195,56 +195,54 @@ function App() {
     };
 
   // New feature states
-                  {/* Streaming Control Menu: Only show on mobile during live streaming */}
-                  {liveStreamInfo && isMobileView && (
-                    <div className="stream-mobile-menu-container">
-                      <button
-                        className="stream-mobile-menu-btn"
-                        aria-label="Open stream controls"
-                        onClick={() => setShowMobileMenu((prev) => !prev)}
-                      >
-                        <Menu size={32} />
-                      </button>
-                      {showMobileMenu && (
-                        <div className="stream-mobile-menu-dropdown">
-                          <button
-                            className={`stream-mobile-menu-item${isMuted ? ' active' : ''}`}
-                            onClick={() => { toggleMute(); setShowMobileMenu(false); }}
-                          >
-                            {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} />} {isMuted ? 'Unmute' : 'Mute'}
-                          </button>
-                          {callType === 'video' && (
-                            <button
-                              className={`stream-mobile-menu-item${isVideoOff ? ' active' : ''}`}
-                              onClick={() => { toggleVideo(); setShowMobileMenu(false); }}
-                            >
-                              {isVideoOff ? <VideoOff size={22} /> : <Camera size={22} />} {isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
-                            </button>
-                          )}
-                          {callType === 'video' && (
-                            <button
-                              className={`stream-mobile-menu-item${isScreenSharing ? ' active' : ''}`}
-                              onClick={() => { toggleScreenShare(); setShowMobileMenu(false); }}
-                            >
-                              <Monitor size={22} /> {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
-                            </button>
-                          )}
-                          <button
-                            className="stream-mobile-menu-item end"
-                            onClick={() => { endCall(); setShowMobileMenu(false); }}
-                          >
-                            <PhoneOff size={22} /> End Call
-                          </button>
-                          <button
-                            className="stream-mobile-menu-item minimize"
-                            onClick={() => { toggleCallMinimize(); setShowMobileMenu(false); }}
-                          >
-                            <Minimize2 size={22} /> Minimize
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  // (successMessage, errorMessage) state already declared above
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
+  const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
+  const [ringtoneVolume, setRingtoneVolume] = useState(() => {
+    const storedVolume = Number(localStorage.getItem('ringtoneVolume'));
+    return Number.isFinite(storedVolume) ? Math.min(1, Math.max(0.05, storedVolume)) : 0.18;
+  });
+  const [autoJoinLivestream, setAutoJoinLivestream] = useState(() => localStorage.getItem('autoJoinLivestream') === 'true');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [userProfiles, setUserProfiles] = useState({});
+  const [showProfileModal, setShowProfileModal] = useState(null);
+  const [userStatus, setUserStatus] = useState({});
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [showMarkdown, setShowMarkdown] = useState(true);
+  
+  // Voice message states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [recordingLocked, setRecordingLocked] = useState(false);
+  const [slideDistance, setSlideDistance] = useState(0);
+  const [startX, setStartX] = useState(0);
+  
+  // Image preview states
+  const [imageCaption, setImageCaption] = useState('');
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]); // Multiple images: [{file, preview, id}]
+  const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
+  const [isDragging, setIsDragging] = useState(false); // Drag and drop state
+  
+  // Navigation & UI State (Breadcrumb/Back button system)
+  const [navigationStack, setNavigationStack] = useState([]); // Track navigation history
+  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'notifications', 'settings'
+  
+  // Private chat/DM states
+  const [showRoomSidebar, setShowRoomSidebar] = useState(false);
+  const [rooms, setRooms] = useState([]);
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [groupRoomId, setGroupRoomId] = useState('');
+  const [newRoomIdInput, setNewRoomIdInput] = useState('');
+  const [roomUserMap, setRoomUserMap] = useState({});
   const [activeRoomRegistry, setActiveRoomRegistry] = useState([]);
   const [globalPresenceUsers, setGlobalPresenceUsers] = useState([]);
   const [notificationItems, setNotificationItems] = useState([]);
