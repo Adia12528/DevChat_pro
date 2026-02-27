@@ -7891,18 +7891,21 @@ textarea.whatsapp-input {
   .call-controls {
     position: fixed;
     left: 50%;
-    bottom: max(32px, env(safe-area-inset-bottom, 32px));
+    bottom: max(4dvh, 36px, env(safe-area-inset-bottom, 36px));
     transform: translateX(-50%);
     gap: 10px;
     width: 98vw;
     max-width: 98vw;
-    padding: 18px 4vw 22px 4vw;
+    padding: 18px 4vw 32px 4vw;
+    margin-bottom: 2.5dvh;
     border-radius: 32px;
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
     z-index: 99999;
     pointer-events: auto;
+    background: linear-gradient(0deg, rgba(10,10,10,0.85) 80%, rgba(10,10,10,0.65) 100%);
+    transition: bottom 0.2s;
   }
   .call-control-btn {
     width: 44px;
@@ -7917,18 +7920,21 @@ textarea.whatsapp-input {
   .call-controls {
     position: fixed;
     left: 50%;
-    bottom: max(36px, env(safe-area-inset-bottom, 36px));
+    bottom: max(5dvh, 44px, env(safe-area-inset-bottom, 44px));
     transform: translateX(-50%);
     gap: 6px;
     width: 99vw;
     max-width: 99vw;
-    padding: 16px 2vw 28px 2vw;
+    padding: 16px 2vw 36px 2vw;
+    margin-bottom: 3dvh;
     border-radius: 24px;
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
     z-index: 99999;
     pointer-events: auto;
+    background: linear-gradient(0deg, rgba(10,10,10,0.92) 80%, rgba(10,10,10,0.65) 100%);
+    transition: bottom 0.2s;
   }
   .call-control-btn {
     width: 40px;
