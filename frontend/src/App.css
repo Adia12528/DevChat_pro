@@ -1,59 +1,77 @@
-﻿/* --- Mobile Streaming Controls Redesign --- */
-.stream-mobile-controls {
+﻿/* --- Modern Mobile Streaming Menu --- */
+.stream-mobile-menu-container {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
+  top: 18px;
+  right: 16px;
+  z-index: 12000;
   display: flex;
-  justify-content: space-around;
-  align-items: center;
-  background: linear-gradient(0deg, rgba(20,20,20,0.98) 90%, rgba(20,20,20,0.7) 100%);
-  padding: max(10px, env(safe-area-inset-bottom, 10px)) 0  max(18px, env(safe-area-inset-bottom, 18px)) 0;
-  z-index: 10000;
-  box-shadow: 0 -2px 16px rgba(0,0,0,0.18);
-  border-top-left-radius: 18px;
-  border-top-right-radius: 18px;
+  flex-direction: column;
+  align-items: flex-end;
 }
-.stream-mobile-btn {
-  background: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.04));
-  border: 2px solid rgba(255,255,255,0.18);
+.stream-mobile-menu-btn {
+  background: linear-gradient(135deg, #232526 60%, #414345 100%);
+  border: none;
   border-radius: 50%;
-  width: 54px;
-  height: 54px;
-  min-width: 48px;
-  min-height: 48px;
+  width: 52px;
+  height: 52px;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  margin: 0 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+  font-size: 28px;
+  cursor: pointer;
   transition: background 0.18s, transform 0.18s;
-  touch-action: manipulation;
 }
-.stream-mobile-btn:active {
-  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09));
-  transform: scale(0.96);
+.stream-mobile-menu-btn:active {
+  background: linear-gradient(135deg, #232526 80%, #414345 100%);
+  transform: scale(0.97);
 }
-.stream-mobile-btn.end {
-  background: linear-gradient(135deg, #f44336, #d32f2f);
-  border-color: #f44336;
+.stream-mobile-menu-dropdown {
+  margin-top: 10px;
+  background: linear-gradient(135deg, #232526 80%, #414345 100%);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+  padding: 10px 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  animation: fadeInMenu 0.22s cubic-bezier(0.34,1.56,0.64,1);
+}
+.stream-mobile-menu-item {
+  background: none;
+  border: none;
   color: #fff;
+  font-size: 1.08em;
+  padding: 13px 24px 13px 18px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+  border-radius: 12px;
+  margin: 0 8px 4px 8px;
+}
+.stream-mobile-menu-item:hover, .stream-mobile-menu-item.active {
+  background: rgba(255,255,255,0.10);
+  color: #90caf9;
+}
+.stream-mobile-menu-item.end {
+  color: #ff6b6b;
   font-weight: 700;
 }
-.stream-mobile-btn.end:active {
-  background: linear-gradient(135deg, #ef5350, #c62828);
-}
-.stream-mobile-btn.minimize {
-  background: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.04));
-  border-color: rgba(255,255,255,0.18);
+.stream-mobile-menu-item.minimize {
+  color: #ffd54f;
 }
 @media (min-width: 769px) {
-  .stream-mobile-controls {
+  .stream-mobile-menu-container {
     display: none !important;
   }
+}
+@keyframes fadeInMenu {
+  from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .livestream-professional-container {
   background: linear-gradient(135deg, #232526 0%, #414345 100%);

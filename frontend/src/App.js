@@ -8527,47 +8527,53 @@ function App() {
                   </div>
                 )}
 
-                {/* Redesigned Mobile Streaming Controls */}
-                <div className="stream-mobile-controls">
+                {/* Mobile: Modern Top-Right Menu for Streaming Controls */}
+                <div className="stream-mobile-menu-container">
                   <button
-                    className={`stream-mobile-btn ${isMuted ? 'active' : ''}`}
-                    onClick={toggleMute}
-                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    className="stream-mobile-menu-btn"
+                    aria-label="Open stream controls"
+                    onClick={() => setShowMobileMenu((prev) => !prev)}
                   >
-                    {isMuted ? <VolumeX size={28} /> : <Volume2 size={28} />}
+                    <Menu size={32} />
                   </button>
-                  {callType === 'video' && (
-                    <button
-                      className={`stream-mobile-btn ${isVideoOff ? 'active' : ''}`}
-                      onClick={toggleVideo}
-                      aria-label={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
-                    >
-                      {isVideoOff ? <VideoOff size={28} /> : <Camera size={28} />}
-                    </button>
+                  {showMobileMenu && (
+                    <div className="stream-mobile-menu-dropdown">
+                      <button
+                        className={`stream-mobile-menu-item${isMuted ? ' active' : ''}`}
+                        onClick={() => { toggleMute(); setShowMobileMenu(false); }}
+                      >
+                        {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} />} {isMuted ? 'Unmute' : 'Mute'}
+                      </button>
+                      {callType === 'video' && (
+                        <button
+                          className={`stream-mobile-menu-item${isVideoOff ? ' active' : ''}`}
+                          onClick={() => { toggleVideo(); setShowMobileMenu(false); }}
+                        >
+                          {isVideoOff ? <VideoOff size={22} /> : <Camera size={22} />} {isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
+                        </button>
+                      )}
+                      {callType === 'video' && (
+                        <button
+                          className={`stream-mobile-menu-item${isScreenSharing ? ' active' : ''}`}
+                          onClick={() => { toggleScreenShare(); setShowMobileMenu(false); }}
+                        >
+                          <Monitor size={22} /> {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+                        </button>
+                      )}
+                      <button
+                        className="stream-mobile-menu-item end"
+                        onClick={() => { endCall(); setShowMobileMenu(false); }}
+                      >
+                        <PhoneOff size={22} /> End Call
+                      </button>
+                      <button
+                        className="stream-mobile-menu-item minimize"
+                        onClick={() => { toggleCallMinimize(); setShowMobileMenu(false); }}
+                      >
+                        <Minimize2 size={22} /> Minimize
+                      </button>
+                    </div>
                   )}
-                  {callType === 'video' && (
-                    <button
-                      className={`stream-mobile-btn ${isScreenSharing ? 'active' : ''}`}
-                      onClick={toggleScreenShare}
-                      aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-                    >
-                      <Monitor size={28} />
-                    </button>
-                  )}
-                  <button
-                    className="stream-mobile-btn end"
-                    onClick={endCall}
-                    aria-label="End call"
-                  >
-                    <PhoneOff size={28} />
-                  </button>
-                  <button
-                    className="stream-mobile-btn minimize"
-                    onClick={toggleCallMinimize}
-                    aria-label="Minimize"
-                  >
-                    <Minimize2 size={28} />
-                  </button>
                 </div>
 
                 {/* Error Display */}
