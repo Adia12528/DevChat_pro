@@ -7536,7 +7536,6 @@ textarea.whatsapp-input {
 
 /* Call Controls - Production Enhanced */
 /* Enhanced for mobile responsiveness */
-/* Final polish for mobile and desktop */
 .call-controls {
   position: absolute;
   bottom: 40px;
@@ -7545,23 +7544,20 @@ textarea.whatsapp-input {
   display: flex;
   flex-wrap: nowrap;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   z-index: 20;
-  padding: 14px 24px;
-  background: linear-gradient(120deg, rgba(18,18,18,0.82) 60%, rgba(40,40,40,0.72) 100%);
+  padding: 12px 20px;
+  background: rgba(10, 10, 10, 0.65);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-radius: 50px;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 8px 32px 0 rgba(0,0,0,0.38), 0 1.5px 0 rgba(255,255,255,0.10) inset;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
   max-width: 98vw;
   overflow-x: auto;
   overflow-y: visible;
   -ms-overflow-style: none;
-  transition: box-shadow 0.2s, background 0.2s;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-}
 }
 .call-controls::-webkit-scrollbar {
   display: none;
@@ -7579,36 +7575,28 @@ textarea.whatsapp-input {
 }
 
 /* Enhanced for mobile touch targets */
-/* Final polish for control buttons */
 .call-control-btn {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.10));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border: 2px solid rgba(255,255,255,0.28);
+  border: 2px solid rgba(255, 255, 255, 0.3);
   color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 48px;
   min-height: 48px;
   font-size: 24px;
   position: relative;
   font-weight: 600;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.13) inset;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
   flex: 0 0 auto;
   touch-action: manipulation;
-  outline: none;
-}
-.call-control-btn:active {
-  transform: scale(0.96);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.32);
-  background: linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06));
-}
 }
 
 .call-control-btn:hover {
@@ -7903,16 +7891,14 @@ textarea.whatsapp-input {
   .call-controls {
     bottom: 16px;
     gap: 10px;
-    width: 99vw;
-    max-width: 99vw;
+    width: 98vw;
+    max-width: 98vw;
     left: 50%;
     transform: translateX(-50%);
-    padding: 10px 2vw;
+    padding: 10px 4vw;
     border-radius: 32px;
     overflow-x: auto;
     flex-wrap: nowrap;
-    box-shadow: 0 4px 18px 0 rgba(0,0,0,0.32);
-    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
   .call-control-btn {
     width: 44px;
@@ -7920,33 +7906,29 @@ textarea.whatsapp-input {
     min-width: 44px;
     min-height: 44px;
     font-size: 20px;
-    margin: 0 2px;
   }
 }
 
 @media (max-width: 480px) {
   .call-controls {
-    gap: 4px;
-    width: 100vw;
-    max-width: 100vw;
+    gap: 6px;
+    width: 99vw;
+    max-width: 99vw;
     left: 50%;
     transform: translateX(-50%);
-    padding: 7px 1vw;
-    border-radius: 18px;
+    padding: 8px 2vw;
+    border-radius: 24px;
     overflow-x: auto;
     flex-wrap: nowrap;
-    box-shadow: 0 2px 10px 0 rgba(0,0,0,0.28);
-    padding-bottom: calc(7px + env(safe-area-inset-bottom, 0px));
   }
   .call-control-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
-    font-size: 17px;
-    margin: 0 1px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 18px;
   }
-
+}
 @media (max-height: 700px) {
   .livestream-comments-panel {
     bottom: 112px;
