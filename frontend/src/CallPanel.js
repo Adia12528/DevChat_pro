@@ -32,7 +32,8 @@ const CallPanel = ({
   localStream,
   remoteStream
 }) => {
-  // Removed effects and more options state for simplified controls
+  const [showEffects, setShowEffects] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   if (!callPeer || !callType) return null;
 
@@ -48,12 +49,13 @@ const CallPanel = ({
             <div className="call-peer-name">{callPeer}</div>
             <div className="call-timer">{formatDuration(callDuration)}</div>
           </div>
+          <div className={`quality-dot ${connectionQuality >= 70 ? 'good' : connectionQuality >= 40 ? 'fair' : 'poor'}`}></div>
         </div>
       </div>
     );
   }
 
-  // Remove quality style for simplified UI
+  const qualityStyle = getQualityLabelStyle(connectionQuality);
 
   return (
     <div className="call-panel-container">
@@ -66,7 +68,27 @@ const CallPanel = ({
             </h2>
             <div className="call-details">
               <span className="call-duration">{formatDuration(callDuration)}</span>
+              <span className="quality-badge" style={{ backgroundColor: qualityStyle.color }}>
+                {qualityStyle.label}
+              </span>
+              {isRecording && <span className="recording-badge">🎙️ Recording</span>}
             </div>
+          </div>
+          <div className="call-actions">
+            <button
+              className="call-btn stats-btn"
+              onClick={onShowStats}
+              title="Show Call Stats"
+            >
+              📊
+            </button>
+            <button
+              className="call-btn minimize-btn"
+              onClick={onToggleMinimize}
+              title="Minimize Call"
+            >
+              ➖
+            </button>
           </div>
         </div>
 
@@ -118,39 +140,83 @@ const CallPanel = ({
           </div>
         )}
 
-        {/* No stats bar in simplified UI */}
+        {/* Stats Display */}
+        {callStats && (
+          <div className="call-stats-bar">
+            <div className="stat-item">
+              <span className="stat-label">Latency:</span>
+              <span className="stat-value">{Math.round(callStats.latency || 0)}ms</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Packets Lost:</span>
+              <span className="stat-value">{(callStats.packetLoss || 0).toFixed(1)}%</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-label">Video FPS:</span>
+              <span className="stat-value">{Math.round(callStats.videoBitrate || 0)} kbps</span>
+            </div>
+          </div>
+        )}
 
         {/* Control Bar */}
         <div className="call-controls">
-          {/* Mute/Unmute */}
+          {/* Basic controls */}
           <button
             className={`call-btn ${isMuted ? 'muted' : ''}`}
             onClick={onToggleMute}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? '🔇' : '🎤'}
+            {isMuted ? '🔇 Muted' : '🎤 Mute'}
           </button>
 
-          {/* Video On/Off (only for video calls) */}
           {callType === 'video' && (
-            <>
-              <button
-                className={`call-btn ${isVideoOff ? 'video-off' : ''}`}
-                onClick={onToggleVideo}
-                title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
-              >
-                {isVideoOff ? '📹️' : '📹'}
-              </button>
-              {/* Share Screen */}
-              <button
-                className={`call-btn ${isScreenSharing ? 'screen-active' : ''}`}
-                onClick={onToggleScreenShare}
-                title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-              >
-                {isScreenSharing ? '🖥️' : '🖥️'}
-              </button>
-            </>
+            <button
+              className={`call-btn ${isVideoOff ? 'video-off' : ''}`}
+              onClick={onToggleVideo}
+              title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+            >
+              {isVideoOff ? '📹️ Off' : '📹 Video'}
+            </button>
           )}
+
+          {callType === 'video' && (
+            <button
+              className={`call-btn ${isScreenSharing ? 'screen-active' : ''}`}
+              onClick={onToggleScreenShare}
+              title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+            >
+              {isScreenSharing ? '🖥️ Sharing' : '🖥️ Share'}
+            </button>
+          )}
+
+          {/* Recording Button */}
+          <button
+            className={`call-btn ${isRecording ? 'recording' : ''}`}
+            onClick={onToggleRecording}
+            title={isRecording ? 'Stop recording' : 'Start recording'}
+          >
+            {isRecording ? '🔴 Recording' : '⭕ Record'}
+          </button>
+
+          {/* Effects Button */}
+          {callType === 'video' && (
+            <button
+              className="call-btn"
+              onClick={() => setShowEffects(!showEffects)}
+              title="Video effects"
+            >
+              🎨 Effects
+            </button>
+          )}
+
+          {/* More Options */}
+          <button
+            className="call-btn"
+            onClick={() => setShowMoreOptions(!showMoreOptions)}
+            title="More options"
+          >
+            ⋯
+          </button>
 
           {/* End Call */}
           <button
@@ -158,13 +224,97 @@ const CallPanel = ({
             onClick={onEndCall}
             title="End call"
           >
-            ☐
+            ☐ End
           </button>
         </div>
 
-        {/* No effects panel in simplified UI */}
+        {/* Effects Panel */}
+        {showEffects && callType === 'video' && (
+          <div className="call-effects-panel">
+            <h4>Video Effects</h4>
+            <div className="effect-group">
+              <label>
+                <span>Brightness:</span>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  value={videoEffectSettings?.brightness || 100}
+                  onChange={(e) => onApplyEffect('brightness', parseInt(e.target.value))}
+                />
+                <span>{videoEffectSettings?.brightness || 100}%</span>
+              </label>
+            </div>
+            <div className="effect-group">
+              <label>
+                <span>Contrast:</span>
+                <input
+                  type="range"
+                  min="50"
+                  max="150"
+                  value={videoEffectSettings?.contrast || 100}
+                  onChange={(e) => onApplyEffect('contrast', parseInt(e.target.value))}
+                />
+                <span>{videoEffectSettings?.contrast || 100}%</span>
+              </label>
+            </div>
+            <div className="effect-group">
+              <label>
+                <span>Saturation:</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="200"
+                  value={videoEffectSettings?.saturation || 100}
+                  onChange={(e) => onApplyEffect('saturation', parseInt(e.target.value))}
+                />
+                <span>{videoEffectSettings?.saturation || 100}%</span>
+              </label>
+            </div>
+            <div className="effect-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={videoEffectSettings?.blur || false}
+                  onChange={(e) => onApplyEffect('blur', e.target.checked)}
+                />
+                Background Blur
+              </label>
+            </div>
+            <button className="btn-reset-effects" onClick={() => {
+              onApplyEffect('brightness', 100);
+              onApplyEffect('contrast', 100);
+              onApplyEffect('saturation', 100);
+              onApplyEffect('blur', false);
+            }}>
+              Reset Effects
+            </button>
+          </div>
+        )}
 
-        {/* No more options panel in simplified UI */}
+        {/* More Options Panel */}
+        {showMoreOptions && (
+          <div className="call-options-panel">
+            <div className="option-item">
+              <span>Auto-record calls</span>
+              <input
+                type="checkbox"
+                checked={localStorage.getItem('autoRecordCalls') === 'true'}
+                onChange={(e) => {
+                  localStorage.setItem('autoRecordCalls', e.target.checked);
+                }}
+              />
+            </div>
+            <div className="option-item">
+              <span>Network Stats</span>
+              <span className="info-text">
+                {callStats
+                  ? `Latency: ${Math.round(callStats.latency || 0)}ms | Loss: ${(callStats.packetLoss || 0).toFixed(1)}%`
+                  : 'Not available'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
