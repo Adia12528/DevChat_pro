@@ -5677,13 +5677,14 @@ function App() {
   }, [showChat, groupRoomSummaries, activeRoom, room, switchRoom, markCurrentRoomAsRead]);
 
   if (!showChat) return (
-    <div className="login-screen">
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
-        <Zap color="#00a884" size={48} fill="#00a884" />
-        <h2 className="brand">DevChat <span>Pro+</span></h2>
-        <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
-        <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
-        <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
+    <div className="login-screen" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #232526 0%, #414345 100%)' }}>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card" style={{ width: '100%', maxWidth: 380, background: 'var(--header)', borderRadius: 18, boxShadow: '0 4px 32px rgba(0,0,0,0.18)', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Zap color="#00a884" size={48} fill="#00a884" style={{ marginBottom: 8 }} />
+        <h2 className="brand" style={{ fontWeight: 800, fontSize: 28, marginBottom: 18, color: 'var(--accent)' }}>DevChat <span style={{ color: '#fff', fontWeight: 600 }}>Pro+</span></h2>
+        <div className="input-group" style={{ width: '100%', marginBottom: 16 }}><User size={18} style={{ marginRight: 8 }}/><input style={{ flex: 1, borderRadius: 8, border: '1px solid var(--border)', padding: '10px 14px', fontSize: 16 }} placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
+        <div className="input-group" style={{ width: '100%', marginBottom: 20 }}><Hash size={18} style={{ marginRight: 8 }}/><input style={{ flex: 1, borderRadius: 8, border: '1px solid var(--border)', padding: '10px 14px', fontSize: 16 }} placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
+        <button className="join-btn" style={{ width: '100%', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 0', fontWeight: 700, fontSize: 17, letterSpacing: 0.5, cursor: 'pointer', marginBottom: 8, transition: 'background 0.2s' }} onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
+        <div style={{ color: '#aaa', fontSize: 14, marginTop: 10, textAlign: 'center' }}>Join or start a room to begin streaming, chatting, and collaborating in real time.<br/>Optimized for all devices.</div>
       </motion.div>
     </div>
   );
@@ -5705,18 +5706,85 @@ function App() {
               </button>
           </div>
 
-          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
-              <LiveKitRoom
-                video={isStreamHost}
-                audio={isStreamHost}
-                token={liveKitToken}
-                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
-                data-lk-theme="default"
-                onDisconnected={handleLeaveStream}
-              >
+          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <LiveKitRoom
+              video={isStreamHost}
+              audio={isStreamHost}
+              token={liveKitToken}
+              serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+              data-lk-theme="default"
+              onDisconnected={handleLeaveStream}
+            >
+              {isStreamHost ? (
                 <VideoConference />
-                <RoomAudioRenderer />
-              </LiveKitRoom>
+              ) : (
+                <div style={{ width: '100%', maxWidth: 900, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {/* Only show the streamer's video for viewers */}
+                  <VideoConference
+                    style={{ width: '100%', borderRadius: 16, overflow: 'hidden', background: '#111' }}
+                    layout="grid"
+                    hideSelfView={true}
+                    hideControls={true}
+                  />
+                  {/* Reactions and comments UI will be added here */}
+                  <div className="livestream-interactions" style={{ width: '100%', marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* Reactions */}
+                    <div className="livestream-reactions-bar" style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {LIVESTREAM_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          className="reaction-btn"
+                          style={{ fontSize: 28, background: 'none', border: 'none', cursor: 'pointer', transition: 'transform 0.1s', borderRadius: 8 }}
+                          onClick={() => {/* TODO: send reaction event */}}
+                          aria-label={`React with ${emoji}`}
+                          tabIndex={0}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Comments */}
+                    <div className="livestream-comments-section" style={{ width: '100%', maxWidth: 500, background: 'var(--header)', borderRadius: 12, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: 8 }}>
+                      <div className="comments-list" style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 8 }}>
+                        {livestreamComments.length === 0 ? (
+                          <div style={{ color: '#888', textAlign: 'center', fontSize: 15 }}>No comments yet. Be the first to comment!</div>
+                        ) : (
+                          livestreamComments.map((c, idx) => (
+                            <div key={idx} style={{ marginBottom: 6, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--txt)' }}>{c.user || 'User'}:</span>
+                              <span style={{ color: 'var(--txt2)' }}>{c.text}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <form
+                        style={{ display: 'flex', gap: 8 }}
+                        onSubmit={e => {
+                          e.preventDefault();
+                          if (!livestreamCommentInput.trim()) return;
+                          // TODO: send comment event
+                          setLivestreamComments([...livestreamComments, { user: username, text: livestreamCommentInput }]);
+                          setLivestreamCommentInput('');
+                        }}
+                      >
+                        <input
+                          type="text"
+                          className="comment-input"
+                          style={{ flex: 1, borderRadius: 8, border: '1px solid var(--border)', padding: '8px 12px', fontSize: 15 }}
+                          placeholder="Add a comment..."
+                          value={livestreamCommentInput}
+                          onChange={e => setLivestreamCommentInput(e.target.value)}
+                          maxLength={200}
+                          autoComplete="off"
+                        />
+                        <button type="submit" style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}>Send</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <RoomAudioRenderer />
+            </LiveKitRoom>
           </div>
         </div>
       )}
