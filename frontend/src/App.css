@@ -7889,17 +7889,19 @@ textarea.whatsapp-input {
 
 @media (max-width: 768px) {
   .call-controls {
+    position: fixed;
+    left: 50%;
     bottom: 32px;
+    transform: translateX(-50%);
     gap: 10px;
     width: 98vw;
     max-width: 98vw;
-    left: 50%;
-    transform: translateX(-50%);
     padding: 18px 4vw 22px 4vw;
     border-radius: 32px;
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
+    z-index: 1000;
   }
   .call-control-btn {
     width: 44px;
@@ -7912,17 +7914,19 @@ textarea.whatsapp-input {
 
 @media (max-width: 480px) {
   .call-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 36px;
+    transform: translateX(-50%);
     gap: 6px;
     width: 99vw;
     max-width: 99vw;
-    left: 50%;
-    transform: translateX(-50%);
     padding: 16px 2vw 28px 2vw;
     border-radius: 24px;
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
-    bottom: 36px;
+    z-index: 1000;
   }
   .call-control-btn {
     width: 40px;
