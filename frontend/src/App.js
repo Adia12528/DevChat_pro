@@ -5714,6 +5714,44 @@ function App() {
       {/* 🌟 NEW: LiveKit UI Engine */}
       {liveKitToken && (
         <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
+          {/* Mobile menu dropdown above header on mobile */}
+          {showMenuDropdown && isMobileView && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 11000 }}>
+              <AnimatePresence>
+                <motion.div 
+                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  style={{ margin: '0 auto', maxWidth: 360 }}
+                >
+                  {/* ...menu dropdown content... */}
+                  {/* Copy from the main menu dropdown rendering below */}
+                  <div className="menu-header">Actions</div>
+                  <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
+                  <button className="menu-item" onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
+                  <button className="menu-item" onClick={() => { if (deferredPrompt) { handleInstallClick(); setShowMenuDropdown(false); } }} disabled={!deferredPrompt} style={{ cursor: deferredPrompt ? 'pointer' : 'default', opacity: deferredPrompt ? 1 : 0.6 }}><Smartphone size={18}/><span>{isAppInstalled ? '✓ App Installed' : deferredPrompt ? 'Install as App' : 'Install (Desktop Only)'}</span></button>
+                  <div className="menu-divider"></div>
+                  <button className="menu-item" onClick={() => { setShowRoomSidebar(true); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations {roomScopedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{roomScopedOnlineUsers.filter((user) => user !== username).length}</span>}</span></button>
+                  <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}</span></button>
+                  <button className="menu-item" onClick={() => { navigateTo('media'); setShowMenuDropdown(false); }}><ImageIcon size={18}/><span>Media {mediaMessages.length > 0 && <span className="menu-badge">{mediaMessages.length}</span>}</span></button>
+                  <button className="menu-item" onClick={() => { navigateTo('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}</span></button>
+                  <div className="menu-divider"></div>
+                  <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMenuDropdown(false); }} title="Start streaming with LiveKit"><Disc3 size={18}/><span>Start Stream</span></button>
+                  <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMenuDropdown(false); }} title="Join a LiveKit stream"><PlayCircle size={18}/><span>Join Stream</span></button>
+                  <button className="menu-item" onClick={() => setShowQuickReplies(!showQuickReplies)} title="Quick reply templates"><MessageSquare size={18}/><span>Quick Replies</span></button>
+                  <button className="menu-item" onClick={() => { navigateTo('settings'); setShowMenuDropdown(false); }}><Settings size={18}/><span>Settings</span></button>
+                  {recentMentions > 0 && (<button className="menu-item" onClick={() => { setChat(prev => { const firstMention = mentionedMessages[0]; if (firstMention && msgRefsMap.current[firstMention._id]) { msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' }); } return prev; }); setShowMenuDropdown(false); }} title={`You have ${recentMentions} mention${recentMentions !== 1 ? 's' : ''}`}><AtSign size={18}/><span>Mentions {recentMentions > 0 && <span className="menu-badge">{recentMentions}</span>}</span></button>)}
+                  <button className="menu-item" onClick={() => setShowMenuDropdown(false)} title="Conversation statistics"><Hash size={18}/><span>Stats: {conversationStats.totalMessages} msgs, {conversationStats.totalUsers} users</span></button>
+                  <div className="menu-divider"></div>
+                  <button className="menu-item menu-item-danger" onClick={handleLogout} title="Logout and end session"><LogOut size={18}/><span>Logout</span></button>
+                  <div className="menu-footer"><div>Session ends when browser closes</div><div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div></div>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          )}
+          {/* Livestream header below menu dropdown */}
           <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <Radio size={24} color="var(--error)" className="pulse-animation" />
