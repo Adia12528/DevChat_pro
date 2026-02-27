@@ -289,29 +289,28 @@ function App() {
 
 
 
-// --- Move these component definitions to the top of the file ---
-const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
+
+// ===== COMPONENT DEFINITIONS (at the bottom of the file) =====
+const StreamJoinModal = ({ visible, streams, onClose, onJoin, formatRelativeTime }) => {
   const [search, setSearch] = React.useState('');
   const [suggestions, setSuggestions] = React.useState([]);
-  const [selectedStream, setSelectedStream] = React.useState(null);
 
   const filteredStreams = streams.filter(stream => {
     const searchLower = search.toLowerCase();
     return stream.host.toLowerCase().includes(searchLower) ||
-      stream.uniqueId.toLowerCase().includes(searchLower) ||
-      stream.room.toLowerCase().includes(searchLower);
+           (stream.uniqueId || '').toLowerCase().includes(searchLower) ||
+           stream.room.toLowerCase().includes(searchLower);
   });
 
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearch(value);
-    // Generate suggestions based on partial matches
     if (value.length > 1) {
-      const matches = streams.filter(s =>
+      const matches = streams.filter(s => 
         s.host.toLowerCase().includes(value.toLowerCase()) ||
-        s.uniqueId.toLowerCase().includes(value.toLowerCase())
+        (s.uniqueId || '').toLowerCase().includes(value.toLowerCase())
       ).map(s => ({
-        text: `${s.host} (${s.uniqueId})`,
+        text: `${s.host} (${s.uniqueId || 'N/A'})`,
         stream: s
       }));
       setSuggestions(matches.slice(0, 5));
@@ -322,21 +321,20 @@ const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
 
   const handleSuggestionClick = (stream) => {
     setSearch(stream.host);
-    setSelectedStream(stream);
     setSuggestions([]);
   };
 
   if (!visible) return null;
 
   return (
-    <motion.div
+    <motion.div 
       className="stream-join-modal-overlay"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={onClose}
     >
-      <motion.div
+      <motion.div 
         className="stream-join-modal"
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
@@ -392,14 +390,17 @@ const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
                       <User size={14} />
                       {stream.host}
                     </span>
-                    <span className="stream-badge">{stream.source}</span>
+                    <span className="stream-badge">{stream.source || 'camera'}</span>
                   </div>
                   <div className="stream-item-details">
-                    <span className="stream-unique-id">ID: {stream.uniqueId}</span>
+                    <span className="stream-unique-id">ID: {stream.uniqueId || 'N/A'}</span>
                     <span className="stream-viewers">
                       <Users size={12} />
-                      {stream.viewerCount} watching
+                      {stream.viewerCount || 0} watching
                     </span>
+                  </div>
+                  <div className="stream-time">
+                    Started {formatRelativeTime && stream.startedAt ? formatRelativeTime(stream.startedAt) : ''}
                   </div>
                 </div>
                 <button
@@ -417,10 +418,11 @@ const StreamJoinModal = ({ visible, streams, onClose, onJoin }) => {
   );
 };
 
-const ViewersList = ({ viewers, onClose }) => {
-  if (!viewers.length) return null;
+const ViewersList = ({ viewers, onClose, getInitials }) => {
+  if (!viewers || !viewers.length) return null;
+
   return (
-    <motion.div
+    <motion.div 
       className="viewers-list-modal"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -436,7 +438,7 @@ const ViewersList = ({ viewers, onClose }) => {
         {viewers.map((viewer, i) => (
           <div key={i} className="viewer-item">
             <div className="viewer-avatar">
-              {getInitials(viewer)}
+              {getInitials ? getInitials(viewer) : viewer.charAt(0).toUpperCase()}
             </div>
             <span className="viewer-name">{viewer}</span>
           </div>
