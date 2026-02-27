@@ -90,6 +90,169 @@ function App() {
   const [viewerCount, setViewerCount] = useState(0);
   const [streamNotifications, setStreamNotifications] = useState([]);
   // ...existing code...
+
+  // --- Stream modal, notifications, and viewers list rendering ---
+  // Place these in your main return (JSX) after the LiveKit UI Engine section:
+  // Stream Join Modal
+  // (Insert this where modals are rendered)
+  /*
+  <AnimatePresence>
+    {streamJoinModal.visible && (
+      <StreamJoinModal
+        visible={streamJoinModal.visible}
+        streams={activeStreams}
+        onClose={() => setStreamJoinModal({ visible: false, streams: [] })}
+        onJoin={(stream) => {
+          setStreamJoinModal({ visible: false, streams: [] });
+          handleJoinStream(stream.room, false);
+        }}
+        formatRelativeTime={formatRelativeTime}
+      />
+    )}
+  </AnimatePresence>
+  */
+
+  // Stream Notifications
+  /*
+  <AnimatePresence>
+    {streamNotifications.slice(0, 3).map((notification, index) => (
+      <motion.div
+        key={notification.id}
+        className="viewer-notification"
+        initial={{ x: 100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        exit={{ x: 100, opacity: 0 }}
+        transition={{ delay: index * 0.1 }}
+        onClick={() => {
+          const stream = activeStreams.find(s => s.id === notification.streamId);
+          if (stream) {
+            setStreamJoinModal({ visible: true, streams: [stream] });
+          }
+          setStreamNotifications(prev => prev.filter(n => n.id !== notification.id));
+        }}
+      >
+        <span>🔴 {notification.message}</span>
+      </motion.div>
+    ))}
+  </AnimatePresence>
+  */
+
+  // Host Controls (inside active call interface when user is host)
+  /*
+  {liveStreamInfo?.isHost && callState === 'active' && (
+    <div className="host-controls">
+      <div 
+        className="viewer-count-badge"
+        onClick={() => setShowViewersList(!showViewersList)}
+      >
+        <Users size={18} />
+        <span className="count">{viewerCount}</span>
+        <span className="label">watching</span>
+      </div>
+      <AnimatePresence>
+        {showViewersList && (
+          <ViewersList
+            viewers={streamViewers}
+            onClose={() => setShowViewersList(false)}
+            getInitials={getInitials}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  )}
+  */
+
+  // Reactions display for viewers
+  /*
+  <AnimatePresence>
+    {streamReactions.length > 0 && callState === 'active' && (
+      <div className="reaction-bubbles">
+        {streamReactions.slice(-5).map(reaction => (
+          <motion.div
+            key={reaction.id}
+            className="reaction-bubble"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            {reaction.emoji}
+          </motion.div>
+        ))}
+      </div>
+    )}
+  </AnimatePresence>
+  */
+
+  // --- Update menu dropdown items for streaming ---
+  // Replace your Stream menu items with:
+  /*
+  <button
+    className="menu-item"
+    onClick={() => {
+      if (activeStreams.length > 0) {
+        setStreamJoinModal({ visible: true, streams: activeStreams });
+      } else {
+        handleJoinStream(`${room}-stream`, true);
+      }
+      setShowMenuDropdown(false);
+    }}
+    title={activeStreams.length > 0 ? `${activeStreams.length} active stream(s)` : "Start streaming"}
+  >
+    <Disc3 size={18}/>
+    <span>Stream {activeStreams.length > 0 && <span className="menu-badge">{activeStreams.length}</span>}</span>
+  </button>
+
+  <button
+    className="menu-item"
+    onClick={() => {
+      if (activeStreams.length > 0) {
+        setStreamJoinModal({ visible: true, streams: activeStreams });
+      } else {
+        setErrorMessage('No active streams available');
+        setTimeout(() => setErrorMessage(''), 3000);
+      }
+      setShowMenuDropdown(false);
+    }}
+    style={{
+      opacity: activeStreams.length === 0 ? 0.6 : 1,
+      cursor: activeStreams.length === 0 ? 'not-allowed' : 'pointer'
+    }}
+  >
+    <PlayCircle size={18}/>
+    <span>Join Stream {activeStreams.length > 0 && <span className="menu-badge">{activeStreams.length}</span>}</span>
+  </button>
+  */
+
+  // --- Update notifications panel to show stream notifications ---
+  // Inside your notifications panel rendering (where you map through notificationItems), add:
+  /*
+  {streamNotifications.map(notification => (
+    <button
+      key={notification.id}
+      className="starred-panel-item notification-item"
+      onClick={() => {
+        const stream = activeStreams.find(s => s.id === notification.streamId);
+        if (stream) {
+          setStreamJoinModal({ visible: true, streams: [stream] });
+        }
+        setStreamNotifications(prev => prev.filter(n => n.id !== notification.id));
+        goBack();
+      }}
+    >
+      <div className="starred-item-meta">
+        <span className="starred-item-sender">{notification.host}</span>
+        <span className="notification-source live">LIVE</span>
+        <span className="starred-item-time">{formatRelativeTime(notification.time)}</span>
+      </div>
+      <div className="starred-item-preview">
+        {notification.message}
+        <span style={{ display: 'block', marginTop: 4, fontSize: 11, fontWeight: 700, color: 'var(--primary)' }}>
+          Tap to join stream
+        </span>
+      </div>
+    </button>
+  ))}
+  */
   useEffect(() => {
     if (!socketRef.current || !liveStreamInfo?.isHost) return;
 
@@ -494,8 +657,7 @@ const ViewersList = ({ viewers, onClose }) => {
   // New feature states
 
   // Streaming enhancement states
-  const [activeStreams, setActiveStreams] = useState([]); // All active streams in the app
-  const [streamJoinModal, setStreamJoinModal] = useState({ visible: false, streams: [] });
+  // (Removed duplicate streaming state declarations)
 
   // --- Move these component definitions to the bottom of the file, outside App ---
   // ...existing code...
