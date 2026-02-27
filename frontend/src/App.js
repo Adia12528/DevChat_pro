@@ -5764,7 +5764,7 @@ function App() {
               </button>
           </div>
 
-          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
+          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px', marginBottom: isMobileView ? 72 : 0 }}>
               <LiveKitRoom
                 video={isStreamHost}
                 audio={isStreamHost}
@@ -5777,6 +5777,28 @@ function App() {
                 <RoomAudioRenderer />
               </LiveKitRoom>
           </div>
+          {/* Mobile streaming controls bar */}
+          {isMobileView && (
+            <div style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 12001,
+              background: 'rgba(20,20,20,0.98)',
+              display: 'flex',
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              padding: '12px 0 18px 0',
+              boxShadow: '0 -2px 12px rgba(0,0,0,0.18)'
+            }}>
+              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 700, fontSize: 16 }}>End</button>
+              {isStreamHost && (
+                <button onClick={/* TODO: Add toggle video logic */ undefined} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, fontSize: 16 }}>Video</button>
+              )}
+              <button onClick={/* TODO: Add mute/unmute logic */ undefined} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, fontSize: 16 }}>Mute</button>
+            </div>
+          )}
         </div>
       )}
       {/* Streaming error/success toast */}
