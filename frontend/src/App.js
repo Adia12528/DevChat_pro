@@ -138,6 +138,13 @@ function App() {
     // Prevent multiple stream sessions per device/tab
     const handleJoinStream = async (roomName, asHost = false) => {
       if (liveKitToken) {
+        if (currentStreamRoom === roomName) {
+          setErrorMessage("You are already in this stream session.");
+          setTimeout(() => setErrorMessage(''), 2500);
+        } else {
+          setErrorMessage("You are already in another stream session. Please leave it first.");
+          setTimeout(() => setErrorMessage(''), 2500);
+        }
         console.warn("[LiveKit] Already in a stream session. Ignoring join request.");
         return;
       }
