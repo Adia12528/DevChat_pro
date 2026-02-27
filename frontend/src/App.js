@@ -76,6 +76,16 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+                  // Listen for FORCE_RELOAD message from service worker to force update
+                  useEffect(() => {
+                    if ('serviceWorker' in navigator) {
+                      navigator.serviceWorker.addEventListener('message', (event) => {
+                        if (event.data && event.data.type === 'FORCE_RELOAD') {
+                          window.location.reload(true);
+                        }
+                      });
+                    }
+                  }, []);
                 // Detect iOS for screen sharing support
                 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
               // Stream visibility state
