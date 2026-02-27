@@ -116,6 +116,18 @@ app.get('/api/livekit/token', async (req, res) => {
     }
 
     try {
+        // Prevent duplicate host joins for the same user in the same room
+        if (isHost) {
+            // Use a simple in-memory map for host sessions (production: use Redis or DB)
+            if (!global.livekitHostSessions) global.livekitHostSessions = {};
+            const hostKey = `${roomName}::${participantName}`;
+            if (global.livekitHostSessions[hostKey]) {
+                return res.status(409).json({ error: 'You are already hosting this stream in another session or tab.' });
+            }
+            // Mark this host session as active
+            global.livekitHostSessions[hostKey] = true;
+        }
+
         const at = new AccessToken(
             process.env.LIVEKIT_API_KEY, 
             process.env.LIVEKIT_API_SECRET, 
@@ -132,6 +144,13 @@ app.get('/api/livekit/token', async (req, res) => {
 
         const token = await at.toJwt();
         res.json({ token });
+
+        // Optionally, set a timeout to auto-clear the host session after 2 hours
+        if (isHost) {
+            setTimeout(() => {
+                if (global.livekitHostSessions) delete global.livekitHostSessions[`${roomName}::${participantName}`];
+            }, 2 * 60 * 60 * 1000);
+        }
     } catch (error) {
         console.error("Error generating LiveKit token:", error);
         res.status(500).json({ error: "Failed to generate token" });
