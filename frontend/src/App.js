@@ -5692,119 +5692,28 @@ function App() {
     <div className="chat-container">
       {/* 🌟 NEW: LiveKit UI Engine */}
       {liveKitToken && (
-        <div
-          className={`livestream-fullscreen-container${isFullscreen ? ' fullscreen' : ''}`}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            backgroundColor: 'var(--bg)',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 0,
-            height: '100vh',
-            width: '100vw',
-            transition: 'all 0.2s',
-          }}
-        >
-          <div
-            className="livestream-header"
-            style={{
-              position: 'relative',
-              width: '100%',
-              zIndex: 10000,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: isMobileView ? '10px 8px' : '15px 32px',
-              background: 'var(--header)',
-              borderBottom: '1px solid var(--border)',
-              minHeight: 56,
-              boxSizing: 'border-box',
-            }}
-          >
+        <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+          <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Radio size={24} color="var(--error)" className="pulse-animation" />
-              <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: isMobileView ? '15px' : '18px' }}>
-                {isStreamHost ? '🔴 You are Live' : `Watching: ${currentStreamRoom}`}
+              <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
+                {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
               </h2>
+              {/* Viewer count for streamer */}
               {isStreamHost && liveStreamInfo?.viewerCount !== undefined && (
                 <span style={{ marginLeft: 16, fontWeight: 500, color: '#00a884', fontSize: 16, background: 'rgba(0,0,0,0.08)', borderRadius: 8, padding: '2px 10px' }}>
                   👁️ {liveStreamInfo.viewerCount} viewer{liveStreamInfo.viewerCount === 1 ? '' : 's'}
                 </span>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                onClick={() => setIsFullscreen((f) => !f)}
-                style={{
-                  background: 'var(--panel-bg, #f8f8f8)',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                  color: '#222',
-                  padding: '7px 14px',
-                  fontWeight: 600,
-                  fontSize: 15,
-                  marginRight: 8,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-                title={isFullscreen ? 'Exit Fullscreen' : 'Go Fullscreen'}
-              >
-                {isFullscreen ? (
-                  <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M14 10V4h6v6h-2V6.41l-5.29 5.3-1.42-1.42L16.59 4H14zm-4 4v6H4v-6h2v3.59l5.29-5.3 1.42 1.42L7.41 20H10zm10 0h-2v3.59l-5.29-5.3-1.42 1.42L16.59 20H14v-6h6v6z"/></svg>
-                ) : (
-                  <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h6v2H6.41l5.3 5.29-1.42 1.42L4 6.41V10H2V4zm16 0v6h-2V6.41l-5.29 5.3-1.42-1.42L17.59 4H14V2h6zm0 16h-6v-2h3.59l-5.3-5.29 1.42-1.42L20 17.59V14h2v6zM4 20v-6h2v3.59l5.29-5.3 1.42 1.42L6.41 20H10v2H4z"/></svg>
-                )}
-                {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-              </button>
-              <button
-                onClick={handleLeaveStream}
-                style={{
-                  background: 'var(--error)',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontWeight: 'bold',
-                }}
-              >
-                Leave Stream
-              </button>
-            </div>
+            <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+              Leave Stream
+            </button>
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'flex-start',
-              alignItems: 'center',
-              minHeight: 0,
-              width: '100%',
-              padding: isMobileView ? '0 0 0 0' : '0 0 0 0',
-              boxSizing: 'border-box',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: '100%',
-                maxWidth: 900,
-                flex: '0 0 auto',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minHeight: 0,
-                margin: isMobileView ? '0' : '0',
-                marginTop: isMobileView ? 8 : 16,
-              }}
-            >
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginTop: 60, minHeight: 0 }}>
+            <div style={{ width: '100%', maxWidth: 900, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 0 }}>
+              {/* Streamer: Only show their own stream, not audience screens */}
               {isStreamHost ? (
                 <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
                   <div style={{ fontWeight: 600, color: '#00a884', marginBottom: 8, fontSize: 16 }}>You are streaming live</div>
@@ -5817,6 +5726,7 @@ function App() {
                     onDisconnected={handleLeaveStream}
                     style={{ width: '100%', height: '100%', minHeight: 320 }}
                   >
+                    {/* Only render the main video/audio, not audience tiles */}
                     <VideoConference hideParticipants={true} />
                     <RoomAudioRenderer />
                   </LiveKitRoom>
@@ -5836,7 +5746,7 @@ function App() {
                 </LiveKitRoom>
               )}
             </div>
-            {/* Comments/Reactions Panel - anchored below video, never overlaps */}
+            {/* Comments/Reactions Panel */}
             <div
               className="livestream-comments-panel"
               style={{
@@ -5845,38 +5755,50 @@ function App() {
                 margin: '0 auto',
                 background: 'var(--panel-bg, #f8f8f8)',
                 borderTop: '1px solid var(--border)',
-                padding: isMobileView ? '8px 4px' : '16px 24px',
+                padding: isMobileView ? '8px 2vw' : '16px 24px',
                 minHeight: 120,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 8,
                 boxSizing: 'border-box',
-                overflowY: 'auto',
                 flexShrink: 0,
-                marginTop: isMobileView ? 0 : 8,
                 position: 'relative',
-                zIndex: 2,
               }}
             >
               <div
                 style={{
                   flex: 1,
                   overflowY: 'auto',
-                  maxHeight: isMobileView ? 120 : 180,
-                  marginBottom: 4,
+                  maxHeight: isMobileView ? 100 : 180,
+                  marginBottom: 0,
                   paddingRight: 2,
+                  minHeight: 40,
+                  transition: 'max-height 0.2s',
                 }}
               >
                 {livestreamComments.length === 0 ? (
-                  <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>No comments yet. Be the first to comment!</div>
+                  <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>
+                    No comments yet. Be the first to comment!
+                  </div>
                 ) : (
                   livestreamComments.slice(-30).map((c, idx) => (
-                    <div key={c.id || idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, fontSize: 15 }}>
+                    <div
+                      key={c.id || idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        marginBottom: 2,
+                        fontSize: 15,
+                        wordBreak: 'break-word',
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <span style={{ fontWeight: 600, color: '#00a884' }}>{c.from}</span>
                       {c.type === 'reaction' ? (
                         <span style={{ fontSize: 20 }}>{c.emoji}</span>
                       ) : (
-                        <span style={{ color: '#222' }}>{c.text}</span>
+                        <span style={{ color: '#222', wordBreak: 'break-word' }}>{c.text}</span>
                       )}
                       <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
                     </div>
@@ -5885,31 +5807,77 @@ function App() {
               </div>
               {/* Input for audience to comment or react */}
               {!isStreamHost && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2, position: 'relative', zIndex: 3 }}>
-                  <input
-                    type="text"
-                    value={livestreamCommentInput}
-                    onChange={e => setLivestreamCommentInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
-                    placeholder="Add a comment..."
-                    style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15, background: '#fff' }}
-                    maxLength={200}
-                    disabled={!liveKitToken}
-                  />
-                  <button
-                    onClick={sendLivestreamComment}
-                    disabled={!livestreamCommentInput.trim()}
-                    style={{ background: '#00a884', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 600, fontSize: 15, cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed' }}
-                  >
-                    Send
-                  </button>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: isMobileView ? 'column' : 'row',
+                    gap: isMobileView ? 6 : 8,
+                    alignItems: isMobileView ? 'stretch' : 'center',
+                    marginTop: 8,
+                    width: '100%',
+                  }}
+                >
+                  <div style={{ display: 'flex', flex: 1, gap: 6 }}>
+                    <input
+                      type="text"
+                      value={livestreamCommentInput}
+                      onChange={e => setLivestreamCommentInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
+                      placeholder="Add a comment..."
+                      style={{
+                        flex: 1,
+                        padding: isMobileView ? '8px 8px' : '8px 12px',
+                        borderRadius: 6,
+                        border: '1px solid #ddd',
+                        fontSize: 15,
+                        minWidth: 0,
+                        width: '100%',
+                        maxWidth: isMobileView ? '100%' : 320,
+                      }}
+                      maxLength={200}
+                      disabled={!liveKitToken}
+                    />
+                    <button
+                      onClick={sendLivestreamComment}
+                      disabled={!livestreamCommentInput.trim()}
+                      style={{
+                        background: '#00a884',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: isMobileView ? '8px 10px' : '8px 14px',
+                        fontWeight: 600,
+                        fontSize: 15,
+                        cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed',
+                        minWidth: 60,
+                        alignSelf: isMobileView ? 'stretch' : 'center',
+                      }}
+                    >
+                      Send
+                    </button>
+                  </div>
                   {/* Emoji reactions */}
-                  <div style={{ display: 'flex', gap: 2 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: isMobileView ? 4 : 2,
+                      marginTop: isMobileView ? 6 : 0,
+                      justifyContent: isMobileView ? 'flex-start' : 'center',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
                       <button
                         key={emoji}
                         onClick={() => sendLivestreamReaction(emoji)}
-                        style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+                        style={{
+                          fontSize: 20,
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 2,
+                          minWidth: 32,
+                        }}
                         title={`React with ${emoji}`}
                       >
                         {emoji}
@@ -5922,8 +5890,6 @@ function App() {
           </div>
         </div>
       )}
-      // Add fullscreen state for streaming overlay
-      const [isFullscreen, setIsFullscreen] = React.useState(false);
       {/* Streaming error/success toast */}
       {(callError || successMessage) && (
         <div className="stream-toast" style={{
