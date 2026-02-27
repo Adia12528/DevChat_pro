@@ -70,13 +70,6 @@ const ROOM_EVENTS = Object.freeze({
 });
 
 const LOCAL_PREVIEW_SIZES = [
-                  <motion.div
-                    className="livestream-comments-panel enhanced-responsive"
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 30 }}
-                    transition={{ duration: 0.25 }}
-                  >
   { width: 200, height: 150 },
   { width: 260, height: 195 }
 ];
