@@ -116,16 +116,30 @@ app.get('/api/livekit/token', async (req, res) => {
     }
 
     try {
-        // Prevent duplicate host joins for the same user in the same room
+        // Improved: Allow host to rejoin if no other active session exists for this user in the room
         if (isHost) {
-            // Use a simple in-memory map for host sessions (production: use Redis or DB)
             if (!global.livekitHostSessions) global.livekitHostSessions = {};
             const hostKey = `${roomName}::${participantName}`;
-            if (global.livekitHostSessions[hostKey]) {
+            if (!Array.isArray(global.livekitHostSessions[hostKey])) {
+                global.livekitHostSessions[hostKey] = [];
+            }
+            // Remove any stale socket ids (should be handled on disconnect/leave)
+            // Check if any socket id in the array is actually connected
+            const connectedSockets = (global.livekitHostSessions[hostKey] || []).filter(id => {
+                // 'pending' is not a real socket id
+                if (id === 'pending') return false;
+                // Check if socket exists in io.sockets.sockets
+                return io.sockets.sockets.has(id);
+            });
+            console.log(`[LiveKitHostSession] hostKey=${hostKey} connectedSockets=`, connectedSockets);
+            // Only block if a real socket is connected
+            if (connectedSockets.length > 0) {
                 return res.status(409).json({ error: 'You are already hosting this stream in another session or tab.' });
             }
-            // Mark this host session as active
-            global.livekitHostSessions[hostKey] = true;
+            // Clean up if only stale/pending
+            global.livekitHostSessions[hostKey] = global.livekitHostSessions[hostKey].filter(id => connectedSockets.includes(id));
+            // Mark this host session as active (will be cleaned up on disconnect/leave)
+            global.livekitHostSessions[hostKey].push('pending');
         }
 
         const at = new AccessToken(
@@ -148,7 +162,9 @@ app.get('/api/livekit/token', async (req, res) => {
         // Optionally, set a timeout to auto-clear the host session after 2 hours
         if (isHost) {
             setTimeout(() => {
-                if (global.livekitHostSessions) delete global.livekitHostSessions[`${roomName}::${participantName}`];
+                if (global.livekitHostSessions && Array.isArray(global.livekitHostSessions[`${roomName}::${participantName}`])) {
+                    global.livekitHostSessions[`${roomName}::${participantName}`] = [];
+                }
             }, 2 * 60 * 60 * 1000);
         }
     } catch (error) {
@@ -356,6 +372,21 @@ io.on('connection', (socket) => {
             delete roomUsers[room][socket.id];
         }
 
+        // Improved: Clean up host session if this was a host
+        if (global.livekitHostSessions) {
+            const hostKey = `${room}::${username}`;
+            if (Array.isArray(global.livekitHostSessions[hostKey])) {
+                const idx = global.livekitHostSessions[hostKey].indexOf(socket.id);
+                if (idx !== -1) {
+                    global.livekitHostSessions[hostKey].splice(idx, 1);
+                }
+                // If no more sessions, clean up the key
+                if (global.livekitHostSessions[hostKey].length === 0) {
+                    delete global.livekitHostSessions[hostKey];
+                }
+            }
+        }
+
         const remainingUsers = getUniqueRoomUsers(room);
         const count = remainingUsers.length;
 
@@ -407,14 +438,27 @@ io.on('connection', (socket) => {
             removeSocketFromRoom({ room: previousRoom, username, emitOffline: false })
                 .catch((err) => console.error('Cleanup error while switching rooms:', err));
         }
-        
         socket.join(room);
         socket.username = username;
         if (setActiveRoom) {
             socket.room = room;
             socket.activeRoom = room;
         }
-        
+        // Improved: If this is a host, register the socket id for cleanup
+        if (data && data.isHost) {
+            if (!global.livekitHostSessions) global.livekitHostSessions = {};
+            const hostKey = `${room}::${username}`;
+            if (!Array.isArray(global.livekitHostSessions[hostKey])) {
+                global.livekitHostSessions[hostKey] = [];
+            }
+            // Replace 'pending' with actual socket id
+            const idx = global.livekitHostSessions[hostKey].indexOf('pending');
+            if (idx !== -1) {
+                global.livekitHostSessions[hostKey][idx] = socket.id;
+            } else if (!global.livekitHostSessions[hostKey].includes(socket.id)) {
+                global.livekitHostSessions[hostKey].push(socket.id);
+            }
+        }
         if (!roomUsers[room]) roomUsers[room] = {};
         const isNewJoin = !roomUsers[room][socket.id];
         roomUsers[room][socket.id] = username;
