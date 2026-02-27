@@ -96,78 +96,94 @@ function App() {
             const [errorMessage, setErrorMessage] = useState('');
           // Success and error message states
           const [successMessage, setSuccessMessage] = useState('');
-                // Mobile streaming control bar state
-                const [showMobileControlBar, setShowMobileControlBar] = useState(false);
-                // Helper: is streaming
-                const isStreaming = !!liveKitToken && (currentStreamRoom || isStreamHost);
-          // Screen share stream ref
-          const screenShareStreamRef = useRef(null);
-        // Reported users state (localStorage-backed)
-        const [reportedUsers, setReportedUsers] = useState(() => {
-          try {
-            return JSON.parse(localStorage.getItem('devchatReportedUsers') || '[]');
-          } catch {
-            return [];
-          }
-        });
-      // Blocked users state (localStorage-backed)
-      const [blockedUsers, setBlockedUsers] = useState(() => {
-        try {
-          return JSON.parse(localStorage.getItem('devchatBlockedUsers') || '[]');
-        } catch {
-          return [];
-        }
-      });
-    // Device detection for streaming controls
-    const isWindows = /Windows/i.test(navigator.userAgent);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    // ...existing code...
-      const [liveKitToken, setLiveKitToken] = useState(null);
-      const [currentStreamRoom, setCurrentStreamRoom] = useState("");
-      const [isStreamHost, setIsStreamHost] = useState(false);
-  // Existing state
-  const [username, setUsername] = useState("");
-  const [room, setRoom] = useState("");
-  const [showChat, setShowChat] = useState(false);
-  const [message, setMessage] = useState("");
-  const [chat, setChat] = useState([]);
-  const [connected, setConnected] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [typingUsers, setTypingUsers] = useState(new Set());
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [showDoubleTick, setShowDoubleTick] = useState(localStorage.getItem('showDoubleTick') !== 'false');
-  const [showBlueTick, setShowBlueTick] = useState(localStorage.getItem('showBlueTick') !== 'false');
-  const [copiedMsgId, setCopiedMsgId] = useState(null);
-  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 600);
-  const [editingMsgId, setEditingMsgId] = useState(null);
-  const [editingText, setEditingText] = useState("");
-  const [deletingMsgId, setDeletingMsgId] = useState(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-    // 🌟 NEW: Unified Stream Connection Logic
-    // Prevent multiple stream sessions per device/tab
-    const handleJoinStream = async (roomName, asHost = false) => {
-      if (liveKitToken) {
-        if (currentStreamRoom === roomName) {
-          setErrorMessage("You are already in this stream session.");
-          setTimeout(() => setErrorMessage(''), 2500);
-        } else {
-          setErrorMessage("You are already in another stream session. Please leave it first.");
-          setTimeout(() => setErrorMessage(''), 2500);
-        }
-        console.warn("[LiveKit] Already in a stream session. Ignoring join request.");
-        return;
-      }
-      try {
-        const isProduction = window.location.hostname !== 'localhost';
-        const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
-        console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
-        const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
-        const data = await response.json();
-        if (data.token) {
+            const mobileStreamingControlBar = isMobile && isStreaming ? (
+              <>
+                {/* Slide-out control bar */}
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    right: showMobileControlBar ? 0 : '-70vw',
+                    width: '70vw',
+                    height: '100vh',
+                    background: 'rgba(30,30,30,0.98)',
+                    boxShadow: showMobileControlBar ? '-2px 0 8px #0004' : 'none',
+                    transition: 'right 0.3s',
+                    zIndex: 9999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    padding: '16px 8px',
+                  }}
+                >
+                  <button
+                    style={{
+                      position: 'absolute',
+                      left: '-32px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: '#222',
+                      borderRadius: '50%',
+                      border: 'none',
+                      boxShadow: '0 2px 8px #0002',
+                      color: '#fff',
+                      width: 32,
+                      height: 32,
+                      fontSize: 22,
+                      cursor: 'pointer',
+                      zIndex: 10000,
+                    }}
+                    onClick={() => setShowMobileControlBar(false)}
+                    aria-label="Hide control bar"
+                  >{'>'}</button>
+                  {/* Real streaming controls */}
+                  <div style={{width:'100%',marginTop:32}}>
+                    <button style={{margin:'8px 0',width:'100%'}} onClick={toggleMute}>
+                      {isMuted ? 'Unmute' : 'Mute'}
+                    </button>
+                    {callType === 'video' && (
+                      <button style={{margin:'8px 0',width:'100%'}} onClick={toggleVideo}>
+                        {isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
+                      </button>
+                    )}
+                    {callType === 'video' && (
+                      <button style={{margin:'8px 0',width:'100%'}} onClick={toggleScreenShare}>
+                        {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+                      </button>
+                    )}
+                    <button style={{margin:'8px 0',width:'100%'}} onClick={endCall}>
+                      End Call
+                    </button>
+                    <button style={{margin:'8px 0',width:'100%'}} onClick={toggleCallMinimize}>
+                      Minimize
+                    </button>
+                  </div>
+                </div>
+                {/* Toggle button to show control bar, always visible when hidden */}
+                {!showMobileControlBar && (
+                  <button
+                    style={{
+                      position: 'fixed',
+                      top: '50%',
+                      right: 0,
+                      transform: 'translateY(-50%)',
+                      background: '#222',
+                      borderRadius: '50%',
+                      border: 'none',
+                      boxShadow: '0 2px 8px #0002',
+                      color: '#fff',
+                      width: 32,
+                      height: 32,
+                      fontSize: 22,
+                      cursor: 'pointer',
+                      zIndex: 10000,
+                    }}
+                    onClick={() => setShowMobileControlBar(true)}
+                    aria-label="Show control bar"
+                  >{'<'}</button>
+                )}
+              </>
+            ) : null;
           setCurrentStreamRoom(roomName);
           setIsStreamHost(asHost);
           setLiveKitToken(data.token);
@@ -200,8 +216,6 @@ function App() {
   // New feature states
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-                  {/* ...existing code... */}
-                  {mobileStreamingControlBar}
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   // (successMessage, errorMessage) state already declared above
@@ -6036,6 +6050,7 @@ function App() {
         </div>
 
         {/* ...existing code... */}
+        {mobileStreamingControlBar}
         
         {/* Call Buttons - Only show when a user is selected in DM */}
         {selectedUser && isSelectedUserOnline && callState !== 'active' && (
