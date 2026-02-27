@@ -1881,6 +1881,7 @@ function App() {
       const activeSession = liveStreamInfoRef.current;
       if (activeSession?.sessionId !== data.sessionId) return;
 
+      // Only viewers should clean up their peer/stream on STOPPED event
       if (!activeSession?.isHost) {
         const viewerPeer = livestreamViewerPeerRef.current;
         if (viewerPeer) {
@@ -1897,13 +1898,12 @@ function App() {
         setCallPeer(null);
         setCallDuration(0);
         stopCallTimer();
+        setLiveStreamInfo(null);
+        setLivestreamComments([]);
+        setLivestreamCommentInput('');
+        setSuccessMessage(`🔴 Livestream ended (${data.reason || 'stopped'})`);
+        setTimeout(() => setSuccessMessage(''), 3000);
       }
-
-      setLiveStreamInfo(null);
-      setLivestreamComments([]);
-      setLivestreamCommentInput('');
-      setSuccessMessage(`🔴 Livestream ended (${data.reason || 'stopped'})`);
-      setTimeout(() => setSuccessMessage(''), 3000);
     });
 
     // Handle proper disconnect when user closes tab/browser
@@ -4233,6 +4233,7 @@ function App() {
 
     if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
 
+    // DO NOT stop or modify the host's stream/tracks here!
     const pc = new RTCPeerConnection(iceServersConfig);
     livestreamHostPeersRef.current.set(viewerUsername, pc);
 
