@@ -7891,7 +7891,7 @@ textarea.whatsapp-input {
   .call-controls {
     position: fixed;
     left: 50%;
-    bottom: 32px;
+    bottom: max(32px, env(safe-area-inset-bottom, 32px));
     transform: translateX(-50%);
     gap: 10px;
     width: 98vw;
@@ -7901,7 +7901,8 @@ textarea.whatsapp-input {
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
-    z-index: 1000;
+    z-index: 99999;
+    pointer-events: auto;
   }
   .call-control-btn {
     width: 44px;
@@ -7916,7 +7917,7 @@ textarea.whatsapp-input {
   .call-controls {
     position: fixed;
     left: 50%;
-    bottom: 36px;
+    bottom: max(36px, env(safe-area-inset-bottom, 36px));
     transform: translateX(-50%);
     gap: 6px;
     width: 99vw;
@@ -7926,7 +7927,8 @@ textarea.whatsapp-input {
     overflow-x: auto;
     flex-wrap: nowrap;
     box-sizing: border-box;
-    z-index: 1000;
+    z-index: 99999;
+    pointer-events: auto;
   }
   .call-control-btn {
     width: 40px;
