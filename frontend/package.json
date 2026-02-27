@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "2.10.8",
+  "version": "2.2.0",
   "private": true,
   "dependencies": {
     "@livekit/components-react": "^2.9.20",
