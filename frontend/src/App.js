@@ -1,7 +1,6 @@
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 // ...existing code...
-const [showMobileMenu, setShowMobileMenu] = useState(false);
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3, Bell } from 'lucide-react';
@@ -78,6 +77,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+  // Mobile menu state (must be inside component)
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
                   // Listen for FORCE_RELOAD message from service worker to force update
                   useEffect(() => {
                     if ('serviceWorker' in navigator) {
