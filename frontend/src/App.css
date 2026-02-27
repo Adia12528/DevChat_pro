@@ -35,6 +35,88 @@
   max-width: 100vw;
   transition: background 0.2s;
 }
+.floating-emoji-overlay {
+  pointer-events: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  overflow: visible;
+}
+.floating-emoji {
+  position: absolute;
+  bottom: 140px;
+  font-size: 2.2rem;
+  animation: float-emoji-up 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0.92;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.18));
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform, opacity;
+}
+@media (max-width: 600px) {
+  .floating-emoji {
+    font-size: 1.5rem;
+    bottom: 90px;
+  }
+  .floating-emoji-overlay {
+    height: 100dvh;
+  }
+}
+
+/* Livestream comments panel mobile fit */
+.livestream-comments-panel.enhanced-responsive {
+  max-width: 420px;
+  width: 100vw;
+  box-sizing: border-box;
+  margin: 0 auto;
+  position: relative;
+  background: var(--panel-bg, #181c20f2);
+  border-radius: 16px 16px 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+@media (max-width: 600px) {
+  .livestream-comments-panel.enhanced-responsive {
+    max-width: 100vw;
+    min-width: 0;
+    border-radius: 0;
+    padding: 0 0 8px 0;
+    font-size: 15px;
+  }
+  .livestream-comments-list {
+    max-height: 120px;
+    min-height: 48px;
+    overflow-y: auto;
+    padding-bottom: 2px;
+  }
+  .livestream-comment-input-row {
+    padding: 0 6px;
+  }
+  .livestream-reaction-buttons {
+    gap: 4px;
+  }
+}
+/* Video container fit for mobile */
+.remote-video {
+  width: 100vw !important;
+  height: 56vw !important;
+  max-width: 100vw;
+  max-height: 60vh;
+  object-fit: cover;
+  border-radius: 0;
+}
+@media (max-width: 600px) {
+  .remote-video {
+    width: 100vw !important;
+    height: 56vw !important;
+    max-width: 100vw;
+    max-height: 60vh;
+    object-fit: cover;
+    border-radius: 0;
+  }
+}
 /* Responsive Livestream Fullscreen Container */
 .livestream-fullscreen-container {
   position: fixed;
