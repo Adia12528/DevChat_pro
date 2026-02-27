@@ -5797,15 +5797,19 @@ function App() {
                 minWidth: 220,
                 maxWidth: isMobileView ? '90vw' : 400,
                 zIndex: 11000,
-                background: 'var(--panel-bg, #f8f8f8)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                boxShadow: '0 2px 16px rgba(0,0,0,0.10)',
+                background: 'rgba(255,255,255,0.28)',
+                border: '1px solid rgba(200,200,200,0.25)',
+                borderRadius: 18,
+                boxShadow: '0 8px 32px 0 rgba(31,38,135,0.18)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
                 transition: 'box-shadow 0.2s',
                 userSelect: commentBoxDragging.current ? 'none' : 'auto',
+                backdropFilter: 'blur(16px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+                borderTop: '1.5px solid rgba(255,255,255,0.25)',
+                borderLeft: '1.5px solid rgba(255,255,255,0.18)',
               }}
             >
               {/* Drag handle and minimize/expand button */}
@@ -5813,27 +5817,37 @@ function App() {
                 ref={commentBoxDragRef}
                 style={{
                   cursor: 'grab',
-                  background: 'var(--header, #eee)',
-                  padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.18)',
+                  padding: '10px 16px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  borderBottom: '1px solid var(--border)',
-                  fontWeight: 600,
-                  fontSize: 15,
+                  borderBottom: '1px solid rgba(200,200,200,0.18)',
+                  fontWeight: 700,
+                  fontSize: 16,
                   color: '#00a884',
                   userSelect: 'none',
+                  letterSpacing: 0.2,
+                  boxShadow: '0 1px 8px rgba(0,0,0,0.04)',
                 }}
                 onMouseDown={handleCommentBoxDragStart}
                 onTouchStart={handleCommentBoxDragStart}
               >
-                <span>Comments & Reactions</span>
+                <span style={{display:'flex',alignItems:'center',gap:6}}>
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="#00a884" style={{marginRight:2}}><circle cx="10" cy="10" r="9" fill="#00a884" fillOpacity="0.12"/><path d="M7.5 10.5l2 2 3-3" stroke="#00a884" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Comments & Reactions
+                </span>
                 <button
                   onClick={() => setCommentBoxMinimized((v) => !v)}
-                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888', marginLeft: 8 }}
+                  style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#00a884', marginLeft: 8, borderRadius: 6, padding: 2, transition: 'background 0.15s' }}
                   title={commentBoxMinimized ? 'Expand' : 'Minimize'}
+                  aria-label={commentBoxMinimized ? 'Expand' : 'Minimize'}
                 >
-                  {commentBoxMinimized ? '▣' : '—'}
+                  {commentBoxMinimized ? (
+                    <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><rect x="4" y="8" width="12" height="4" rx="2" fill="#00a884"/></svg>
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 20 20" fill="none"><rect x="4" y="4" width="12" height="12" rx="3" fill="#00a884"/></svg>
+                  )}
                 </button>
               </div>
               {!commentBoxMinimized && (
