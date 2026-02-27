@@ -70,6 +70,7 @@ const ROOM_EVENTS = Object.freeze({
 });
 
 const LOCAL_PREVIEW_SIZES = [
+  { width: 140, height: 105 },
   { width: 200, height: 150 },
   { width: 260, height: 195 }
 ];
@@ -148,7 +149,7 @@ function App() {
         return;
       }
       try {
-                  </motion.div>
+        const isProduction = window.location.hostname !== 'localhost';
         const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
         console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
         const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
@@ -8324,17 +8325,14 @@ function App() {
                   </button>
                 )}
                 {/* Remote Video */}
-                {/* Remote Video: Only show for audience or host, but never show audience feeds to streamer */}
-                {(!liveStreamInfo || liveStreamInfo.isHost || !liveStreamInfo.isHost) && (
-                  <video
-                    key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
-                    ref={setRemoteVideoElement}
-                    autoPlay
-                    playsInline
-                    className="remote-video"
-                    style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
-                  />
-                )}
+                <video
+                  key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
+                  ref={setRemoteVideoElement}
+                  autoPlay
+                  playsInline
+                  className="remote-video"
+                  style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
+                />
 
                 {/* Local Video (only for video calls) */}
                 {callType === 'video' && localStream && !liveStreamInfo?.isHost && (

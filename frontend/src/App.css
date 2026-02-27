@@ -1,16 +1,4 @@
-﻿.floating-emoji {
-  animation: floatEmoji 1.2s cubic-bezier(0.4,0,0.2,1);
-  display: inline-block;
-  font-size: 1.25em;
-  will-change: transform, opacity;
-}
-@keyframes floatEmoji {
-  0% { opacity: 0; transform: translateY(20px) scale(0.8); }
-  30% { opacity: 1; transform: translateY(-2px) scale(1.1); }
-  70% { opacity: 1; transform: translateY(-18px) scale(1.1); }
-  100% { opacity: 0; transform: translateY(-32px) scale(0.9); }
-}
-.livestream-header-row {
+﻿.livestream-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
