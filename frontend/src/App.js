@@ -1,11 +1,3 @@
-// Floating emoji animation duration (ms)
-const FLOATING_EMOJI_DURATION = 1800;
-function getRandomX() { return 10 + Math.random() * 80; }
-function FloatingEmoji({ emoji, x }) {
-  return (
-    <span className="floating-emoji" style={{ left: `${x}%` }} aria-hidden="true">{emoji}</span>
-  );
-}
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
@@ -380,17 +372,6 @@ function App() {
   const [callError, setCallError] = useState(null);
   const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, source, isHost, viewers, hasAudio }
   const [livestreamComments, setLivestreamComments] = useState([]);
-  const [floatingEmojis, setFloatingEmojis] = useState([]);
-
-  // Show floating emoji animation
-  const triggerFloatingEmoji = useCallback((emoji) => {
-    const id = `float-${Date.now()}-${Math.random()}`;
-    const x = getRandomX();
-    setFloatingEmojis((prev) => [...prev, { id, emoji, x }]);
-    setTimeout(() => {
-      setFloatingEmojis((prev) => prev.filter((e) => e.id !== id));
-    }, FLOATING_EMOJI_DURATION);
-  }, []);
   const [livestreamCommentInput, setLivestreamCommentInput] = useState('');
   const [livestreamViewerExpanded, setLivestreamViewerExpanded] = useState(false);
   const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
@@ -8458,84 +8439,64 @@ function App() {
 
                 {/* Call Controls */}
                 {liveStreamInfo && (
-                  <>
-                    {/* Floating emoji animation overlay */}
-                    <div className="floating-emoji-overlay">
-                      {floatingEmojis.map((e) => (
-                        <FloatingEmoji key={e.id} emoji={e.emoji} x={e.x} />
-                      ))}
+                  <div className="livestream-comments-panel">
+                    <div className="livestream-comments-list">
+                      {livestreamComments.length === 0 ? (
+                        <div className="livestream-comments-empty">Audience comments will appear here</div>
+                      ) : (
+                        livestreamComments.slice(-6).map((entry) => (
+                          <div key={entry.id} className="livestream-comment-item">
+                            <span className="livestream-comment-author">{entry.from}</span>
+                            {entry.type === 'reaction' ? (
+                              <span className="livestream-comment-text">reacted {entry.emoji}</span>
+                            ) : (
+                              <span className="livestream-comment-text">{entry.text}</span>
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
-                    <div className="livestream-comments-panel enhanced-responsive">
-                      <div className="livestream-header-row">
-                        <span className="livestream-live-indicator" aria-label="Live">🔴 LIVE</span>
-                        <span className="livestream-user-count" aria-label="Viewers">
-                          <Users size={16} style={{verticalAlign: 'middle', marginRight: 4}} />
-                          {liveStreamInfo.viewers || 1}
-                        </span>
-                      </div>
-                      <div className="livestream-comments-list">
-                        {livestreamComments.length === 0 ? (
-                          <div className="livestream-comments-empty">Audience comments will appear here</div>
-                        ) : (
-                          livestreamComments.slice(-6).map((entry) => (
-                            <div key={entry.id} className="livestream-comment-item">
-                              <span className="livestream-comment-author">{entry.from}</span>
-                              {entry.type === 'reaction' ? (
-                                <span className="livestream-comment-text">reacted {entry.emoji}</span>
-                              ) : (
-                                <span className="livestream-comment-text">{entry.text}</span>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                      <div className="livestream-comment-actions">
-                        <div className="livestream-reaction-buttons" role="group" aria-label="Quick reactions">
-                          {LIVESTREAM_REACTIONS.map((emoji) => (
-                            <button
-                              key={`live-reaction-${emoji}`}
-                              type="button"
-                              className="livestream-reaction-btn"
-                              onClick={() => sendLivestreamReaction(emoji)}
-                              title={`React ${emoji}`}
-                              aria-label={`React ${emoji}`}
-                              tabIndex={0}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="livestream-comment-input-row">
-                          <input
-                            type="text"
-                            className="livestream-comment-input"
-                            value={livestreamCommentInput}
-                            onChange={(event) => setLivestreamCommentInput(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                sendLivestreamComment();
-                              }
-                            }}
-                            maxLength={300}
-                            placeholder="Comment while watching..."
-                            aria-label="Comment while watching"
-                          />
+                    <div className="livestream-comment-actions">
+                      <div className="livestream-reaction-buttons">
+                        {LIVESTREAM_REACTIONS.map((emoji) => (
                           <button
+                            key={`live-reaction-${emoji}`}
                             type="button"
-                            className="livestream-comment-send"
-                            onClick={sendLivestreamComment}
-                            disabled={!livestreamCommentInput.trim()}
-                            title="Send comment"
-                            aria-label="Send comment"
-                            tabIndex={0}
+                            className="livestream-reaction-btn"
+                            onClick={() => sendLivestreamReaction(emoji)}
+                            title={`React ${emoji}`}
                           >
-                            <Send size={16} />
+                            {emoji}
                           </button>
-                        </div>
+                        ))}
+                      </div>
+                      <div className="livestream-comment-input-row">
+                        <input
+                          type="text"
+                          className="livestream-comment-input"
+                          value={livestreamCommentInput}
+                          onChange={(event) => setLivestreamCommentInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              sendLivestreamComment();
+                            }
+                          }}
+                          maxLength={300}
+                          placeholder="Comment while watching..."
+                        />
+                        <button
+                          type="button"
+                          className="livestream-comment-send"
+                          onClick={sendLivestreamComment}
+                          disabled={!livestreamCommentInput.trim()}
+                          title="Send comment"
+                        >
+                          <Send size={16} />
+                        </button>
                       </div>
                     </div>
-                  </>
+                  </div>
                 )}
 
                 <div className="call-controls">
