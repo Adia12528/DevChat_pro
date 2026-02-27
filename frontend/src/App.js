@@ -5747,146 +5747,251 @@ function App() {
               )}
             </div>
             {/* Comments/Reactions Panel */}
-            <div
-              className="livestream-comments-panel"
-              style={{
-                width: '100%',
-                maxWidth: 900,
-                margin: '0 auto',
-                background: 'var(--panel-bg, #f8f8f8)',
-                borderTop: '1px solid var(--border)',
-                padding: isMobileView ? '8px 2vw' : '16px 24px',
-                minHeight: 120,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-                boxSizing: 'border-box',
-                flexShrink: 0,
-                position: 'relative',
-              }}
-            >
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  maxHeight: isMobileView ? 100 : 180,
-                  marginBottom: 0,
-                  paddingRight: 2,
-                  minHeight: 40,
-                  transition: 'max-height 0.2s',
-                }}
-              >
-                {livestreamComments.length === 0 ? (
-                  <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>
-                    No comments yet. Be the first to comment!
-                  </div>
-                ) : (
-                  livestreamComments.slice(-30).map((c, idx) => (
-                    <div
-                      key={c.id || idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginBottom: 2,
-                        fontSize: 15,
-                        wordBreak: 'break-word',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <span style={{ fontWeight: 600, color: '#00a884' }}>{c.from}</span>
-                      {c.type === 'reaction' ? (
-                        <span style={{ fontSize: 20 }}>{c.emoji}</span>
-                      ) : (
-                        <span style={{ color: '#222', wordBreak: 'break-word' }}>{c.text}</span>
-                      )}
-                      <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-              {/* Input for audience to comment or react */}
-              {!isStreamHost && (
+            {/* Modern, draggable, minimizable, floating comment box */}
+            {(() => {
+              // --- Modern floating comment box state/hooks ---
+              const [commentBoxPos, setCommentBoxPos] = React.useState({ x: isMobileView ? 10 : 40, y: isMobileView ? 60 : 120 });
+              const [isDraggingCommentBox, setIsDraggingCommentBox] = React.useState(false);
+              const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
+              const [commentBoxMinimized, setCommentBoxMinimized] = React.useState(false);
+              const commentBoxRef = React.useRef();
+
+              // Drag handlers
+              const onDragStart = (e) => {
+                setIsDraggingCommentBox(true);
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                setDragOffset({
+                  x: clientX - commentBoxPos.x,
+                  y: clientY - commentBoxPos.y,
+                });
+                e.stopPropagation();
+              };
+              const onDrag = (e) => {
+                if (!isDraggingCommentBox) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                let newX = clientX - dragOffset.x;
+                let newY = clientY - dragOffset.y;
+                // Clamp to viewport
+                const minX = 0, minY = 0, maxX = window.innerWidth - 260, maxY = window.innerHeight - 80;
+                newX = Math.max(minX, Math.min(newX, maxX));
+                newY = Math.max(minY, Math.min(newY, maxY));
+                setCommentBoxPos({ x: newX, y: newY });
+              };
+              const onDragEnd = () => setIsDraggingCommentBox(false);
+              React.useEffect(() => {
+                if (!isDraggingCommentBox) return;
+                window.addEventListener('mousemove', onDrag);
+                window.addEventListener('mouseup', onDragEnd);
+                window.addEventListener('touchmove', onDrag, { passive: false });
+                window.addEventListener('touchend', onDragEnd);
+                return () => {
+                  window.removeEventListener('mousemove', onDrag);
+                  window.removeEventListener('mouseup', onDragEnd);
+                  window.removeEventListener('touchmove', onDrag);
+                  window.removeEventListener('touchend', onDragEnd);
+                };
+              }, [isDraggingCommentBox, dragOffset]);
+
+              // Responsive reset on mobile/desktop switch
+              React.useEffect(() => {
+                setCommentBoxPos({ x: isMobileView ? 10 : 40, y: isMobileView ? 60 : 120 });
+              }, [isMobileView]);
+
+              // --- Modern floating comment box UI ---
+              return (
                 <div
+                  ref={commentBoxRef}
+                  className="livestream-comments-panel-floating"
                   style={{
+                    position: 'fixed',
+                    left: commentBoxPos.x,
+                    top: commentBoxPos.y,
+                    width: isMobileView ? '90vw' : 340,
+                    minWidth: 220,
+                    maxWidth: 400,
+                    background: 'rgba(30,34,40,0.82)',
+                    boxShadow: '0 4px 24px 0 rgba(0,0,0,0.18)',
+                    borderRadius: 16,
+                    border: '1.5px solid rgba(0,0,0,0.12)',
+                    zIndex: 10001,
+                    color: '#fff',
                     display: 'flex',
-                    flexDirection: isMobileView ? 'column' : 'row',
-                    gap: isMobileView ? 6 : 8,
-                    alignItems: isMobileView ? 'stretch' : 'center',
-                    marginTop: 8,
-                    width: '100%',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    backdropFilter: 'blur(8px)',
+                    transition: 'box-shadow 0.2s',
+                    opacity: 0.97,
                   }}
                 >
-                  <div style={{ display: 'flex', flex: 1, gap: 6 }}>
-                    <input
-                      type="text"
-                      value={livestreamCommentInput}
-                      onChange={e => setLivestreamCommentInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
-                      placeholder="Add a comment..."
-                      style={{
-                        flex: 1,
-                        padding: isMobileView ? '8px 8px' : '8px 12px',
-                        borderRadius: 6,
-                        border: '1px solid #ddd',
-                        fontSize: 15,
-                        minWidth: 0,
-                        width: '100%',
-                        maxWidth: isMobileView ? '100%' : 320,
-                      }}
-                      maxLength={200}
-                      disabled={!liveKitToken}
-                    />
-                    <button
-                      onClick={sendLivestreamComment}
-                      disabled={!livestreamCommentInput.trim()}
-                      style={{
-                        background: '#00a884',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 6,
-                        padding: isMobileView ? '8px 10px' : '8px 14px',
-                        fontWeight: 600,
-                        fontSize: 15,
-                        cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed',
-                        minWidth: 60,
-                        alignSelf: isMobileView ? 'stretch' : 'center',
-                      }}
-                    >
-                      Send
-                    </button>
-                  </div>
-                  {/* Emoji reactions */}
+                  {/* Header with drag, minimize/expand */}
                   <div
                     style={{
+                      cursor: 'grab',
+                      background: 'rgba(20,22,28,0.92)',
+                      padding: '8px 14px',
+                      fontWeight: 600,
+                      fontSize: 16,
                       display: 'flex',
-                      gap: isMobileView ? 4 : 2,
-                      marginTop: isMobileView ? 6 : 0,
-                      justifyContent: isMobileView ? 'flex-start' : 'center',
-                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      userSelect: 'none',
                     }}
+                    onMouseDown={onDragStart}
+                    onTouchStart={onDragStart}
                   >
-                    {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
-                      <button
-                        key={emoji}
-                        onClick={() => sendLivestreamReaction(emoji)}
-                        style={{
-                          fontSize: 20,
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: 2,
-                          minWidth: 32,
-                        }}
-                        title={`React with ${emoji}`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                    <span>Comments & Reactions</span>
+                    <button
+                      onClick={e => { e.stopPropagation(); setCommentBoxMinimized(m => !m); }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#fff',
+                        fontSize: 18,
+                        cursor: 'pointer',
+                        opacity: 0.7,
+                        marginLeft: 8,
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                      title={commentBoxMinimized ? 'Expand' : 'Minimize'}
+                    >
+                      {commentBoxMinimized ? '▣' : '—'}
+                    </button>
                   </div>
+                  {!commentBoxMinimized && (
+                    <>
+                      <div
+                        style={{
+                          flex: 1,
+                          overflowY: 'auto',
+                          maxHeight: isMobileView ? 120 : 180,
+                          minHeight: 40,
+                          padding: '8px 12px 0 12px',
+                        }}
+                      >
+                        {livestreamComments.length === 0 ? (
+                          <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>
+                            No comments yet. Be the first to comment!
+                          </div>
+                        ) : (
+                          livestreamComments.slice(-30).map((c, idx) => (
+                            <div
+                              key={c.id || idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                marginBottom: 2,
+                                fontSize: 15,
+                                wordBreak: 'break-word',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <span style={{ fontWeight: 600, color: '#00e6a8' }}>{c.from}</span>
+                              {c.type === 'reaction' ? (
+                                <span style={{ fontSize: 20 }}>{c.emoji}</span>
+                              ) : (
+                                <span style={{ color: '#fff', wordBreak: 'break-word' }}>{c.text}</span>
+                              )}
+                              <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {/* Input for audience to comment or react */}
+                      {!isStreamHost && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: isMobileView ? 'column' : 'row',
+                            gap: isMobileView ? 6 : 8,
+                            alignItems: isMobileView ? 'stretch' : 'center',
+                            margin: '8px 12px 12px 12px',
+                            width: 'auto',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flex: 1, gap: 6 }}>
+                            <input
+                              type="text"
+                              value={livestreamCommentInput}
+                              onChange={e => setLivestreamCommentInput(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
+                              placeholder="Add a comment..."
+                              style={{
+                                flex: 1,
+                                padding: isMobileView ? '8px 8px' : '8px 12px',
+                                borderRadius: 8,
+                                border: '1.5px solid #222',
+                                fontSize: 15,
+                                minWidth: 0,
+                                width: '100%',
+                                maxWidth: isMobileView ? '100%' : 220,
+                                background: 'rgba(255,255,255,0.08)',
+                                color: '#fff',
+                                outline: 'none',
+                              }}
+                              maxLength={200}
+                              disabled={!liveKitToken}
+                            />
+                            <button
+                              onClick={sendLivestreamComment}
+                              disabled={!livestreamCommentInput.trim()}
+                              style={{
+                                background: '#00e6a8',
+                                color: '#222',
+                                border: 'none',
+                                borderRadius: 8,
+                                padding: isMobileView ? '8px 10px' : '8px 14px',
+                                fontWeight: 600,
+                                fontSize: 15,
+                                cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed',
+                                minWidth: 60,
+                                alignSelf: isMobileView ? 'stretch' : 'center',
+                                boxShadow: '0 2px 8px 0 rgba(0,230,168,0.08)',
+                              }}
+                            >
+                              Send
+                            </button>
+                          </div>
+                          {/* Emoji reactions */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: isMobileView ? 4 : 2,
+                              marginTop: isMobileView ? 6 : 0,
+                              justifyContent: isMobileView ? 'flex-start' : 'center',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
+                              <button
+                                key={emoji}
+                                onClick={() => sendLivestreamReaction(emoji)}
+                                style={{
+                                  fontSize: 20,
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: 2,
+                                  minWidth: 32,
+                                  color: '#fff',
+                                  opacity: 0.85,
+                                }}
+                                title={`React with ${emoji}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}
