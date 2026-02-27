@@ -70,7 +70,13 @@ const ROOM_EVENTS = Object.freeze({
 });
 
 const LOCAL_PREVIEW_SIZES = [
-  { width: 140, height: 105 },
+                  <motion.div
+                    className="livestream-comments-panel enhanced-responsive"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 30 }}
+                    transition={{ duration: 0.25 }}
+                  >
   { width: 200, height: 150 },
   { width: 260, height: 195 }
 ];
@@ -149,7 +155,7 @@ function App() {
         return;
       }
       try {
-        const isProduction = window.location.hostname !== 'localhost';
+                  </motion.div>
         const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
         console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
         const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
@@ -8325,14 +8331,17 @@ function App() {
                   </button>
                 )}
                 {/* Remote Video */}
-                <video
-                  key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
-                  ref={setRemoteVideoElement}
-                  autoPlay
-                  playsInline
-                  className="remote-video"
-                  style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
-                />
+                {/* Remote Video: Only show for audience or host, but never show audience feeds to streamer */}
+                {(!liveStreamInfo || liveStreamInfo.isHost || !liveStreamInfo.isHost) && (
+                  <video
+                    key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
+                    ref={setRemoteVideoElement}
+                    autoPlay
+                    playsInline
+                    className="remote-video"
+                    style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
+                  />
+                )}
 
                 {/* Local Video (only for video calls) */}
                 {callType === 'video' && localStream && !liveStreamInfo?.isHost && (
@@ -8439,7 +8448,14 @@ function App() {
 
                 {/* Call Controls */}
                 {liveStreamInfo && (
-                  <div className="livestream-comments-panel">
+                  <div className="livestream-comments-panel enhanced-responsive">
+                    <div className="livestream-header-row">
+                      <span className="livestream-live-indicator" aria-label="Live">🔴 LIVE</span>
+                      <span className="livestream-user-count" aria-label="Viewers">
+                        <Users size={16} style={{verticalAlign: 'middle', marginRight: 4}} />
+                        {liveStreamInfo.viewers || 1}
+                      </span>
+                    </div>
                     <div className="livestream-comments-list">
                       {livestreamComments.length === 0 ? (
                         <div className="livestream-comments-empty">Audience comments will appear here</div>
@@ -8457,7 +8473,7 @@ function App() {
                       )}
                     </div>
                     <div className="livestream-comment-actions">
-                      <div className="livestream-reaction-buttons">
+                      <div className="livestream-reaction-buttons" role="group" aria-label="Quick reactions">
                         {LIVESTREAM_REACTIONS.map((emoji) => (
                           <button
                             key={`live-reaction-${emoji}`}
@@ -8465,6 +8481,8 @@ function App() {
                             className="livestream-reaction-btn"
                             onClick={() => sendLivestreamReaction(emoji)}
                             title={`React ${emoji}`}
+                            aria-label={`React ${emoji}`}
+                            tabIndex={0}
                           >
                             {emoji}
                           </button>
@@ -8484,6 +8502,7 @@ function App() {
                           }}
                           maxLength={300}
                           placeholder="Comment while watching..."
+                          aria-label="Comment while watching"
                         />
                         <button
                           type="button"
@@ -8491,6 +8510,8 @@ function App() {
                           onClick={sendLivestreamComment}
                           disabled={!livestreamCommentInput.trim()}
                           title="Send comment"
+                          aria-label="Send comment"
+                          tabIndex={0}
                         >
                           <Send size={16} />
                         </button>
