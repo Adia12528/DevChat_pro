@@ -1,43 +1,3 @@
-  // Livestream comment box UI state
-  const [commentBoxMinimized, setCommentBoxMinimized] = useState(false);
-  const [commentBoxPos, setCommentBoxPos] = useState({ x: 0, y: 0 });
-  const commentBoxDragRef = useRef(null);
-  const commentBoxDragging = useRef(false);
-  const commentBoxOffset = useRef({ x: 0, y: 0 });
-
-  // Drag handlers for comment box
-  const handleCommentBoxDragStart = (e) => {
-    commentBoxDragging.current = true;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    commentBoxOffset.current = {
-      x: clientX - commentBoxPos.x,
-      y: clientY - commentBoxPos.y
-    };
-    document.addEventListener('mousemove', handleCommentBoxDragMove);
-    document.addEventListener('mouseup', handleCommentBoxDragEnd);
-    document.addEventListener('touchmove', handleCommentBoxDragMove, { passive: false });
-    document.addEventListener('touchend', handleCommentBoxDragEnd);
-  };
-  const handleCommentBoxDragMove = (e) => {
-    if (!commentBoxDragging.current) return;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    let x = clientX - commentBoxOffset.current.x;
-    let y = clientY - commentBoxOffset.current.y;
-    // Clamp to viewport
-    x = Math.max(0, Math.min(window.innerWidth - 320, x));
-    y = Math.max(60, Math.min(window.innerHeight - 80, y));
-    setCommentBoxPos({ x, y });
-  };
-  const handleCommentBoxDragEnd = () => {
-    commentBoxDragging.current = false;
-    document.removeEventListener('mousemove', handleCommentBoxDragMove);
-    document.removeEventListener('mouseup', handleCommentBoxDragEnd);
-    document.removeEventListener('touchmove', handleCommentBoxDragMove);
-    document.removeEventListener('touchend', handleCommentBoxDragEnd);
-  };
-
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
@@ -5786,111 +5746,73 @@ function App() {
                 </LiveKitRoom>
               )}
             </div>
-            {/* Comments/Reactions Panel - Draggable, Minimizable */}
-            <div
-              className="livestream-comments-panel"
-              style={{
-                position: 'fixed',
-                left: commentBoxPos.x,
-                top: commentBoxPos.y || (window.innerHeight - (commentBoxMinimized ? 48 : 260) - 24),
-                width: 320,
-                minWidth: 220,
-                maxWidth: isMobileView ? '90vw' : 400,
-                zIndex: 11000,
-                background: 'var(--panel-bg, #f8f8f8)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                boxShadow: '0 2px 16px rgba(0,0,0,0.10)',
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                transition: 'box-shadow 0.2s',
-                userSelect: commentBoxDragging.current ? 'none' : 'auto',
-              }}
-            >
-              {/* Drag handle and minimize/expand button */}
-              <div
-                ref={commentBoxDragRef}
-                style={{
-                  cursor: 'grab',
-                  background: 'var(--header, #eee)',
-                  padding: '8px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  borderBottom: '1px solid var(--border)',
-                  fontWeight: 600,
-                  fontSize: 15,
-                  color: '#00a884',
-                  userSelect: 'none',
-                }}
-                onMouseDown={handleCommentBoxDragStart}
-                onTouchStart={handleCommentBoxDragStart}
-              >
-                <span>Comments & Reactions</span>
-                <button
-                  onClick={() => setCommentBoxMinimized((v) => !v)}
-                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#888', marginLeft: 8 }}
-                  title={commentBoxMinimized ? 'Expand' : 'Minimize'}
-                >
-                  {commentBoxMinimized ? '▣' : '—'}
-                </button>
-              </div>
-              {!commentBoxMinimized && (
-                <>
-                  <div style={{ flex: 1, overflowY: 'auto', maxHeight: isMobileView ? 100 : 160, margin: '8px 0 4px 0', padding: '0 12px' }}>
-                    {livestreamComments.length === 0 ? (
-                      <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>No comments yet. Be the first to comment!</div>
-                    ) : (
-                      livestreamComments.slice(-30).map((c, idx) => (
-                        <div key={c.id || idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, fontSize: 15 }}>
-                          <span style={{ fontWeight: 600, color: '#00a884' }}>{c.from}</span>
-                          {c.type === 'reaction' ? (
-                            <span style={{ fontSize: 20 }}>{c.emoji}</span>
-                          ) : (
-                            <span style={{ color: '#222' }}>{c.text}</span>
-                          )}
-                          <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  {/* Input for audience to comment or react */}
-                  {!isStreamHost && (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 12px 12px 12px' }}>
-                      <input
-                        type="text"
-                        value={livestreamCommentInput}
-                        onChange={e => setLivestreamCommentInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
-                        placeholder="Add a comment..."
-                        style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15 }}
-                        maxLength={200}
-                        disabled={!liveKitToken}
-                      />
-                      <button
-                        onClick={sendLivestreamComment}
-                        disabled={!livestreamCommentInput.trim()}
-                        style={{ background: '#00a884', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 600, fontSize: 15, cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed' }}
-                      >
-                        Send
-                      </button>
-                      {/* Emoji reactions */}
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={() => sendLivestreamReaction(emoji)}
-                            style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
-                            title={`React with ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
+            {/* Comments/Reactions Panel */}
+            <div className="livestream-comments-panel" style={{
+              width: '100%',
+              maxWidth: 900,
+              margin: '0 auto',
+              background: 'var(--panel-bg, #f8f8f8)',
+              borderTop: '1px solid var(--border)',
+              padding: isMobileView ? '8px 4px' : '16px 24px',
+              minHeight: 120,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              boxSizing: 'border-box',
+              overflowY: 'auto',
+              flexShrink: 0
+            }}>
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: isMobileView ? 120 : 180, marginBottom: 4 }}>
+                {livestreamComments.length === 0 ? (
+                  <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>No comments yet. Be the first to comment!</div>
+                ) : (
+                  livestreamComments.slice(-30).map((c, idx) => (
+                    <div key={c.id || idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, fontSize: 15 }}>
+                      <span style={{ fontWeight: 600, color: '#00a884' }}>{c.from}</span>
+                      {c.type === 'reaction' ? (
+                        <span style={{ fontSize: 20 }}>{c.emoji}</span>
+                      ) : (
+                        <span style={{ color: '#222' }}>{c.text}</span>
+                      )}
+                      <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
                     </div>
-                  )}
-                </>
+                  ))
+                )}
+              </div>
+              {/* Input for audience to comment or react */}
+              {!isStreamHost && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                  <input
+                    type="text"
+                    value={livestreamCommentInput}
+                    onChange={e => setLivestreamCommentInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
+                    placeholder="Add a comment..."
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15 }}
+                    maxLength={200}
+                    disabled={!liveKitToken}
+                  />
+                  <button
+                    onClick={sendLivestreamComment}
+                    disabled={!livestreamCommentInput.trim()}
+                    style={{ background: '#00a884', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 600, fontSize: 15, cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed' }}
+                  >
+                    Send
+                  </button>
+                  {/* Emoji reactions */}
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => sendLivestreamReaction(emoji)}
+                        style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+                        title={`React with ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>
