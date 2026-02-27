@@ -1,5 +1,7 @@
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+// ...existing code...
+const [showMobileMenu, setShowMobileMenu] = useState(false);
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3, Bell } from 'lucide-react';
@@ -8042,6 +8044,20 @@ function App() {
                   >
                     Open Threads {threadRootCount > 0 ? `(${threadRootCount})` : ''}
                   </button>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Call Settings</h4>
+                  <button
+                    className="settings-btn"
+                    onClick={() => endCall()}
+                    style={{ marginTop: 8 }}
+                  >
+                    Reset Call Settings
+                  </button>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                    This will reset all call state, device selection, and clear call errors.
+                  </div>
                 </div>
 
                 <div className="settings-section">
