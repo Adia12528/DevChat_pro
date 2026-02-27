@@ -8439,16 +8439,17 @@ function App() {
 
                 {/* Call Controls */}
                 {liveStreamInfo && (
-                  <div className="livestream-comments-panel">
+                  <div className="livestream-comments-panel enhanced-responsive">
                     <div className="livestream-comments-list">
                       {livestreamComments.length === 0 ? (
                         <div className="livestream-comments-empty">Audience comments will appear here</div>
                       ) : (
                         livestreamComments.slice(-6).map((entry) => (
-                          <div key={entry.id} className="livestream-comment-item">
+                          <div key={entry.id} className={`livestream-comment-item ${entry.type === 'reaction' ? 'reaction' : ''}`}>
+                            <span className="livestream-comment-avatar" style={getAvatarStyle(entry.from)}>{getInitials(entry.from)}</span>
                             <span className="livestream-comment-author">{entry.from}</span>
                             {entry.type === 'reaction' ? (
-                              <span className="livestream-comment-text">reacted {entry.emoji}</span>
+                              <span className="livestream-comment-text livestream-reaction-badge">{entry.emoji}</span>
                             ) : (
                               <span className="livestream-comment-text">{entry.text}</span>
                             )}
@@ -8457,7 +8458,7 @@ function App() {
                       )}
                     </div>
                     <div className="livestream-comment-actions">
-                      <div className="livestream-reaction-buttons">
+                      <div className="livestream-reaction-buttons" role="group" aria-label="Quick reactions">
                         {LIVESTREAM_REACTIONS.map((emoji) => (
                           <button
                             key={`live-reaction-${emoji}`}
@@ -8465,6 +8466,8 @@ function App() {
                             className="livestream-reaction-btn"
                             onClick={() => sendLivestreamReaction(emoji)}
                             title={`React ${emoji}`}
+                            aria-label={`React ${emoji}`}
+                            tabIndex={0}
                           >
                             {emoji}
                           </button>
@@ -8484,6 +8487,7 @@ function App() {
                           }}
                           maxLength={300}
                           placeholder="Comment while watching..."
+                          aria-label="Comment while watching"
                         />
                         <button
                           type="button"
@@ -8491,9 +8495,33 @@ function App() {
                           onClick={sendLivestreamComment}
                           disabled={!livestreamCommentInput.trim()}
                           title="Send comment"
+                          aria-label="Send comment"
+                          tabIndex={0}
                         >
                           <Send size={16} />
                         </button>
+                        <button
+                          type="button"
+                          className="livestream-emoji-picker-btn"
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          title="Pick emoji"
+                          aria-label="Pick emoji"
+                        >
+                          <Smile size={18} />
+                        </button>
+                        {showEmojiPicker && (
+                          <div className="livestream-emoji-picker-popup">
+                            <EmojiPicker
+                              onEmojiClick={(emojiObj) => {
+                                setLivestreamCommentInput((prev) => prev + emojiObj.emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              theme="dark"
+                              width={320}
+                              height={350}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
