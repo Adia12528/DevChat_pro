@@ -29,8 +29,6 @@ import {
   switchBackToCamera,
   getQualityIndicator
 } from './callUtils';
-
-import CallPanel from './CallPanel';
 import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 
@@ -5766,7 +5764,7 @@ function App() {
               </button>
           </div>
 
-          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px', marginBottom: isMobileView ? 72 : 0 }}>
+          <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
               <LiveKitRoom
                 video={isStreamHost}
                 audio={isStreamHost}
@@ -5779,28 +5777,6 @@ function App() {
                 <RoomAudioRenderer />
               </LiveKitRoom>
           </div>
-          {/* Mobile streaming controls bar */}
-          {isMobileView && (
-            <div style={{
-              position: 'fixed',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 12001,
-              background: 'rgba(20,20,20,0.98)',
-              display: 'flex',
-              justifyContent: 'space-around',
-              alignItems: 'center',
-              padding: '12px 0 18px 0',
-              boxShadow: '0 -2px 12px rgba(0,0,0,0.18)'
-            }}>
-              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 700, fontSize: 16 }}>End</button>
-              {isStreamHost && (
-                <button onClick={/* TODO: Add toggle video logic */ undefined} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, fontSize: 16 }}>Video</button>
-              )}
-              <button onClick={/* TODO: Add mute/unmute logic */ undefined} style={{ background: '#222', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 600, fontSize: 16 }}>Mute</button>
-            </div>
-          )}
         </div>
       )}
       {/* Streaming error/success toast */}
@@ -8368,38 +8344,324 @@ function App() {
         )}
       </AnimatePresence>
 
-
-      {/* Active Call Interface (CallPanel) */}
+      {/* Active Call Interface */}
       <AnimatePresence>
         {callState === 'active' && callPeer && (
-          <CallPanel
-            callType={callType}
-            callPeer={callPeer.username}
-            callDuration={callDuration}
-            callStats={callStats}
-            isRecording={isCallRecording}
-            qualityIndicator={qualityIndicator}
-            connectionQuality={connectionQuality}
-            isMuted={isMuted}
-            isVideoOff={isVideoOff}
-            isScreenSharing={isScreenSharing}
-            isCallMinimized={isCallMinimized}
-            videoEffectSettings={videoEffectSettings}
-            onToggleMute={toggleMute}
-            onToggleVideo={toggleVideo}
-            onToggleScreenShare={toggleScreenShare}
-            onToggleRecording={toggleRecording}
-            onApplyEffect={applyVideoEffect}
-            onEndCall={endCall}
-            onToggleMinimize={toggleCallMinimize}
-            onShowStats={showCallStats}
-            localVideoRef={localVideoRef}
-            remoteVideoRef={remoteVideoRef}
-            formatDuration={formatCallDuration}
-            getQualityLabelStyle={getQualityLabelStyle}
-            localStream={localStream}
-            remoteStream={remoteStream}
-          />
+          <motion.div
+            className={`call-interface ${isCallMinimized ? 'minimized' : 'fullscreen'}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {isCallMinimized ? (
+              <div className="call-minimized-panel">
+                <div className="call-minimized-info">
+                  {callType === 'video' ? <Video size={18} /> : <Phone size={18} />}
+                  <span>{callPeer.username}</span>
+                  <span className="call-minimized-duration">{formatCallDuration(callDuration)}</span>
+                </div>
+                <div className="call-minimized-controls">
+                  <button 
+                    className="call-minimized-btn"
+                    onClick={toggleCallMinimize}
+                    title="Maximize"
+                  >
+                    <Maximize2 size={16} />
+                  </button>
+                  <button 
+                    className="call-minimized-btn end-btn"
+                    onClick={endCall}
+                    title="End call"
+                  >
+                    <PhoneOff size={16} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="call-video-container">
+                <audio ref={setRemoteAudioElement} autoPlay playsInline style={{ display: 'none' }} />
+                {isLivestreamViewer && (
+                  <button
+                    className="livestream-viewer-expand-btn"
+                    onClick={() => setLivestreamViewerExpanded((prev) => !prev)}
+                    title={livestreamViewerExpanded ? 'Show full frame' : 'Expand video'}
+                  >
+                    {livestreamViewerExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  </button>
+                )}
+                {/* Remote Video */}
+                <video
+                  key={remoteStream ? `remote-${remoteStream.id}` : 'remote-no-stream'}
+                  ref={setRemoteVideoElement}
+                  autoPlay
+                  playsInline
+                  className="remote-video"
+                  style={{ width: '100%', height: '100%', objectFit: remoteVideoFitMode }}
+                />
+
+                {/* Local Video (only for video calls) */}
+                {callType === 'video' && localStream && !liveStreamInfo?.isHost && (
+                  <div
+                    className={`local-video-shell ${isDraggingLocalPreview ? 'dragging' : ''}`}
+                    onTouchStart={startLocalPreviewDrag}
+                    style={{
+                      position: 'absolute',
+                      left: `${localPreviewPosition.x}px`,
+                      top: `${localPreviewPosition.y}px`,
+                      width: `${localPreviewSize.width}px`,
+                      height: `${localPreviewSize.height}px`
+                    }}
+                  >
+                    <div
+                      className="local-video-toolbar"
+                      onMouseDown={startLocalPreviewDrag}
+                      onTouchStart={startLocalPreviewDrag}
+                      title="Drag to move"
+                    >
+                      <span className="local-video-label">You</span>
+                      <div className="local-video-size-controls">
+                        <button
+                          type="button"
+                          className="local-video-size-btn"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onClick={() => resizeLocalPreview('down')}
+                          disabled={localPreviewSizeIndex === 0}
+                          title="Smaller"
+                        >
+                          <Minimize2 size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="local-video-size-btn"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onTouchStart={(event) => event.stopPropagation()}
+                          onClick={() => resizeLocalPreview('up')}
+                          disabled={localPreviewSizeIndex === LOCAL_PREVIEW_SIZES.length - 1}
+                          title="Bigger"
+                        >
+                          <Maximize2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <video
+                      key={localStream ? `local-${localStream.id}` : 'local-no-stream'}
+                      ref={setLocalVideoElement}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="local-video"
+                    />
+                  </div>
+                )}
+
+                {/* Call Info Overlay */}
+                <div className="call-info-overlay">
+                  <div className="call-info-top">
+                    <div className="call-peer-name">
+                      {callPeer.username}
+                      {remoteIsScreenSharing && (
+                        <span className="screen-share-badge">📺 Sharing Screen</span>
+                      )}
+                    </div>
+                    {isScreenSharing && (
+                      <div className="local-screen-share-indicator">
+                        <span className="screen-share-pulse"></span>
+                        You are sharing your screen
+                      </div>
+                    )}
+                  </div>
+                  <div className="call-duration">{formatCallDuration(callDuration)}</div>
+                  <div className="call-status-badges">
+                    <span className={`call-status-badge ${reconnectInfo ? 'warning' : ''}`}>
+                      {reconnectInfo
+                        ? `Reconnecting (${reconnectInfo.attempt}/${reconnectInfo.max})`
+                        : (callState === 'active' ? 'Connected' : 'Connecting')}
+                    </span>
+                    {livestreamSourceLabel && (
+                      <span className="call-status-badge">SOURCE: {livestreamSourceLabel}</span>
+                    )}
+                    {liveStreamInfo && (
+                      <span className={`call-status-badge ${livestreamAudioEnabled ? '' : 'warning'}`}>
+                        AUDIO: {livestreamAudioEnabled ? 'ON' : 'OFF'}
+                      </span>
+                    )}
+                    {liveStreamInfo && !liveStreamInfo.isHost && liveStreamInfo.autoJoined && (
+                      <span className="call-status-badge">AUTO</span>
+                    )}
+                    {reconnectInfo && Number.isFinite(reconnectInfo.secondsLeft) && (
+                      <span className="reconnect-countdown-badge">
+                        Retry in {reconnectInfo.secondsLeft}s
+                      </span>
+                    )}
+                    {connectionQuality && (
+                      <span className={`quality-badge quality-${connectionQuality.toLowerCase()}`}>
+                        {connectionQuality}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Call Controls */}
+                {liveStreamInfo && (
+                  <div className="livestream-comments-panel enhanced-responsive">
+                    <div className="livestream-comments-list">
+                      {livestreamComments.length === 0 ? (
+                        <div className="livestream-comments-empty">Audience comments will appear here</div>
+                      ) : (
+                        livestreamComments.slice(-6).map((entry) => (
+                          <div key={entry.id} className={`livestream-comment-item ${entry.type === 'reaction' ? 'reaction' : ''}`}>
+                            <span className="livestream-comment-avatar" style={getAvatarStyle(entry.from)}>{getInitials(entry.from)}</span>
+                            <span className="livestream-comment-author">{entry.from}</span>
+                            {entry.type === 'reaction' ? (
+                              <span className="livestream-comment-text livestream-reaction-badge">{entry.emoji}</span>
+                            ) : (
+                              <span className="livestream-comment-text">{entry.text}</span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="livestream-comment-actions">
+                      <div className="livestream-reaction-buttons" role="group" aria-label="Quick reactions">
+                        {LIVESTREAM_REACTIONS.map((emoji) => (
+                          <button
+                            key={`live-reaction-${emoji}`}
+                            type="button"
+                            className="livestream-reaction-btn"
+                            onClick={() => sendLivestreamReaction(emoji)}
+                            title={`React ${emoji}`}
+                            aria-label={`React ${emoji}`}
+                            tabIndex={0}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="livestream-comment-input-row">
+                        <input
+                          type="text"
+                          className="livestream-comment-input"
+                          value={livestreamCommentInput}
+                          onChange={(event) => setLivestreamCommentInput(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              sendLivestreamComment();
+                            }
+                          }}
+                          maxLength={300}
+                          placeholder="Comment while watching..."
+                          aria-label="Comment while watching"
+                        />
+                        <button
+                          type="button"
+                          className="livestream-comment-send"
+                          onClick={sendLivestreamComment}
+                          disabled={!livestreamCommentInput.trim()}
+                          title="Send comment"
+                          aria-label="Send comment"
+                          tabIndex={0}
+                        >
+                          <Send size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="livestream-emoji-picker-btn"
+                          onClick={() => setShowEmojiPicker((prev) => !prev)}
+                          title="Pick emoji"
+                          aria-label="Pick emoji"
+                        >
+                          <Smile size={18} />
+                        </button>
+                        {showEmojiPicker && (
+                          <div className="livestream-emoji-picker-popup">
+                            <EmojiPicker
+                              onEmojiClick={(emojiObj) => {
+                                setLivestreamCommentInput((prev) => prev + emojiObj.emoji);
+                                setShowEmojiPicker(false);
+                              }}
+                              theme="dark"
+                              width={320}
+                              height={350}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mobile: Modern Top-Right Menu for Streaming Controls */}
+                <div className="stream-mobile-menu-container">
+                  <button
+                    className="stream-mobile-menu-btn"
+                    aria-label="Open stream controls"
+                    onClick={() => setShowMobileMenu((prev) => !prev)}
+                  >
+                    <Menu size={32} />
+                  </button>
+                  {showMobileMenu && (
+                    <div className="stream-mobile-menu-dropdown">
+                      <button
+                        className={`stream-mobile-menu-item${isMuted ? ' active' : ''}`}
+                        onClick={() => { toggleMute(); setShowMobileMenu(false); }}
+                      >
+                        {isMuted ? <VolumeX size={22} /> : <Volume2 size={22} />} {isMuted ? 'Unmute' : 'Mute'}
+                      </button>
+                      {callType === 'video' && (
+                        <button
+                          className={`stream-mobile-menu-item${isVideoOff ? ' active' : ''}`}
+                          onClick={() => { toggleVideo(); setShowMobileMenu(false); }}
+                        >
+                          {isVideoOff ? <VideoOff size={22} /> : <Camera size={22} />} {isVideoOff ? 'Turn Camera On' : 'Turn Camera Off'}
+                        </button>
+                      )}
+                      {callType === 'video' && (
+                        <button
+                          className={`stream-mobile-menu-item${isScreenSharing ? ' active' : ''}`}
+                          onClick={() => { toggleScreenShare(); setShowMobileMenu(false); }}
+                        >
+                          <Monitor size={22} /> {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+                        </button>
+                      )}
+                      <button
+                        className="stream-mobile-menu-item end"
+                        onClick={() => { endCall(); setShowMobileMenu(false); }}
+                      >
+                        <PhoneOff size={22} /> End Call
+                      </button>
+                      <button
+                        className="stream-mobile-menu-item minimize"
+                        onClick={() => { toggleCallMinimize(); setShowMobileMenu(false); }}
+                      >
+                        <Minimize2 size={22} /> Minimize
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Error Display */}
+                {callError && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    background: 'rgba(244, 67, 54, 0.9)',
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    zIndex: 30,
+                    fontSize: '14px',
+                    fontWeight: '500'
+                  }}>
+                    {callError}
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
         )}
       </AnimatePresence>
 
