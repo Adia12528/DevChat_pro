@@ -5713,93 +5713,108 @@ function App() {
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', marginTop: 60, minHeight: 0 }}>
             <div style={{ width: '100%', maxWidth: 900, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: 0 }}>
-              <LiveKitRoom
-                video={isStreamHost}
-                audio={isStreamHost}
-                token={liveKitToken}
-                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
-                data-lk-theme="default"
-                onDisconnected={handleLeaveStream}
-                style={{ width: '100%', height: '100%', minHeight: 320 }}
-              >
-                <VideoConference />
-                <RoomAudioRenderer />
-              </LiveKitRoom>
-            </div>
-            {/* Minimal, animated comments/reactions overlay at bottom for streamer and viewers */}
-            <div
-              className="livestream-comments-overlay"
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: isMobileView ? 12 : 32,
-                zIndex: 10010,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                pointerEvents: 'none',
-                minHeight: 0,
-                width: '100%',
-                maxWidth: 900,
-                margin: '0 auto',
-                gap: 0
-              }}
-            >
-              <AnimatedLivestreamComments comments={livestreamComments} />
-            </div>
-            {/* Input for audience to comment or react (fixed at bottom, only for viewers) */}
-            {!isStreamHost && (
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 10020,
-                width: '100%',
-                maxWidth: 900,
-                margin: '0 auto',
-                background: 'rgba(255,255,255,0.95)',
-                borderTop: '1px solid #eee',
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                padding: isMobileView ? '6px 4px' : '10px 18px',
-                boxSizing: 'border-box',
-                pointerEvents: 'auto'
-              }}>
-                <input
-                  type="text"
-                  value={livestreamCommentInput}
-                  onChange={e => setLivestreamCommentInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
-                  placeholder="Add a comment..."
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15 }}
-                  maxLength={200}
-                  disabled={!liveKitToken}
-                />
-                <button
-                  onClick={sendLivestreamComment}
-                  disabled={!livestreamCommentInput.trim()}
-                  style={{ background: '#00a884', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 600, fontSize: 15, cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed' }}
-                >
-                  Send
-                </button>
-                {/* Emoji reactions */}
-                <div style={{ display: 'flex', gap: 2 }}>
-                  {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
-                    <button
-                      key={emoji}
-                      onClick={() => sendLivestreamReaction(emoji)}
-                      style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
-                      title={`React with ${emoji}`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+              {/* Streamer: Only show their own stream, not audience screens */}
+              {isStreamHost ? (
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320 }}>
+                  <div style={{ fontWeight: 600, color: '#00a884', marginBottom: 8, fontSize: 16 }}>You are streaming live</div>
+                  <LiveKitRoom
+                    video={true}
+                    audio={true}
+                    token={liveKitToken}
+                    serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+                    data-lk-theme="default"
+                    onDisconnected={handleLeaveStream}
+                    style={{ width: '100%', height: '100%', minHeight: 320 }}
+                  >
+                    {/* Only render the main video/audio, not audience tiles */}
+                    <VideoConference hideParticipants={true} />
+                    <RoomAudioRenderer />
+                  </LiveKitRoom>
                 </div>
+              ) : (
+                <LiveKitRoom
+                  video={false}
+                  audio={false}
+                  token={liveKitToken}
+                  serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+                  data-lk-theme="default"
+                  onDisconnected={handleLeaveStream}
+                  style={{ width: '100%', height: '100%', minHeight: 320 }}
+                >
+                  <VideoConference />
+                  <RoomAudioRenderer />
+                </LiveKitRoom>
+              )}
+            </div>
+            {/* Comments/Reactions Panel */}
+            <div className="livestream-comments-panel" style={{
+              width: '100%',
+              maxWidth: 900,
+              margin: '0 auto',
+              background: 'var(--panel-bg, #f8f8f8)',
+              borderTop: '1px solid var(--border)',
+              padding: isMobileView ? '8px 4px' : '16px 24px',
+              minHeight: 120,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              boxSizing: 'border-box',
+              overflowY: 'auto',
+              flexShrink: 0
+            }}>
+              <div style={{ flex: 1, overflowY: 'auto', maxHeight: isMobileView ? 120 : 180, marginBottom: 4 }}>
+                {livestreamComments.length === 0 ? (
+                  <div style={{ color: '#aaa', textAlign: 'center', fontSize: 15 }}>No comments yet. Be the first to comment!</div>
+                ) : (
+                  livestreamComments.slice(-30).map((c, idx) => (
+                    <div key={c.id || idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, fontSize: 15 }}>
+                      <span style={{ fontWeight: 600, color: '#00a884' }}>{c.from}</span>
+                      {c.type === 'reaction' ? (
+                        <span style={{ fontSize: 20 }}>{c.emoji}</span>
+                      ) : (
+                        <span style={{ color: '#222' }}>{c.text}</span>
+                      )}
+                      <span style={{ color: '#bbb', fontSize: 12, marginLeft: 6 }}>{formatRelativeTime(c.time)}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            )}
+              {/* Input for audience to comment or react */}
+              {!isStreamHost && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                  <input
+                    type="text"
+                    value={livestreamCommentInput}
+                    onChange={e => setLivestreamCommentInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') sendLivestreamComment(); }}
+                    placeholder="Add a comment..."
+                    style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #ddd', fontSize: 15 }}
+                    maxLength={200}
+                    disabled={!liveKitToken}
+                  />
+                  <button
+                    onClick={sendLivestreamComment}
+                    disabled={!livestreamCommentInput.trim()}
+                    style={{ background: '#00a884', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontWeight: 600, fontSize: 15, cursor: livestreamCommentInput.trim() ? 'pointer' : 'not-allowed' }}
+                  >
+                    Send
+                  </button>
+                  {/* Emoji reactions */}
+                  <div style={{ display: 'flex', gap: 2 }}>
+                    {["👍","😂","🔥","👏","😍","😮","🎉"].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => sendLivestreamReaction(emoji)}
+                        style={{ fontSize: 20, background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}
+                        title={`React with ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
