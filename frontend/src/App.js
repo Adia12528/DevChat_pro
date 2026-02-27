@@ -96,7 +96,10 @@ function App() {
             const [errorMessage, setErrorMessage] = useState('');
           // Success and error message states
           const [successMessage, setSuccessMessage] = useState('');
-
+                // Mobile streaming control bar state
+                const [showMobileControlBar, setShowMobileControlBar] = useState(false);
+                // Helper: is streaming
+                const isStreaming = !!liveKitToken && (currentStreamRoom || isStreamHost);
           // Screen share stream ref
           const screenShareStreamRef = useRef(null);
         // Reported users state (localStorage-backed)
@@ -197,7 +200,8 @@ function App() {
   // New feature states
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
+                  {/* ...existing code... */}
+                  {mobileStreamingControlBar}
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   // (successMessage, errorMessage) state already declared above
