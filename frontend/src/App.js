@@ -8527,54 +8527,46 @@ function App() {
                   </div>
                 )}
 
-                <div className="call-controls">
-                  {/* Mute Button */}
+                {/* Redesigned Mobile Streaming Controls */}
+                <div className="stream-mobile-controls">
                   <button
-                    className={`call-control-btn ${isMuted ? 'active' : ''}`}
+                    className={`stream-mobile-btn ${isMuted ? 'active' : ''}`}
                     onClick={toggleMute}
-                    title={isMuted ? 'Unmute' : 'Mute'}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
-                    {isMuted ? <VolumeX size={24} /> : <Volume2 size={24} />}
+                    {isMuted ? <VolumeX size={28} /> : <Volume2 size={28} />}
                   </button>
-
-                  {/* Video Toggle (only for video calls) */}
                   {callType === 'video' && (
                     <button
-                      className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
+                      className={`stream-mobile-btn ${isVideoOff ? 'active' : ''}`}
                       onClick={toggleVideo}
-                      title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
+                      aria-label={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
                     >
-                      {isVideoOff ? <VideoOff size={24} /> : <Camera size={24} />}
+                      {isVideoOff ? <VideoOff size={28} /> : <Camera size={28} />}
                     </button>
                   )}
-
-                  {/* Screen Share (only for video calls) */}
                   {callType === 'video' && (
                     <button
-                      className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
+                      className={`stream-mobile-btn ${isScreenSharing ? 'active' : ''}`}
                       onClick={toggleScreenShare}
-                      title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+                      aria-label={isScreenSharing ? 'Stop sharing' : 'Share screen'}
                     >
-                      <Monitor size={24} />
+                      <Monitor size={28} />
                     </button>
                   )}
-
-                  {/* End Call Button */}
                   <button
-                    className="call-control-btn end-call-btn"
+                    className="stream-mobile-btn end"
                     onClick={endCall}
-                    title="End call"
+                    aria-label="End call"
                   >
-                    <PhoneOff size={24} />
+                    <PhoneOff size={28} />
                   </button>
-
-                  {/* Minimize Button */}
                   <button
-                    className="call-control-btn minimize-btn"
+                    className="stream-mobile-btn minimize"
                     onClick={toggleCallMinimize}
-                    title="Minimize"
+                    aria-label="Minimize"
                   >
-                    <Minimize2 size={24} />
+                    <Minimize2 size={28} />
                   </button>
                 </div>
 

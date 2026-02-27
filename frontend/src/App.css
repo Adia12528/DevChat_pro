@@ -1,4 +1,61 @@
-﻿.livestream-professional-container {
+﻿/* --- Mobile Streaming Controls Redesign --- */
+.stream-mobile-controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: linear-gradient(0deg, rgba(20,20,20,0.98) 90%, rgba(20,20,20,0.7) 100%);
+  padding: max(10px, env(safe-area-inset-bottom, 10px)) 0  max(18px, env(safe-area-inset-bottom, 18px)) 0;
+  z-index: 10000;
+  box-shadow: 0 -2px 16px rgba(0,0,0,0.18);
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+.stream-mobile-btn {
+  background: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.04));
+  border: 2px solid rgba(255,255,255,0.18);
+  border-radius: 50%;
+  width: 54px;
+  height: 54px;
+  min-width: 48px;
+  min-height: 48px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin: 0 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  transition: background 0.18s, transform 0.18s;
+  touch-action: manipulation;
+}
+.stream-mobile-btn:active {
+  background: linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09));
+  transform: scale(0.96);
+}
+.stream-mobile-btn.end {
+  background: linear-gradient(135deg, #f44336, #d32f2f);
+  border-color: #f44336;
+  color: #fff;
+  font-weight: 700;
+}
+.stream-mobile-btn.end:active {
+  background: linear-gradient(135deg, #ef5350, #c62828);
+}
+.stream-mobile-btn.minimize {
+  background: linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.04));
+  border-color: rgba(255,255,255,0.18);
+}
+@media (min-width: 769px) {
+  .stream-mobile-controls {
+    display: none !important;
+  }
+}
+.livestream-professional-container {
   background: linear-gradient(135deg, #232526 0%, #414345 100%);
   border-radius: 18px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
