@@ -14,78 +14,93 @@ import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedM
 import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
-  getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
-  optimizeRtpSenders,
-  waitForIceGatheringComplete,
-  CallStatistics,
-  CallRecorder,
-  VideoEffectsProcessor,
-  CallHistory,
-  AdaptiveQualityController,
-  getScreenStream,
-  switchToScreenShare,
-  switchBackToCamera,
-  getQualityIndicator
-} from './callUtils';
-import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
-import '@livekit/components-styles';
-
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
-const LIVESTREAM_REACTIONS = ['🔥', '👏', '❤️', '😂', '😮', '🎉'];
-
-const CALL_EVENTS = Object.freeze({
-  OFFER: 'call:offer',
-  ANSWER: 'call:answer',
-  ICE_CANDIDATE: 'call:ice-candidate',
-  REJECT: 'call:reject',
-  REJECTED: 'call:rejected',
-  END: 'call:end',
-  ENDED: 'call:ended',
-  SCREEN_SHARE_START: 'call:screen-share-start',
-  SCREEN_SHARE_END: 'call:screen-share-end'
-});
-
-const LIVESTREAM_EVENTS = Object.freeze({
-  START: 'livestream:start',
-  STARTED: 'livestream:started',
-  AVAILABLE: 'livestream:available',
-  JOIN_REQUEST: 'livestream:join-request',
-  OFFER: 'livestream:offer',
-  ANSWER: 'livestream:answer',
-  ICE_CANDIDATE: 'livestream:ice-candidate',
-  STOP: 'livestream:stop',
-  STOPPED: 'livestream:stopped',
-  DECLINE: 'livestream:decline',
-  LEAVE: 'livestream:leave',
-  VIEWERS_UPDATE: 'livestream:viewers-update',
-  COMMENT: 'livestream:comment',
-  COMMENTED: 'livestream:commented',
-  REACTION: 'livestream:reaction',
-  REACTED: 'livestream:reacted'
-});
-
-const ROOM_EVENTS = Object.freeze({
-  REGISTRY_UPDATED: 'room_registry_updated'
-});
-
-const LOCAL_PREVIEW_SIZES = [
-  { width: 140, height: 105 },
-  { width: 200, height: 150 },
-  { width: 260, height: 195 }
-];
-
-function App() {
-                // Detect iOS for screen sharing support
-                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-              // Stream visibility state
-              const [streamVisibility, setStreamVisibility] = useState('public');
-              // Stream source state for livestream (camera/screen)
-              const [streamSource, setStreamSource] = useState('camera');
-            // Error message state
-            const [errorMessage, setErrorMessage] = useState('');
-          // Success and error message states
-          const [successMessage, setSuccessMessage] = useState('');
+                {liveStreamInfo && (
+                  <>
+                    {/* Floating emoji animation overlay */}
+                    <div className="livestream-emoji-overlay">
+                      {livestreamComments.slice(-6).map((entry) => (
+                        entry.type === 'reaction' ? (
+                          <span
+                            key={`emoji-float-${entry.id}`}
+                            className="livestream-emoji-float"
+                          >
+                            {entry.emoji}
+                          </span>
+                        ) : null
+                      ))}
+                    </div>
+                    <div className="livestream-comments-panel enhanced-responsive">
+                      <div className="livestream-header-row">
+                        <span className="livestream-live-indicator" aria-label="Live">🔴 LIVE</span>
+                        <span className="livestream-user-count" aria-label="Viewers">
+                          <Users size={16} style={{verticalAlign: 'middle', marginRight: 4}} />
+                          {liveStreamInfo.viewers || 1}
+                        </span>
+                      </div>
+                      <div className="livestream-comments-list">
+                        {livestreamComments.length === 0 ? (
+                          <div className="livestream-comments-empty">Audience comments will appear here</div>
+                        ) : (
+                          livestreamComments.slice(-6).map((entry) => (
+                            <div key={entry.id} className="livestream-comment-item">
+                              <span className="livestream-comment-author">{entry.from}</span>
+                              {entry.type === 'reaction' ? (
+                                <span className="livestream-comment-text">reacted {entry.emoji}</span>
+                              ) : (
+                                <span className="livestream-comment-text">{entry.text}</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="livestream-comment-actions" role="group" aria-label="Quick reactions">
+                        <div className="livestream-reaction-buttons" role="group" aria-label="Quick reactions">
+                          {LIVESTREAM_REACTIONS.map((emoji) => (
+                            <button
+                              key={`live-reaction-${emoji}`}
+                              type="button"
+                              className="livestream-reaction-btn"
+                              onClick={() => sendLivestreamReaction(emoji)}
+                              title={`React ${emoji}`}
+                              aria-label={`React ${emoji}`}
+                              tabIndex={0}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="livestream-comment-input-row">
+                          <input
+                            type="text"
+                            className="livestream-comment-input"
+                            value={livestreamCommentInput}
+                            onChange={(event) => setLivestreamCommentInput(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                sendLivestreamComment();
+                              }
+                            }}
+                            maxLength={300}
+                            placeholder="Comment while watching..."
+                            aria-label="Comment while watching"
+                          />
+                          <button
+                            type="button"
+                            className="livestream-comment-send"
+                            onClick={sendLivestreamComment}
+                            disabled={!livestreamCommentInput.trim()}
+                            title="Send comment"
+                            aria-label="Send comment"
+                            tabIndex={0}
+                          >
+                            <Send size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
 
           // Screen share stream ref
           const screenShareStreamRef = useRef(null);
