@@ -11,7 +11,7 @@ const urlsToCache = [
   '/logo512.png'
 ];
 
-// Install event - cache assets
+// Install event - cache assets and force update
 self.addEventListener('install', (event) => {
   console.log('[ServiceWorker] Installing version:', CACHE_NAME);
   event.waitUntil(
@@ -26,6 +26,32 @@ self.addEventListener('install', (event) => {
   );
   // Force the waiting service worker to become the active service worker
   self.skipWaiting();
+});
+
+// Always check for updates and claim clients on every activation
+self.addEventListener('activate', (event) => {
+  console.log('[ServiceWorker] Activating version:', CACHE_NAME);
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[ServiceWorker] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => {
+      // Force all clients to reload and use the new service worker
+      return self.clients.claim();
+    })
+  );
+  // Send message to all clients to reload (for immediate update)
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({ type: 'FORCE_RELOAD' });
+    });
+  });
 });
 
 // Activate event - claim clients immediately
