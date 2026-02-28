@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// Import all modular CSS files
+// Import all CSS files directly
 import './styles/variables.css';
 import './styles/base.css';
 import './styles/components/chat.css';
@@ -11,8 +11,6 @@ import './styles/components/streaming.css';
 import './styles/components/modals.css';
 import './styles/components/panels.css';
 import './styles/responsive.css';
-
-// App.css is NOT imported anymore
 
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 

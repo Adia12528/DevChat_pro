@@ -71,7 +71,6 @@
   --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
   --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.6);
   --shadow-glow: 0 0 20px var(--primary-glow);
-  --shadow-glow-strong: 0 0 30px var(--primary-glow);
   
   /* Glass Effect */
   --glass-bg: rgba(30, 30, 30, 0.85);
@@ -90,25 +89,25 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
   
-  /* Font Sizes */
-  --text-xs: 0.75rem;   /* 12px */
-  --text-sm: 0.875rem;  /* 14px */
-  --text-base: 1rem;    /* 16px */
-  --text-lg: 1.125rem;  /* 18px */
-  --text-xl: 1.25rem;   /* 20px */
-  --text-2xl: 1.5rem;   /* 24px */
-  --text-3xl: 1.875rem; /* 30px */
+  /* Font Sizes - Responsive Scale */
+  --text-xs: clamp(0.75rem, 2vw, 0.875rem);     /* 12-14px */
+  --text-sm: clamp(0.875rem, 2.5vw, 1rem);      /* 14-16px */
+  --text-base: clamp(1rem, 3vw, 1.125rem);      /* 16-18px */
+  --text-lg: clamp(1.125rem, 3.5vw, 1.25rem);   /* 18-20px */
+  --text-xl: clamp(1.25rem, 4vw, 1.5rem);       /* 20-24px */
+  --text-2xl: clamp(1.5rem, 5vw, 1.875rem);     /* 24-30px */
+  --text-3xl: clamp(1.875rem, 6vw, 2.25rem);    /* 30-36px */
   
-  /* Spacing Scale */
-  --space-1: 0.25rem;  /* 4px */
-  --space-2: 0.5rem;   /* 8px */
-  --space-3: 0.75rem;  /* 12px */
-  --space-4: 1rem;     /* 16px */
-  --space-5: 1.25rem;  /* 20px */
-  --space-6: 1.5rem;   /* 24px */
-  --space-8: 2rem;     /* 32px */
-  --space-10: 2.5rem;  /* 40px */
-  --space-12: 3rem;    /* 48px */
+  /* Spacing Scale - Responsive */
+  --space-1: clamp(0.25rem, 1vw, 0.375rem);     /* 4-6px */
+  --space-2: clamp(0.5rem, 1.5vw, 0.75rem);     /* 8-12px */
+  --space-3: clamp(0.75rem, 2vw, 1rem);         /* 12-16px */
+  --space-4: clamp(1rem, 2.5vw, 1.25rem);       /* 16-20px */
+  --space-5: clamp(1.25rem, 3vw, 1.5rem);       /* 20-24px */
+  --space-6: clamp(1.5rem, 3.5vw, 2rem);        /* 24-32px */
+  --space-8: clamp(2rem, 4vw, 2.5rem);          /* 32-40px */
+  --space-10: clamp(2.5rem, 5vw, 3rem);         /* 40-48px */
+  --space-12: clamp(3rem, 6vw, 4rem);           /* 48-64px */
   
   /* Border Radius */
   --radius-xs: 4px;
@@ -121,12 +120,12 @@
   --radius-full: 9999px;
   
   /* Layout */
-  --header-height: 64px;
-  --footer-height: 72px;
-  --sidebar-width: 280px;
+  --header-height: clamp(56px, 8vh, 72px);
+  --footer-height: clamp(64px, 10vh, 80px);
+  --sidebar-width: min(320px, 85vw);
   --sidebar-collapsed-width: 72px;
-  --max-width: 1200px;
-  --container-padding: var(--space-4);
+  --max-width: 1400px;
+  --container-padding: clamp(12px, 3vw, 24px);
   
   /* Z-Index Scale */
   --z-base: 1;
@@ -147,84 +146,3 @@
   --touch-min: 44px;
   --touch-comfortable: 48px;
 }
-
-/* Light Theme */
-[data-theme="light"] {
-  --bg: #f5f5f5;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f0f0f0;
-  --header: #ffffff;
-  --surface: #ffffff;
-  --surface-hover: #f8f8f8;
-  --surface-active: #f0f0f0;
-  
-  --primary: #00a884;
-  --primary-hover: #009977;
-  --primary-active: #008866;
-  --primary-muted: rgba(0, 168, 132, 0.1);
-  --primary-soft: rgba(0, 168, 132, 0.05);
-  --primary-glow: rgba(0, 168, 132, 0.3);
-  
-  --me: #dcf8c6;
-  --me-gradient: linear-gradient(135deg, #dcf8c6 0%, #c5e1a5 100%);
-  --me-border: #00a884;
-  --other: #ffffff;
-  --other-gradient: linear-gradient(135deg, #ffffff 0%, #f8f8f8 100%);
-  --other-border: #e0e0e0;
-  
-  --txt: #1a1a1a;
-  --txt-primary: #1a1a1a;
-  --txt-secondary: #4a4a4a;
-  --txt-tertiary: #666666;
-  --txt-muted: #999999;
-  --txt-inverse: #ffffff;
-  
-  --border: #e0e0e0;
-  --border-light: #e8e8e8;
-  --border-lighter: #f0f0f0;
-  --divider: rgba(0, 0, 0, 0.06);
-  --divider-strong: rgba(0, 0, 0, 0.12);
-  
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.12);
-  
-  --glass-bg: rgba(255, 255, 255, 0.9);
-  --glass-bg-strong: rgba(255, 255, 255, 0.95);
-  --glass-bg-light: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --glass-border-strong: rgba(0, 0, 0, 0.15);
-}
-
-/* High Contrast Theme */
-[data-theme="high-contrast"] {
-  --bg: #000000;
-  --bg-secondary: #0a0a0a;
-  --bg-tertiary: #121212;
-  --header: #0a0a0a;
-  --surface: #121212;
-  --surface-hover: #1a1a1a;
-  --surface-active: #222222;
-  
-  --primary: #00ff00;
-  --primary-hover: #33ff33;
-  --primary-muted: rgba(0, 255, 0, 0.2);
-  --primary-glow: rgba(0, 255, 0, 0.6);
-  
-  --me: #00aa00;
-  --other: #1a1a1a;
-  
-  --txt: #ffffff;
-  --txt-secondary: #ffff00;
-  --txt-muted: #cccccc;
-  
-  --border: #ffffff;
-  --border-light: #cccccc;
-  --divider: rgba(255, 255, 255, 0.2);
-  
-  --shadow-glow: 0 0 30px #00ff00;
-}
-
-/* Dark Theme (Default) - Already defined in :root */

@@ -1,708 +1,530 @@
 /* ============================================
-   RESPONSIVE STYLES - COMPLETE
+   COMPLETE RESPONSIVE SYSTEM
    ============================================ */
 
-/* Large Desktop (1440px+) */
-@media (min-width: 1440px) {
-  .chat-container {
-    max-width: 1400px;
-  }
+/* ===== BREAKPOINTS ===== */
+/* 320px - 480px: Small phones */
+/* 481px - 600px: Large phones */
+/* 601px - 768px: Small tablets */
+/* 769px - 1024px: Tablets */
+/* 1025px - 1280px: Desktops */
+/* 1281px - 1440px: Large desktops */
+/* 1441px+: Extra large desktops */
 
-  .msg-bubble {
-    max-width: 60%;
-  }
-
-  .room-sidebar {
-    width: 350px;
-  }
-}
-
-/* Desktop (1025px - 1439px) */
-@media (min-width: 1025px) and (max-width: 1439px) {
-  .chat-container {
-    max-width: 1200px;
-  }
-
-  .msg-bubble {
-    max-width: 65%;
-  }
-
-  .room-sidebar {
-    width: 300px;
-  }
-}
-
-/* Tablet (769px - 1024px) */
-@media (max-width: 1024px) and (min-width: 769px) {
-  .chat-container {
-    max-width: 100%;
-    height: 100vh;
-  }
-
-  .chat-header {
-    padding: var(--space-3) var(--space-4);
-    min-height: 60px;
-  }
-
-  .meta h3 {
-    font-size: var(--text-lg);
-  }
-
-  .msg-bubble {
-    max-width: 70%;
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .users-list {
-    padding: var(--space-2) var(--space-3);
-    overflow-x: auto;
-    flex-wrap: nowrap;
-  }
-
-  .user-tag {
-    flex-shrink: 0;
-  }
-
-  .panel-header-nav {
-    height: 60px;
-    padding: var(--space-3);
-  }
-
-  .panel-back-btn {
-    width: 40px;
-    height: 40px;
-  }
-
-  /* Sidebar adjustments */
-  .room-sidebar {
-    width: 280px;
-  }
-
-  /* Call interface adjustments */
-  .call-controls {
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .call-control-btn {
-    width: 48px;
-    height: 48px;
-    font-size: 20px;
-  }
-}
-
-/* Mobile & Tablet General (max-width: 768px) */
-@media (max-width: 768px) {
-  /* Header optimization */
-  .chat-header {
-    padding: var(--space-2) var(--space-3);
-    gap: var(--space-2);
-    min-height: 60px;
-    flex-wrap: wrap;
-  }
-
-  .meta {
-    gap: var(--space-1);
-    flex: 1 1 100%;
-    order: 2;
-  }
-
-  .meta h3 {
-    font-size: var(--text-base);
-  }
-
-  .menu-container {
-    order: 1;
-  }
-
-  .users-info,
-  .theme-toggle,
-  .sound-toggle,
-  .clear-btn {
-    order: 3;
-  }
-
-  .call-buttons {
-    order: 3;
-    margin-left: 0;
-    gap: var(--space-1);
-  }
-
-  /* Menu dropdown */
-  .menu-dropdown {
-    min-width: 240px;
-    max-width: 90vw;
-    left: auto;
-    right: 0;
-  }
-
-  .menu-item {
-    padding: var(--space-3) var(--space-4);
-    font-size: var(--text-base);
-    min-height: var(--touch-comfortable);
-  }
-
-  /* Messages */
-  .msg-bubble {
-    max-width: 85%;
-    padding: var(--space-2) var(--space-3);
-  }
-
-  .msg-bubble p {
-    font-size: var(--text-base);
-    line-height: 1.4;
-  }
-
-  .msg-actions {
-    opacity: 0.7; /* Always visible on mobile */
-  }
-
-  /* Chat footer */
-  .chat-footer {
-    padding: var(--space-2) var(--space-3);
-    gap: var(--space-2);
-    min-height: 64px;
-  }
-
-  .whatsapp-input-wrapper {
-    padding: var(--space-1) var(--space-3);
-  }
-
-  .whatsapp-input {
-    font-size: 16px; /* Prevents iOS zoom */
-    min-height: 40px;
-  }
-
-  .whatsapp-action-btn,
-  .whatsapp-send,
-  .emoji-btn-inline,
-  .file-upload-btn {
-    min-width: 44px;
-    min-height: 44px;
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
-  }
-
-  /* Users list - horizontal scroll */
-  .users-list {
-    overflow-x: auto;
-    overflow-y: hidden;
-    flex-wrap: nowrap;
-    scroll-behavior: smooth;
-    padding: var(--space-2);
-    min-height: 48px;
-  }
-
-  .users-list::-webkit-scrollbar {
-    display: none;
-  }
-
-  .user-tag {
-    flex-shrink: 0;
-    padding: var(--space-1) var(--space-3);
-  }
-
-  /* Modal adjustments */
-  .edit-modal,
-  .delete-modal,
-  .profile-modal {
-    max-width: 95%;
-    margin: 0 auto;
-  }
-
-  .edit-textarea {
-    min-height: 100px;
-    font-size: 16px;
-  }
-
-  /* Image preview */
-  .preview-nav-btn {
-    width: 40px;
-    height: 40px;
-  }
-
-  .preview-thumbnails {
-    padding: var(--space-2);
-  }
-
-  .preview-thumbnail {
-    width: 60px;
-    height: 60px;
-  }
-
-  /* Voice recording */
-  .recording-container {
-    padding: var(--space-6);
-    width: 90%;
-  }
-
-  .recording-time {
-    font-size: 36px;
-  }
-
-  .waveform-container {
-    height: 50px;
-  }
-
-  /* Call interface */
-  .call-controls {
-    bottom: 20px;
-    padding: var(--space-2);
-    gap: var(--space-2);
-  }
-
-  .call-control-btn {
-    width: 48px;
-    height: 48px;
-    font-size: 20px;
-  }
-
-  .incoming-call-modal,
-  .calling-modal {
-    width: 90%;
-    padding: var(--space-6);
-  }
-
-  .local-video-shell {
-    width: 100px;
-    height: 100px;
-  }
-
-  /* Panels */
-  .starred-panel {
-    width: 100%;
-  }
-
-  .room-sidebar {
-    width: 280px;
-  }
-
-  /* Streaming */
-  .livestream-comments-panel {
-    width: 90vw;
-    bottom: 100px;
-  }
-}
-
-/* Small Mobile (max-width: 600px) */
-@media (max-width: 600px) {
+/* ===== EXTRA SMALL DEVICES (320px - 480px) ===== */
+@media (max-width: 480px) {
+  /* Layout */
   .chat-container {
     height: 100dvh;
+    height: -webkit-fill-available;
   }
-
-  .login-card {
-    padding: var(--space-6) var(--space-4);
-    max-width: 90%;
+  
+  /* Header */
+  .chat-header {
+    padding: var(--space-2) var(--space-3);
+    min-height: 56px;
+    gap: var(--space-2);
   }
-
-  .login-card h2 {
-    font-size: var(--text-xl);
+  
+  .meta h3 {
+    font-size: var(--text-sm);
+    max-width: 140px;
   }
-
-  .brand {
-    font-size: 32px;
-  }
-
-  .input-group {
-    min-height: 48px;
-  }
-
-  .join-btn {
-    min-height: 48px;
-  }
-
-  .msg-bubble {
-    max-width: 88%;
-  }
-
-  .sender-tag {
-    font-size: var(--text-xs);
-  }
-
-  .timestamp {
-    font-size: 10px;
-  }
-
-  .chat-footer {
-    padding: var(--space-2);
-  }
-
-  /* Hide non-essential UI */
+  
   .room-info span:not(.status-on):not(.status-off) {
     display: none;
   }
-
+  
   .users-info span:not(.users-count) {
     display: none;
   }
-
-  /* Emoji picker */
-  .emoji-picker-container {
-    bottom: 70px;
-    max-height: 300px;
+  
+  .users-info {
+    min-width: auto;
   }
-
-  /* Context menu */
-  .context-menu {
-    max-width: 95vw;
-  }
-
-  /* Call interface */
-  .call-info-overlay {
-    top: 10px;
-    left: 10px;
-  }
-
-  .call-peer-name {
-    font-size: var(--text-lg);
-  }
-
-  .call-duration {
-    font-size: var(--text-sm);
-  }
-}
-
-/* Extra Small Mobile (max-width: 480px) */
-@media (max-width: 480px) {
-  .chat-header {
-    padding: var(--space-1) var(--space-2);
-  }
-
-  .meta h3 {
-    font-size: var(--text-sm);
-  }
-
+  
+  /* Messages */
   .msg-bubble {
-    max-width: 92%;
-    padding: var(--space-1) var(--space-2);
+    max-width: 90%;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
   }
-
+  
   .msg-bubble p {
     font-size: var(--text-sm);
   }
-
-  .chat-footer {
-    padding: var(--space-1) var(--space-2);
-    gap: var(--space-1);
+  
+  .timestamp {
+    font-size: 9px;
   }
-
+  
+  /* Input Area */
+  .chat-footer {
+    padding: var(--space-2);
+    gap: var(--space-2);
+    min-height: 60px;
+  }
+  
+  .whatsapp-input-wrapper {
+    padding: var(--space-1) var(--space-3);
+  }
+  
+  .whatsapp-input {
+    font-size: 16px;
+    min-height: 36px;
+  }
+  
   .whatsapp-action-btn,
   .whatsapp-send,
-  .emoji-btn-inline,
-  .file-upload-btn {
+  .file-upload-btn,
+  .camera-btn,
+  .voice-record-btn,
+  .emoji-btn-inline {
     min-width: 40px;
     min-height: 40px;
     width: 40px;
     height: 40px;
-    font-size: 18px;
+    padding: var(--space-1);
   }
-
-  .whatsapp-input {
-    font-size: 16px;
-    padding: var(--space-1) 0;
+  
+  /* Users List */
+  .users-list {
+    padding: var(--space-1) var(--space-2);
+    min-height: 40px;
   }
-
+  
+  .user-tag {
+    padding: var(--space-1) var(--space-2);
+    font-size: 11px;
+  }
+  
+  .user-tag-name {
+    max-width: 70px;
+  }
+  
+  /* Menu Dropdown */
   .menu-dropdown {
-    min-width: calc(100vw - 32px);
+    width: calc(100vw - 32px);
+    max-height: 70vh;
     left: 50%;
     transform: translateX(-50%);
+    margin: 0;
   }
-
+  
   .menu-item {
-    padding: var(--space-3);
-    font-size: var(--text-sm);
+    padding: var(--space-3) var(--space-4);
+    font-size: 14px;
+    min-height: 48px;
   }
-
-  /* Voice recording */
+  
+  /* Modals */
+  .edit-modal,
+  .delete-modal,
+  .profile-modal {
+    width: calc(100% - 32px);
+    max-width: none;
+    margin: 0;
+  }
+  
+  .recording-container {
+    width: calc(100% - 32px);
+    padding: var(--space-6);
+  }
+  
   .recording-time {
     font-size: 28px;
-    min-width: 100px;
   }
-
+  
   .waveform-container {
     height: 40px;
   }
-
+  
   .waveform-bar {
-    width: 3px;
+    width: 2px;
   }
-
-  /* Image preview */
-  .preview-footer {
-    padding: var(--space-3);
-    gap: var(--space-2);
-  }
-
-  .caption-input-wrapper {
-    padding: var(--space-1) var(--space-3);
-  }
-
-  .preview-send-btn {
-    width: 48px;
-    height: 48px;
-  }
-
-  /* Call interface */
+  
+  /* Call Interface */
   .call-controls {
-    bottom: 10px;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2);
+    gap: var(--space-2);
+    padding: var(--space-2);
+    width: calc(100% - var(--space-4));
   }
-
+  
   .call-control-btn {
     width: 44px;
     height: 44px;
-    font-size: 18px;
+    font-size: 20px;
   }
-
+  
   .local-video-shell {
-    width: 80px;
-    height: 80px;
+    width: 80px !important;
+    height: 100px !important;
   }
-
-  .local-video-toolbar {
-    height: 24px;
-    font-size: 9px;
+  
+  /* Panels */
+  .starred-panel,
+  .room-sidebar {
+    width: 100%;
   }
-
+  
+  .panel-header-nav {
+    height: 56px;
+    padding: var(--space-3);
+  }
+  
   /* Streaming */
   .livestream-comments-panel {
-    bottom: 80px;
+    width: calc(100% - 24px);
+    bottom: 100px;
     padding: var(--space-2);
   }
-
+  
   .livestream-comment-item {
-    font-size: var(--text-xs);
+    font-size: 12px;
+  }
+  
+  .livestream-reaction-btn {
+    padding: var(--space-1) var(--space-2);
+    font-size: 12px;
   }
 }
 
-/* Very Small Mobile (max-width: 360px) */
-@media (max-width: 360px) {
+/* ===== SMALL DEVICES (481px - 600px) ===== */
+@media (min-width: 481px) and (max-width: 600px) {
   .chat-header {
-    min-height: 52px;
+    padding: var(--space-3);
   }
-
+  
   .meta h3 {
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
   }
-
-  .whatsapp-action-btn,
-  .whatsapp-send,
-  .emoji-btn-inline,
-  .file-upload-btn {
-    min-width: 36px;
-    min-height: 36px;
-    width: 36px;
-    height: 36px;
-    font-size: 16px;
-  }
-
-  .whatsapp-input {
-    font-size: 15px;
-  }
-
+  
   .msg-bubble {
-    max-width: 95%;
+    max-width: 85%;
   }
-
-  .user-tag {
-    padding: 2px 8px;
-    font-size: 11px;
+  
+  .whatsapp-action-btn,
+  .whatsapp-send {
+    min-width: 44px;
+    min-height: 44px;
   }
-
-  .user-tag-name {
-    max-width: 80px;
+  
+  .menu-dropdown {
+    width: 320px;
+    left: 50%;
+    transform: translateX(-50%);
   }
-
-  /* Emoji picker */
-  .emoji-picker-container {
-    max-height: 250px;
-  }
-
-  /* Call interface */
-  .call-control-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 16px;
-  }
-
-  .local-video-shell {
-    width: 70px;
-    height: 70px;
-  }
-
-  .incoming-call-btn {
-    padding: var(--space-2) var(--space-3);
-    min-width: 80px;
+  
+  .starred-panel {
+    width: 100%;
   }
 }
 
-/* Landscape Mode */
-@media (max-height: 500px) and (orientation: landscape) {
+/* ===== MEDIUM DEVICES / SMALL TABLETS (601px - 768px) ===== */
+@media (min-width: 601px) and (max-width: 768px) {
   .chat-header {
-    min-height: 48px;
-    padding: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
   }
-
-  .chat-body {
-    padding: var(--space-2);
+  
+  .meta h3 {
+    font-size: var(--text-lg);
   }
-
+  
   .msg-bubble {
     max-width: 75%;
   }
+  
+  .whatsapp-action-btn,
+  .whatsapp-send {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  
+  .menu-dropdown {
+    width: 340px;
+  }
+  
+  .starred-panel {
+    width: 360px;
+  }
+  
+  .room-sidebar {
+    width: 300px;
+  }
+  
+  .call-controls {
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+}
 
+/* ===== LARGE DEVICES / TABLETS (769px - 1024px) ===== */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .chat-container {
+    max-width: 100%;
+  }
+  
+  .chat-header {
+    padding: var(--space-4);
+  }
+  
+  .meta h3 {
+    font-size: var(--text-xl);
+  }
+  
+  .msg-bubble {
+    max-width: 70%;
+  }
+  
+  .panel-header-nav {
+    height: 60px;
+  }
+  
+  .starred-panel {
+    width: 380px;
+  }
+  
+  .room-sidebar {
+    width: 320px;
+  }
+  
+  .call-controls {
+    gap: var(--space-4);
+  }
+  
+  .call-control-btn {
+    width: 52px;
+    height: 52px;
+  }
+}
+
+/* ===== DESKTOP (1025px - 1280px) ===== */
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .chat-container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  .msg-bubble {
+    max-width: 65%;
+  }
+  
+  .starred-panel {
+    width: 400px;
+  }
+  
+  .room-sidebar {
+    width: 340px;
+  }
+}
+
+/* ===== LARGE DESKTOP (1281px - 1440px) ===== */
+@media (min-width: 1281px) and (max-width: 1440px) {
+  .chat-container {
+    max-width: 1400px;
+  }
+  
+  .msg-bubble {
+    max-width: 60%;
+  }
+  
+  .starred-panel {
+    width: 420px;
+  }
+}
+
+/* ===== EXTRA LARGE DESKTOP (1441px+) ===== */
+@media (min-width: 1441px) {
+  .chat-container {
+    max-width: 1600px;
+  }
+  
+  .msg-bubble {
+    max-width: 55%;
+  }
+  
+  .starred-panel {
+    width: 440px;
+  }
+}
+
+/* ===== LANDSCAPE MODE ===== */
+@media (max-height: 600px) and (orientation: landscape) {
+  .chat-header {
+    min-height: 48px;
+    padding: var(--space-2) var(--space-4);
+  }
+  
+  .chat-body {
+    padding: var(--space-2) var(--space-4);
+  }
+  
   .chat-footer {
-    min-height: 52px;
-    padding: var(--space-1) var(--space-2);
+    min-height: 56px;
+    padding: var(--space-2) var(--space-4);
   }
-
+  
   .users-list {
-    min-height: 40px;
-    max-height: 60px;
+    min-height: 36px;
+    max-height: 48px;
   }
-
-  /* Hide non-essential in landscape */
-  .room-info,
-  .users-info span:not(.users-count) {
+  
+  .msg-bubble {
+    max-width: 75%;
+  }
+  
+  .room-info {
     display: none;
   }
-
-  /* Modals */
-  .incoming-call-modal,
-  .calling-modal {
+  
+  .login-card {
     max-height: 90vh;
     overflow-y: auto;
+  }
+  
+  .recording-container {
     padding: var(--space-4);
   }
-
-  .audio-call-view {
-    padding: var(--space-4);
+  
+  .recording-time {
+    font-size: 24px;
   }
-
-  .avatar-large {
-    font-size: 48px;
+  
+  .waveform-container {
+    height: 30px;
   }
-
-  /* Call controls */
+  
   .call-controls {
-    bottom: 10px;
+    bottom: var(--space-2);
   }
-
+  
   .call-control-btn {
     width: 40px;
     height: 40px;
   }
-
-  /* Streaming */
+  
   .livestream-comments-panel {
-    bottom: 60px;
+    bottom: 80px;
     max-height: 40vh;
   }
 }
 
-/* High DPI Displays */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  .msg-bubble {
-    border-width: 0.5px;
-  }
-
-  .chat-img {
-    image-rendering: -webkit-optimize-contrast;
-  }
-}
-
-/* Touch Device Optimizations */
+/* ===== TOUCH DEVICE OPTIMIZATIONS ===== */
 @media (hover: none) and (pointer: coarse) {
-  .msg-actions {
-    opacity: 0.7; /* Always visible on touch devices */
-  }
-
-  .msg-bubble:hover {
-    transform: none; /* Disable hover transforms on touch */
-  }
-
   button,
   .btn,
   .menu-item,
-  .user-tag {
+  .user-tag,
+  .room-item,
+  .sidebar-dm-btn,
+  .media-panel-btn,
+  .settings-chip {
     min-height: var(--touch-comfortable);
     min-width: var(--touch-min);
   }
-
-  .whatsapp-action-btn,
-  .whatsapp-send {
+  
+  .msg-actions {
+    opacity: 0.8;
+  }
+  
+  .copy-btn,
+  .edit-btn,
+  .delete-btn,
+  .pin-btn,
+  .reply-btn {
+    padding: var(--space-2) !important;
+    width: 40px;
+    height: 40px;
+  }
+  
+  .whatsapp-input {
+    font-size: 16px;
+  }
+  
+  .menu-toggle {
     min-width: var(--touch-comfortable);
     min-height: var(--touch-comfortable);
   }
-
-  /* Prevent sticky hover states */
-  .copy-btn,
-  .edit-btn,
-  .delete-btn {
-    opacity: 0.7;
-  }
-
-  .copy-btn:hover,
-  .edit-btn:hover,
-  .delete-btn:hover {
-    transform: none;
-  }
 }
 
-/* iOS Safe Area Support */
+/* ===== SAFE AREA SUPPORT (Notched Devices) ===== */
 @supports (padding: env(safe-area-inset-top)) {
   .chat-header {
     padding-top: max(var(--space-3), env(safe-area-inset-top));
     padding-left: max(var(--space-4), env(safe-area-inset-left));
     padding-right: max(var(--space-4), env(safe-area-inset-right));
   }
-
+  
   .chat-footer {
     padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
     padding-left: max(var(--space-4), env(safe-area-inset-left));
     padding-right: max(var(--space-4), env(safe-area-inset-right));
   }
-
-  .call-interface.minimized {
-    bottom: max(20px, env(safe-area-inset-bottom));
-    right: max(20px, env(safe-area-inset-right));
-  }
-
+  
   .login-screen {
     padding: max(var(--space-5), env(safe-area-inset-top)) 
              max(var(--space-5), env(safe-area-inset-right))
              max(var(--space-5), env(safe-area-inset-bottom))
              max(var(--space-5), env(safe-area-inset-left));
   }
+  
+  .call-interface.fullscreen {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .call-controls {
+    bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  
+  .call-interface.minimized {
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    right: calc(20px + env(safe-area-inset-right));
+  }
 }
 
-/* Android Optimization */
-@media (hover: none) and (-webkit-tap-highlight-color: rgba(0,0,0,0)) {
-  .msg-bubble:active {
-    transform: scale(0.98);
-    transition: transform 0.1s;
+/* ===== HIGH DPI DISPLAYS ===== */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .msg-bubble {
+    border-width: 0.5px;
   }
-
-  button:active,
-  .btn:active {
-    transform: scale(0.96);
+  
+  .chat-img {
+    image-rendering: -webkit-optimize-contrast;
   }
 }
 
-/* PWA Display Mode */
+/* ===== DARK MODE SYSTEM PREFERENCE ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+  }
+}
+
+/* ===== PWA DISPLAY MODES ===== */
 @media (display-mode: standalone) {
   .chat-header {
     padding-top: max(var(--space-3), env(safe-area-inset-top), 12px);
   }
-
+  
   .pwa-install-prompt {
     display: none;
   }
 }
 
-/* Print Styles */
+@media (display-mode: minimal-ui) {
+  .chat-header {
+    border-top: 1px solid var(--divider);
+  }
+}
+
+/* ===== PRINT STYLES ===== */
 @media print {
   .chat-header,
   .chat-footer,
@@ -714,21 +536,61 @@
   button {
     display: none !important;
   }
-
+  
   .chat-body {
     padding: 0;
     height: auto !important;
     overflow: visible !important;
   }
-
+  
   .msg-bubble {
     max-width: 100%;
     break-inside: avoid;
     page-break-inside: avoid;
     border: 1px solid #ccc;
+    box-shadow: none;
   }
-
+  
   .timestamp {
     color: #666 !important;
+  }
+}
+
+/* ===== FOLDABLE DEVICES ===== */
+@media (horizontal-viewport-segments: 2) {
+  .App {
+    display: grid;
+    grid-template-columns: env(viewport-segment-width 0 0) env(viewport-segment-width 1 0);
+  }
+  
+  .chat-container {
+    grid-column: 1;
+  }
+  
+  .starred-panel {
+    grid-column: 2;
+    position: relative;
+  }
+}
+
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+.msg-bubble,
+.chat-header,
+.sidebar,
+.menu-dropdown,
+.modal-overlay {
+  will-change: transform;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* ===== DATA SAVER MODE ===== */
+@media (prefers-reduced-data: reduce) {
+  * {
+    background-image: none !important;
+  }
+  
+  .chat-img {
+    opacity: 0.7;
   }
 }

@@ -8,6 +8,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
@@ -17,6 +18,7 @@ html {
   text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -32,10 +34,19 @@ body {
   -webkit-tap-highlight-color: transparent;
   transition: background var(--transition-normal), color var(--transition-normal);
   overflow-x: hidden;
-  touch-action: manipulation;
+  overflow-y: auto;
+  touch-action: pan-y pinch-zoom;
   min-height: 100vh;
   min-height: -webkit-fill-available;
   position: relative;
+  width: 100%;
+}
+
+/* Better text rendering on Windows */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
 }
 
 /* Typography */
@@ -68,7 +79,7 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Focus Styles */
+/* Focus Styles - Accessibility */
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -89,7 +100,12 @@ a:hover {
   color: var(--txt);
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar - Cross Browser */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-secondary);
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -110,12 +126,6 @@ a:hover {
   background: var(--txt-muted);
 }
 
-/* Scrollbar for Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--bg-secondary);
-}
-
 /* Images */
 img {
   max-width: 100%;
@@ -123,7 +133,7 @@ img {
   display: block;
 }
 
-/* Buttons */
+/* Buttons - Base Styles */
 button {
   cursor: pointer;
   font-family: inherit;
@@ -134,6 +144,9 @@ button {
   color: inherit;
   padding: 0;
   margin: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 button:disabled {
@@ -141,19 +154,31 @@ button:disabled {
   opacity: 0.5;
 }
 
-/* Inputs */
+/* Inputs - Base Styles */
 input,
 textarea,
 select {
   font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
   color: inherit;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   transition: all var(--transition-fast);
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Prevent zoom on iOS inputs */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
 
 input:focus,
@@ -174,12 +199,6 @@ ul, ol {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-
-/* Tables */
-table {
-  width: 100%;
-  border-collapse: collapse;
 }
 
 /* Utility Classes */
@@ -238,8 +257,8 @@ table {
 /* Toast Notifications */
 .toast {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  top: var(--space-4);
+  right: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   display: flex;
@@ -249,11 +268,22 @@ table {
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--shadow-lg);
   color: var(--txt);
   min-width: 280px;
   max-width: 400px;
   animation: slideInRight var(--transition-bounce);
+}
+
+/* Mobile toasts */
+@media (max-width: 600px) {
+  .toast {
+    left: var(--space-4);
+    right: var(--space-4);
+    max-width: none;
+    width: calc(100% - var(--space-8));
+  }
 }
 
 .toast-success {
@@ -270,19 +300,6 @@ table {
 
 .toast-info {
   border-left: 4px solid var(--info);
-}
-
-.toast-close {
-  margin-left: auto;
-  padding: var(--space-1);
-  border-radius: var(--radius-full);
-  color: var(--txt-secondary);
-  transition: all var(--transition-fast);
-}
-
-.toast-close:hover {
-  background: var(--surface-hover);
-  color: var(--txt);
 }
 
 /* Animations */
