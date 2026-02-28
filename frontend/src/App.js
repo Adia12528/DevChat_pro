@@ -10,7 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { APP_VERSION, BUILD_DATE } from './version';
-import './App.css';
+
 import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 import {
   ICE_SERVERS,
@@ -77,6 +77,15 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
+    // Debug: Check if CSS variables are loaded
+    React.useEffect(() => {
+      const styles = getComputedStyle(document.documentElement);
+      const bgColor = styles.getPropertyValue('--bg').trim();
+      console.log('CSS Variables - Background color:', bgColor);
+      if (!bgColor) {
+        console.error('CSS variables not loaded! Check your imports.');
+      }
+    }, []);
   // Mobile menu state (must be inside component)
   const [showMobileMenu, setShowMobileMenu] = useState(false);
                   // Listen for FORCE_RELOAD message from service worker to force update
@@ -748,10 +757,56 @@ function App() {
   }, []);
 
   // Theme effect
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+  // In App.js, find your theme useEffect and replace/update it:
+
+// Theme effect with debug
+useEffect(() => {
+  // Set theme on HTML element
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  
+  // Debug: Check if CSS variables are applied
+  const styles = getComputedStyle(document.documentElement);
+  const bgColor = styles.getPropertyValue('--bg').trim();
+  const primaryColor = styles.getPropertyValue('--primary').trim();
+  
+  console.log('🎨 CSS Variables Check:', {
+    '--bg': bgColor || '❌ NOT LOADED',
+    '--primary': primaryColor || '❌ NOT LOADED',
+    '--txt': styles.getPropertyValue('--txt').trim() || '❌ NOT LOADED'
+  });
+  
+  if (!bgColor) {
+    console.error('❌ CSS variables not loaded! Check imports in index.js');
+    // Show visible error in development only
+    if (process.env.NODE_ENV !== 'production') {
+      const errorDiv = document.createElement('div');
+      errorDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #ff4444;
+        color: white;
+        padding: 15px;
+        text-align: center;
+        z-index: 99999;
+        font-weight: bold;
+        font-size: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      `;
+      errorDiv.textContent = '⚠️ CSS not loaded! Check console for details.';
+      document.body.prepend(errorDiv);
+      
+      // Auto-remove after 5 seconds
+      setTimeout(() => {
+        if (errorDiv.parentNode) {
+          errorDiv.remove();
+        }
+      }, 5000);
+    }
+  }
+}, [theme]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-font', fontStyle);

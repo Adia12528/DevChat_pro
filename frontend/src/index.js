@@ -1,11 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
-// We create the root once and render our App component.
-// StrictMode is kept to help you find potential bugs during development,
-// but the App.js code I gave you is designed to handle it without double-connecting.
+// Import all modular CSS files
+import './styles/variables.css';
+import './styles/base.css';
+import './styles/components/chat.css';
+import './styles/components/calls.css';
+import './styles/components/streaming.css';
+import './styles/components/modals.css';
+import './styles/components/panels.css';
+import './styles/responsive.css';
+
+// App.css is NOT imported anymore
+
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -14,7 +23,6 @@ root.render(
   </React.StrictMode>
 );
 
-// Register service worker only in production for instant dev updates
 if (process.env.NODE_ENV === 'production') {
   serviceWorkerRegistration.register({
     onSuccess: () => console.log('✅ App is ready for offline use'),
@@ -24,7 +32,6 @@ if (process.env.NODE_ENV === 'production') {
     }
   });
 } else {
-  // Unregister service worker in development for hot reloading
   serviceWorkerRegistration.unregister();
   console.log('🔥 Development mode: Hot Module Replacement enabled');
 }

@@ -23,17 +23,11 @@
     <meta name="msapplication-tap-highlight" content="no" />
     
     <!-- Theme Color for All Browsers -->
-    <!--
-      NOTE: The following meta[name=theme-color] tags use the media attribute for Chrome/Edge, but Firefox, Firefox for Android, and Opera do not support the media attribute as of 2026.
-      The fallback meta tag and the script below ensure correct theme color for those browsers.
-      The warning from Edge Tools can be safely ignored as this is the best-practice cross-browser solution.
-    -->
     <meta name="theme-color" content="#00a884" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0b141a" media="(prefers-color-scheme: dark)" />
-    <!-- Fallback for browsers that do not support media attribute (e.g., Firefox, Opera) -->
+    <!-- Fallback for browsers that do not support media attribute -->
     <meta name="theme-color" content="#00a884" />
     <script>
-      // Dynamically set theme-color for browsers that do not support media attribute (e.g., Firefox, Opera)
       (function() {
         var darkScheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
         var metaThemeColor = document.querySelector('meta[name="theme-color"]:not([media])');
@@ -46,6 +40,13 @@
         }
       })();
     </script>
+    
+    <!-- Fonts - ADD THESE LINES -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     
     <!-- Performance & Caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -78,6 +79,8 @@
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         touch-action: pan-y;
+        margin: 0;
+        padding: 0;
       }
       #root { 
         width: 100%; 
