@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence } from 'framer-motion';
-import CallSettings from '../CallSettings';        // Capital C, Capital S
+import CallSettings from './CallSettings';        // Capital C, Capital S
 import AudioSettings from './AudioSettings';      // Capital A, Capital S
 import VideoSettings from './VideoSettings';      // Capital V, Capital S
 import StreamSettings from './StreamSettings';    // Capital S, Capital S
