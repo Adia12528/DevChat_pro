@@ -50,6 +50,7 @@ export const SettingsProvider = ({ children }) => {
       };
     }
   }, []);
+  
 
   // Update settings and save to localStorage
   const updateSettings = useCallback((section, values) => {
