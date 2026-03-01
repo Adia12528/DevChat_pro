@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import CallSettings from './callSettings';
 import AudioSettings from './audioSettings';
 import VideoSettings from './VideoSettings';
-import StreamSettings from './StreamSettings';
+import StreamSettings from '.StreamSettings';
 import AppSettings from './AppSettings';
 import CallHistoryPanel from '../CallHistoryPanel';
 
