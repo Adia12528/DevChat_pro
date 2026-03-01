@@ -1,9 +1,6 @@
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 // ...existing code...
-// DevChat Pro - Auto-versioning enabled
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-// ...existing code...
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
