@@ -465,6 +465,7 @@ function App() {
   const textareaRef = useRef(null);
   const contextMenuRef = useRef(null);
   const menuContainerRef = useRef(null);
+  const ignoreMenuClickUntilRef = useRef(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   
@@ -749,6 +750,17 @@ function App() {
     setShowPinnedPanel(false);
     setShowCallHistory(false);
     setShowRoomSidebar(false);
+  }, []);
+
+  const toggleMenuDropdown = useCallback((trigger = 'click') => {
+    const now = Date.now();
+    if (trigger === 'click' && now < ignoreMenuClickUntilRef.current) {
+      return;
+    }
+    if (trigger === 'touch') {
+      ignoreMenuClickUntilRef.current = now + 500;
+    }
+    setShowMenuDropdown((prev) => !prev);
   }, []);
 
   // Update tab title with unread count
@@ -6023,10 +6035,10 @@ if (!showChat) return (
         <div className="menu-container" ref={menuContainerRef}>
           <button 
             className="menu-toggle"
-            onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+            onClick={() => toggleMenuDropdown('click')}
             onTouchStart={(e) => {
               e.preventDefault();
-              setShowMenuDropdown(!showMenuDropdown);
+              toggleMenuDropdown('touch');
             }}
             title="Menu"
             aria-label="Menu"

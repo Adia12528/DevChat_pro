@@ -104,10 +104,11 @@
   
   /* Menu Dropdown */
   .menu-dropdown {
-    width: calc(100vw - 32px);
+    width: auto;
     max-height: 70vh;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 16px;
+    right: 16px;
+    transform: none;
     margin: 0;
   }
   
@@ -210,9 +211,10 @@
   }
   
   .menu-dropdown {
-    width: 320px;
-    left: 50%;
-    transform: translateX(-50%);
+    width: min(320px, calc(100vw - 32px));
+    left: auto;
+    right: 16px;
+    transform: none;
   }
   
   .starred-panel {
