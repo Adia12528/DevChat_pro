@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
 
-/**
- * CallPanel - Premium call UI component
- * Displays active call interface with stats, recording, and quality indicators
- */
 const CallPanel = ({
   callType,
   callPeer,
@@ -50,8 +46,8 @@ const CallPanel = ({
             {callType === 'video' ? '📹' : '☎️'}
           </span>
           <div className="call-mini-info">
-            <div className="call-peer-name">{callPeer}</div>
-            <div className="call-timer">{formatDuration(callDuration)}</div>
+            <div className="call-mini-name">{callPeer}</div>
+            <div className="call-mini-timer">{formatDuration(callDuration)}</div>
           </div>
           <div className={`quality-dot ${
             connectionQuality >= 70 ? 'good' : 
@@ -100,7 +96,7 @@ const CallPanel = ({
 
         {/* Call Info Overlay */}
         <div className="call-info-overlay">
-          <div className="call-peer-info">
+          <div className="call-info-top">
             <div className="call-peer-name">
               {callType === 'video' ? '📹' : '☎️'} {callPeer}
               {remoteIsScreenSharing && (
@@ -112,7 +108,7 @@ const CallPanel = ({
           
           <div className="call-status-badges">
             {isRecording && (
-              <span className="call-status-badge recording">🔴 Recording</span>
+              <span className="call-status-badge">🔴 Recording</span>
             )}
             {isScreenSharing && (
               <span className="local-screen-share-indicator">
@@ -131,21 +127,16 @@ const CallPanel = ({
         {/* Audio-only view */}
         {callType === 'voice' && (
           <div className="audio-call-view">
-            <div className="audio-call-avatar">
-              {callPeer.charAt(0).toUpperCase()}
-            </div>
+            <div className="avatar-large">☎️</div>
             <div className="audio-call-info">
               <h3>{callPeer}</h3>
               <p className="call-status">Active call</p>
               <div className="audio-waveform">
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
-                <div className="audio-waveform-bar"></div>
+                <div className="wave"></div>
+                <div className="wave"></div>
+                <div className="wave"></div>
+                <div className="wave"></div>
+                <div className="wave"></div>
               </div>
             </div>
           </div>
