@@ -36,7 +36,7 @@ import SettingsManager from './components/settings/SettingsManager';
 import CallSettings from './components/settings/CallSettings';
 import AudioSettings from './components/settings/AudioSettings';
 import VideoSettings from './components/settings/VideoSettings';
-import StreamSettings from './components/settings/StreamSettings';
+import { StreamSettings as LiveStreamSettings } from './components/streams/LiveStream';
 import AppSettings from './components/settings/AppSettings';
 
 // Utils
@@ -2091,7 +2091,7 @@ function AppContent() {
       {/* Stream Settings Modal */}
       <AnimatePresence>
         {currentView === 'stream-settings' && (
-          <StreamSettings
+          <LiveStreamSettings  // Changed from StreamSettings
             visibility={streamVisibility}
             source={streamSource}
             onVisibilityChange={setStreamVisibility}
