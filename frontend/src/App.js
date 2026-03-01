@@ -41,6 +41,7 @@ import {
 import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 
+// ==================== CONSTANTS ====================
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
 const LIVESTREAM_REACTIONS = ['🔥', '👏', '❤️', '😂', '😮', '🎉'];
 
@@ -86,65 +87,72 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function App() {
-    // Debug: Check if CSS variables are loaded
-    React.useEffect(() => {
-      const styles = getComputedStyle(document.documentElement);
-      const bgColor = styles.getPropertyValue('--bg').trim();
-      console.log('CSS Variables - Background color:', bgColor);
-      if (!bgColor) {
-        console.error('CSS variables not loaded! Check your imports.');
-      }
-    }, []);
-  // Mobile menu state (must be inside component)
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-                  // Listen for FORCE_RELOAD message from service worker to force update
-                  useEffect(() => {
-                    if ('serviceWorker' in navigator) {
-                      navigator.serviceWorker.addEventListener('message', (event) => {
-                        if (event.data && event.data.type === 'FORCE_RELOAD') {
-                          window.location.reload(true);
-                        }
-                      });
-                    }
-                  }, []);
-                // Detect iOS for screen sharing support
-                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
-              // Stream visibility state
-              const [streamVisibility, setStreamVisibility] = useState('public');
-              // Stream source state for livestream (camera/screen)
-              const [streamSource, setStreamSource] = useState('camera');
-            // Error message state
-            const [errorMessage, setErrorMessage] = useState('');
-          // Success and error message states
-          const [successMessage, setSuccessMessage] = useState('');
+  // ==================== STATE DECLARATIONS ====================
+  
+  // Debug: Check if CSS variables are loaded
+  React.useEffect(() => {
+    const styles = getComputedStyle(document.documentElement);
+    const bgColor = styles.getPropertyValue('--bg').trim();
+    console.log('CSS Variables - Background color:', bgColor);
+    if (!bgColor) {
+      console.error('CSS variables not loaded! Check your imports.');
+    }
+  }, []);
 
-          // Screen share stream ref
-          const screenShareStreamRef = useRef(null);
-        // Reported users state (localStorage-backed)
-        const [reportedUsers, setReportedUsers] = useState(() => {
-          try {
-            return JSON.parse(localStorage.getItem('devchatReportedUsers') || '[]');
-          } catch {
-            return [];
-          }
-        });
-      // Blocked users state (localStorage-backed)
-      const [blockedUsers, setBlockedUsers] = useState(() => {
-        try {
-          return JSON.parse(localStorage.getItem('devchatBlockedUsers') || '[]');
-        } catch {
-          return [];
+  // Mobile menu state
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  
+  // Listen for FORCE_RELOAD message from service worker
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'FORCE_RELOAD') {
+          window.location.reload(true);
         }
       });
-    // Device detection for streaming controls
-    const isWindows = /Windows/i.test(navigator.userAgent);
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+  }, []);
+  
+  // Device detection
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  const isWindows = /Windows/i.test(navigator.userAgent);
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  
+  // Stream states
+  const [streamVisibility, setStreamVisibility] = useState('public');
+  const [streamSource, setStreamSource] = useState('camera');
+  
+  // Message states
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Screen share stream ref
+  const screenShareStreamRef = useRef(null);
+  
+  // Reported users state
+  const [reportedUsers, setReportedUsers] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('devchatReportedUsers') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  
+  // Blocked users state
+  const [blockedUsers, setBlockedUsers] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('devchatBlockedUsers') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
-    // ...existing code...
-      const [liveKitToken, setLiveKitToken] = useState(null);
-      const [currentStreamRoom, setCurrentStreamRoom] = useState("");
-      const [isStreamHost, setIsStreamHost] = useState(false);
-  // Existing state
+  // LiveKit states
+  const [liveKitToken, setLiveKitToken] = useState(null);
+  const [currentStreamRoom, setCurrentStreamRoom] = useState("");
+  const [isStreamHost, setIsStreamHost] = useState(false);
+  
+  // Core chat states
   const [username, setUsername] = useState("");
   const [room, setRoom] = useState("");
   const [showChat, setShowChat] = useState(false);
@@ -165,63 +173,63 @@ function App() {
   const [deletingMsgId, setDeletingMsgId] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    // 🌟 NEW: Unified Stream Connection Logic
-    // Prevent multiple stream sessions per device/tab
-    const handleJoinStream = async (roomName, asHost = false) => {
-      if (liveKitToken) {
-        if (currentStreamRoom === roomName) {
-          setErrorMessage("You are already in this stream session.");
-          setTimeout(() => setErrorMessage(''), 2500);
-        } else {
-          setErrorMessage("You are already in another stream session. Please leave it first.");
-          setTimeout(() => setErrorMessage(''), 2500);
-        }
-        console.warn("[LiveKit] Already in a stream session. Ignoring join request.");
-        return;
+  // ==================== STREAM CONNECTION LOGIC ====================
+  
+  const handleJoinStream = async (roomName, asHost = false) => {
+    if (liveKitToken) {
+      if (currentStreamRoom === roomName) {
+        setErrorMessage("You are already in this stream session.");
+        setTimeout(() => setErrorMessage(''), 2500);
+      } else {
+        setErrorMessage("You are already in another stream session. Please leave it first.");
+        setTimeout(() => setErrorMessage(''), 2500);
       }
-      try {
-        const isProduction = window.location.hostname !== 'localhost';
-        const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
-        console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
-        const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
-        const data = await response.json();
-        if (data.token) {
-          setCurrentStreamRoom(roomName);
-          setIsStreamHost(asHost);
-          setLiveKitToken(data.token);
-          setSuccessMessage(asHost ? "🔴 Stream Started!" : "✅ Joined Stream");
-          setTimeout(() => setSuccessMessage(''), 2000);
-        } else {
-          setErrorMessage("Failed to get LiveKit token");
-          setTimeout(() => setErrorMessage(''), 3000);
-        }
-      } catch (error) {
-        console.error("Failed to connect to stream:", error);
-        setErrorMessage("Failed to connect to livestream");
+      console.warn("[LiveKit] Already in a stream session. Ignoring join request.");
+      return;
+    }
+    try {
+      const isProduction = window.location.hostname !== 'localhost';
+      const BACKEND_URL = isProduction ? "https://devchat-pro.onrender.com" : "http://localhost:5000";
+      console.log(`[LiveKit] ${asHost ? 'Host' : 'Viewer'} joining stream:`, roomName, username);
+      const response = await fetch(`${BACKEND_URL}/api/livekit/token?room=${roomName}&username=${username}&isHost=${asHost}`);
+      const data = await response.json();
+      if (data.token) {
+        setCurrentStreamRoom(roomName);
+        setIsStreamHost(asHost);
+        setLiveKitToken(data.token);
+        setSuccessMessage(asHost ? "🔴 Stream Started!" : "✅ Joined Stream");
+        setTimeout(() => setSuccessMessage(''), 2000);
+      } else {
+        setErrorMessage("Failed to get LiveKit token");
         setTimeout(() => setErrorMessage(''), 3000);
       }
-    };
+    } catch (error) {
+      console.error("Failed to connect to stream:", error);
+      setErrorMessage("Failed to connect to livestream");
+      setTimeout(() => setErrorMessage(''), 3000);
+    }
+  };
 
-    const handleLeaveStream = () => {
-      if (!liveKitToken) {
-        console.warn("[LiveKit] Not in a stream session. Ignoring leave request.");
-        return;
-      }
-      console.log(`[LiveKit] Leaving stream:`, currentStreamRoom, username, isStreamHost ? 'Host' : 'Viewer');
-      setLiveKitToken(null);
-      setCurrentStreamRoom("");
-      setIsStreamHost(false);
-      setSuccessMessage("Stream Ended");
-      setTimeout(() => setSuccessMessage(''), 2000);
-    };
+  const handleLeaveStream = () => {
+    if (!liveKitToken) {
+      console.warn("[LiveKit] Not in a stream session. Ignoring leave request.");
+      return;
+    }
+    console.log(`[LiveKit] Leaving stream:`, currentStreamRoom, username, isStreamHost ? 'Host' : 'Viewer');
+    setLiveKitToken(null);
+    setCurrentStreamRoom("");
+    setIsStreamHost(false);
+    setSuccessMessage("Stream Ended");
+    setTimeout(() => setSuccessMessage(''), 2000);
+  };
 
-  // New feature states
+  // ==================== UI & FEATURE STATES ====================
+  
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
-  // (successMessage, errorMessage) state already declared above
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
   const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
@@ -249,13 +257,13 @@ function App() {
   // Image preview states
   const [imageCaption, setImageCaption] = useState('');
   const [showImagePreview, setShowImagePreview] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]); // Multiple images: [{file, preview, id}]
-  const [currentImageIndex, setCurrentImageIndex] = useState(0); // For gallery navigation
-  const [isDragging, setIsDragging] = useState(false); // Drag and drop state
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   
-  // Navigation & UI State (Breadcrumb/Back button system)
-  const [navigationStack, setNavigationStack] = useState([]); // Track navigation history
-  const [currentView, setCurrentView] = useState('chat'); // 'chat', 'starred', 'pinned', 'history', 'rooms', 'users', 'notifications', 'settings'
+  // Navigation & UI State
+  const [navigationStack, setNavigationStack] = useState([]);
+  const [currentView, setCurrentView] = useState('chat');
   
   // Private chat/DM states
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
@@ -324,7 +332,7 @@ function App() {
   const [roomInviteTarget, setRoomInviteTarget] = useState('');
   const [showRoomAdminTools, setShowRoomAdminTools] = useState(false);
   
-  // Starred messages (localStorage-backed, per session)
+  // Starred messages
   const [starredMsgIds, setStarredMsgIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('devChatStarred') || '[]')); }
     catch { return new Set(); }
@@ -332,8 +340,8 @@ function App() {
   const [showStarredPanel, setShowStarredPanel] = useState(false);
 
   // Read receipts & last seen
-  const [userLastSeen, setUserLastSeen] = useState({}); // { username: timestamp }
-  const [reactionCounts, setReactionCounts] = useState({}); // { msgId: { emoji: count } }
+  const [userLastSeen, setUserLastSeen] = useState({});
+  const [reactionCounts, setReactionCounts] = useState({});
   
   // Quick reply templates
   const [quickReplyTemplates, setQuickReplyTemplates] = useState([
@@ -375,7 +383,7 @@ function App() {
   // Pinned messages panel
   const [showPinnedPanel, setShowPinnedPanel] = useState(false);
   
-  // Message refs for scroll-to-reply
+  // Message refs
   const msgRefsMap = useRef({});
   
   // Context menu state
@@ -384,13 +392,14 @@ function App() {
   const [longPressTimer, setLongPressTimer] = useState(null);
   
   // Media viewer states
-  const [imageViewer, setImageViewer] = useState(null); // { url, fileName, sender, time }
-  const [voicePlayer, setVoicePlayer] = useState(null); // { url, fileName, sender, time, duration }
+  const [imageViewer, setImageViewer] = useState(null);
+  const [voicePlayer, setVoicePlayer] = useState(null);
   
-  // WebRTC Video/Voice Call States
-  const [callState, setCallState] = useState(null); // 'idle' | 'calling' | 'ringing' | 'active' | 'ended'
-  const [callType, setCallType] = useState(null); // 'voice' | 'video'
-  const [callPeer, setCallPeer] = useState(null); // { username, userId }
+  // ==================== WEBRTC CALL STATES ====================
+  
+  const [callState, setCallState] = useState(null);
+  const [callType, setCallType] = useState(null);
+  const [callPeer, setCallPeer] = useState(null);
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -399,13 +408,13 @@ function App() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [remoteIsScreenSharing, setRemoteIsScreenSharing] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
-  const [incomingCall, setIncomingCall] = useState(null); // { from, callType }
+  const [incomingCall, setIncomingCall] = useState(null);
   const [callError, setCallError] = useState(null);
-  const [liveStreamInfo, setLiveStreamInfo] = useState(null); // { sessionId, host, room, visibility, source, isHost, viewers, hasAudio }
+  const [liveStreamInfo, setLiveStreamInfo] = useState(null);
   const [livestreamComments, setLivestreamComments] = useState([]);
   const [livestreamCommentInput, setLivestreamCommentInput] = useState('');
   const [livestreamViewerExpanded, setLivestreamViewerExpanded] = useState(false);
-  const [reconnectInfo, setReconnectInfo] = useState(null); // { attempt, max, secondsLeft }
+  const [reconnectInfo, setReconnectInfo] = useState(null);
   const [, setPeerConnectionState] = useState('new');
   const [, setIceConnectionState] = useState('new');
   const [, setSignalingState] = useState('stable');
@@ -413,7 +422,7 @@ function App() {
   const [localPreviewSizeIndex, setLocalPreviewSizeIndex] = useState(1);
   const [isDraggingLocalPreview, setIsDraggingLocalPreview] = useState(false);
   
-  // PREMIUM: Advanced Call Features
+  // Premium Call Features
   const [callStats, setCallStats] = useState(null);
   const [isCallRecording, setIsCallRecording] = useState(false);
   const [showVideoEffects, setShowVideoEffects] = useState(false);
@@ -426,17 +435,18 @@ function App() {
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [qualityIndicator, setQualityIndicator] = useState(null);
-  const [connectionQuality, setConnectionQuality] = useState('excellent'); // excellent, good, 
-  // fair, poor
-  // Add these with your other navigation states
+  const [connectionQuality, setConnectionQuality] = useState('excellent');
+  
+  // Settings navigation states
   const [showCallSettings, setShowCallSettings] = useState(false);
   const [showAudioSettings, setShowAudioSettings] = useState(false);
   const [showVideoSettings, setShowVideoSettings] = useState(false);
   const [showStreamSettings, setShowStreamSettings] = useState(false);
   const [showStreamQuality, setShowStreamQuality] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
+
+  // ==================== REFS ====================
   
-  // Refs
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
   const socketRef = useRef(null);
@@ -446,8 +456,8 @@ function App() {
   const audioContextRef = useRef(null);
   const lastTypingEmitRef = useRef(0);
   const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null); // Separate ref for camera
-  const textareaRef = useRef(null);    // Auto-growing textarea
+  const cameraInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const contextMenuRef = useRef(null);
   const menuContainerRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -495,7 +505,7 @@ function App() {
   const livestreamViewerPeerRef = useRef(null);
   const livestreamLocalStreamRef = useRef(null);
   
-  // PREMIUM: Advanced call features refs
+  // Premium call features refs
   const callRecorderRef = useRef(null);
   const callStatsRef = useRef(null);
   const qualityControllerRef = useRef(null);
@@ -503,6 +513,7 @@ function App() {
   const videoEffectsCanvasRef = useRef(null);
   const callHistoryRef = useRef(null);
   const screenStreamRef = useRef(null);
+  
   const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
   const configuredLogLevel = (process.env.REACT_APP_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'debug')).toLowerCase();
   const activeLogLevel = LOG_LEVELS[configuredLogLevel] != null ? configuredLogLevel : (process.env.NODE_ENV === 'production' ? 'error' : 'debug');
@@ -511,6 +522,8 @@ function App() {
     if (shouldLog('debug')) console.log(...args);
   };
 
+  // ==================== UTILITY FUNCTIONS ====================
+  
   const attachRemoteStreamToElement = useCallback(() => {
     const stream = remoteStreamRef.current;
     if (!stream) return;
@@ -520,7 +533,6 @@ function App() {
       if (videoElement.srcObject !== stream) {
         videoElement.srcObject = stream;
       }
-      // Keep video muted so autoplay is reliable; audio is handled by remoteAudioRef.
       videoElement.muted = true;
       videoElement.defaultMuted = true;
       videoElement.play().catch((e) => debugLog('⚠️ Remote video autoplay blocked:', e));
@@ -567,6 +579,8 @@ function App() {
     }
   }, [attachRemoteStreamToElement]);
 
+  // ==================== REF EFFECTS ====================
+  
   useEffect(() => { usernameRef.current = username; }, [username]);
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { roomsRef.current = rooms; }, [rooms]);
@@ -663,7 +677,6 @@ function App() {
   }, [remoteStream, callState, isCallMinimized, attachRemoteStreamToElement]);
 
   useEffect(() => {
-    // Debounce stream attachment to prevent AbortError
     const attach = () => {
       const videoEl = remoteVideoRef.current;
       if (!videoEl || !remoteStream) return;
@@ -685,27 +698,27 @@ function App() {
     return () => clearTimeout(timeout);
   }, [remoteStream]);
 
-  // Attach local stream whenever stream changes or local video element mounts
   useEffect(() => {
     if (callType === 'video') {
       attachLocalStreamToElement();
     }
   }, [localStream, callType, callState, isCallMinimized, attachLocalStreamToElement]);
 
-  // Navigation helper functions
-  const navigateTo = useCallback((view, params = {}) => {
-  setNavigationStack(prev => [...prev, { view: currentView, params: {} }]);
-  setCurrentView(view);
+  // ==================== NAVIGATION FUNCTIONS ====================
   
-  // Handle settings modals
-  setShowCallSettings(view === 'call-settings');
-  setShowAudioSettings(view === 'audio-settings');
-  setShowVideoSettings(view === 'video-settings');
-  setShowStreamSettings(view === 'stream-settings');
-  setShowStreamQuality(view === 'stream-quality');
-  setShowAppSettings(view === 'app-settings');
-  setShowMenuDropdown(false);
-}, [currentView]);
+  const navigateTo = useCallback((view, params = {}) => {
+    setNavigationStack(prev => [...prev, { view: currentView, params: {} }]);
+    setCurrentView(view);
+    
+    // Handle settings modals
+    setShowCallSettings(view === 'call-settings');
+    setShowAudioSettings(view === 'audio-settings');
+    setShowVideoSettings(view === 'video-settings');
+    setShowStreamSettings(view === 'stream-settings');
+    setShowStreamQuality(view === 'stream-quality');
+    setShowAppSettings(view === 'app-settings');
+    setShowMenuDropdown(false);
+  }, [currentView]);
 
   const goBack = useCallback(() => {
     if (navigationStack.length > 0) {
@@ -782,57 +795,50 @@ function App() {
     console.log(`%cBuild Date: ${new Date(BUILD_DATE).toLocaleString()}`, 'color: #00ccff; font-size: 12px;');
   }, []);
 
-  // Theme effect
-  // In App.js, find your theme useEffect and replace/update it:
-
-// Theme effect with debug
-useEffect(() => {
-  // Set theme on HTML element
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
-  
-  // Debug: Check if CSS variables are applied
-  const styles = getComputedStyle(document.documentElement);
-  const bgColor = styles.getPropertyValue('--bg').trim();
-  const primaryColor = styles.getPropertyValue('--primary').trim();
-  
-  console.log('🎨 CSS Variables Check:', {
-    '--bg': bgColor || '❌ NOT LOADED',
-    '--primary': primaryColor || '❌ NOT LOADED',
-    '--txt': styles.getPropertyValue('--txt').trim() || '❌ NOT LOADED'
-  });
-  
-  if (!bgColor) {
-    console.error('❌ CSS variables not loaded! Check imports in index.js');
-    // Show visible error in development only
-    if (process.env.NODE_ENV !== 'production') {
-      const errorDiv = document.createElement('div');
-      errorDiv.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: #ff4444;
-        color: white;
-        padding: 15px;
-        text-align: center;
-        z-index: 99999;
-        font-weight: bold;
-        font-size: 16px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      `;
-      errorDiv.textContent = '⚠️ CSS not loaded! Check console for details.';
-      document.body.prepend(errorDiv);
-      
-      // Auto-remove after 5 seconds
-      setTimeout(() => {
-        if (errorDiv.parentNode) {
-          errorDiv.remove();
-        }
-      }, 5000);
+  // Theme effect with debug
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    
+    const styles = getComputedStyle(document.documentElement);
+    const bgColor = styles.getPropertyValue('--bg').trim();
+    const primaryColor = styles.getPropertyValue('--primary').trim();
+    
+    console.log('🎨 CSS Variables Check:', {
+      '--bg': bgColor || '❌ NOT LOADED',
+      '--primary': primaryColor || '❌ NOT LOADED',
+      '--txt': styles.getPropertyValue('--txt').trim() || '❌ NOT LOADED'
+    });
+    
+    if (!bgColor) {
+      console.error('❌ CSS variables not loaded! Check imports in index.js');
+      if (process.env.NODE_ENV !== 'production') {
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          background: #ff4444;
+          color: white;
+          padding: 15px;
+          text-align: center;
+          z-index: 99999;
+          font-weight: bold;
+          font-size: 16px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        errorDiv.textContent = '⚠️ CSS not loaded! Check console for details.';
+        document.body.prepend(errorDiv);
+        
+        setTimeout(() => {
+          if (errorDiv.parentNode) {
+            errorDiv.remove();
+          }
+        }, 5000);
+      }
     }
-  }
-}, [theme]);
+  }, [theme]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-font', fontStyle);
@@ -950,14 +956,12 @@ useEffect(() => {
   useEffect(() => {
     if (chat.length === 0) return;
 
-    // Detect mentions and track notification count
     const mentions = chat.filter(msg => 
       msg.text.includes(`@${username}`) || msg.text.includes('@everyone')
     );
     setMentionedMessages(mentions);
     setRecentMentions(mentions.filter(m => m.sender !== username).length);
 
-    // Calculate conversation stats
     const totalMessages = chat.length;
     const uniqueUsers = new Set(chat.map(m => m.sender)).size;
     const avgLength = totalMessages > 0 ? chat.reduce((sum, m) => sum + (m.text?.length || 0), 0) / totalMessages : 0;
@@ -972,7 +976,6 @@ useEffect(() => {
       mostActiveMember: mostActive
     });
 
-    // Update last seen for each user
     const now = Date.now();
     setUserLastSeen(prev => {
       const updated = { ...prev };
@@ -984,7 +987,6 @@ useEffect(() => {
       return updated;
     });
 
-    // Build user profiles with message counts
     setUserProfiles(prev => {
       const profiles = { ...prev };
       Object.entries(senderCounts).forEach(([sender, count]) => {
@@ -1014,10 +1016,8 @@ useEffect(() => {
       console.log('🔄 Restoring session from sessionStorage');
       setUsername(savedUsername);
       setRoom(savedRoom);
-      // Note: Socket connection happens in the socket useEffect
     }
     
-    // Clear session on browser/tab close (sessionStorage handles this automatically)
     const handleBeforeUnload = (e) => {
       if (socketRef.current && showChat) {
         socketRef.current.emit('update_status', { 
@@ -1178,7 +1178,6 @@ useEffect(() => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Check if already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setShowInstallPrompt(false);
       setIsAppInstalled(true);
@@ -1201,7 +1200,6 @@ useEffect(() => {
       setIsAtBottom(atBottom);
       if (atBottom) {
         setUnreadCount(0);
-        // Mark messages as read
         const unreadIds = chat.filter(m => m.sender !== username && !m.readBy?.includes(username)).map(m => m._id);
         if (unreadIds.length > 0 && socketRef.current) {
           socketRef.current.emit('mark_read', { messageIds: unreadIds, username: usernameRef.current, room: roomRef.current });
@@ -5778,7 +5776,7 @@ useEffect(() => {
     return () => document.removeEventListener('keydown', handleShortcuts);
   }, [showChat, groupRoomSummaries, activeRoom, room, switchRoom, markCurrentRoomAsRead]);
 
-  if (!showChat) return (
+if (!showChat) return (
     <div className="login-screen">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
         <Zap color="#00a884" size={48} fill="#00a884" />
@@ -5792,7 +5790,7 @@ useEffect(() => {
 
   return (
     <div className="chat-container">
-      {/* 🌟 NEW: LiveKit UI Engine */}
+      {/* LiveKit UI Engine */}
       {liveKitToken && (
         <div className="livestream-fullscreen-container" style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'var(--bg)' }}>
           {/* Mobile menu dropdown above header on mobile */}
@@ -5807,59 +5805,154 @@ useEffect(() => {
                   transition={{ duration: 0.2 }}
                   style={{ margin: '0 auto', maxWidth: 360 }}
                 >
-                  {/* ...menu dropdown content... */}
-                  {/* Copy from the main menu dropdown rendering below */}
-                  <div className="menu-header">Actions</div>
-                  <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
-                  <button className="menu-item" onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
-                  <button className="menu-item" onClick={() => { if (deferredPrompt) { handleInstallClick(); setShowMenuDropdown(false); } }} disabled={!deferredPrompt} style={{ cursor: deferredPrompt ? 'pointer' : 'default', opacity: deferredPrompt ? 1 : 0.6 }}><Smartphone size={18}/><span>{isAppInstalled ? '✓ App Installed' : deferredPrompt ? 'Install as App' : 'Install (Desktop Only)'}</span></button>
-                  <div className="menu-divider"></div>
-                  <button className="menu-item" onClick={() => { setShowRoomSidebar(true); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations {roomScopedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{roomScopedOnlineUsers.filter((user) => user !== username).length}</span>}</span></button>
-                  <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}</span></button>
-                  <button className="menu-item" onClick={() => { navigateTo('media'); setShowMenuDropdown(false); }}><ImageIcon size={18}/><span>Media {mediaMessages.length > 0 && <span className="menu-badge">{mediaMessages.length}</span>}</span></button>
-                  <button className="menu-item" onClick={() => { navigateTo('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}</span></button>
-                  <div className="menu-divider"></div>
-                  <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMenuDropdown(false); }} title="Start streaming with LiveKit"><Disc3 size={18}/><span>Start Stream</span></button>
-                  <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMenuDropdown(false); }} title="Join a LiveKit stream"><PlayCircle size={18}/><span>Join Stream</span></button>
-                  <button className="menu-item" onClick={() => setShowQuickReplies(!showQuickReplies)} title="Quick reply templates"><MessageSquare size={18}/><span>Quick Replies</span></button>
-                  <button className="menu-item" onClick={() => { navigateTo('settings'); setShowMenuDropdown(false); }}><Settings size={18}/><span>Settings</span></button>
-                  {recentMentions > 0 && (<button className="menu-item" onClick={() => { setChat(prev => { const firstMention = mentionedMessages[0]; if (firstMention && msgRefsMap.current[firstMention._id]) { msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' }); } return prev; }); setShowMenuDropdown(false); }} title={`You have ${recentMentions} mention${recentMentions !== 1 ? 's' : ''}`}><AtSign size={18}/><span>Mentions {recentMentions > 0 && <span className="menu-badge">{recentMentions}</span>}</span></button>)}
-                  <button className="menu-item" onClick={() => setShowMenuDropdown(false)} title="Conversation statistics"><Hash size={18}/><span>Stats: {conversationStats.totalMessages} msgs, {conversationStats.totalUsers} users</span></button>
-                  <div className="menu-divider"></div>
-                  <button className="menu-item menu-item-danger" onClick={handleLogout} title="Logout and end session"><LogOut size={18}/><span>Logout</span></button>
-                  <div className="menu-footer"><div>Session ends when browser closes</div><div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div></div>
+                  <div className="menu-header">Main Menu</div>
+                  
+                  {/* Chat Actions */}
+                  <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}>
+                    <FileDown size={18}/><span>Export Chat</span>
+                  </button>
+                  <button className="menu-item" onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}>
+                    <Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
+                  </button>
+
+                  {/* CALL SETTINGS SECTION */}
+                  <div className="menu-section">
+                    <div className="menu-header">📞 Call Settings</div>
+                    <button className="menu-item" onClick={() => { navigateTo('call-settings'); setShowMenuDropdown(false); }}>
+                      <Phone size={18}/><span>Call Preferences</span><span className="menu-badge new">New</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('audio-settings'); setShowMenuDropdown(false); }}>
+                      <Volume2 size={18}/><span>Audio Devices</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('video-settings'); setShowMenuDropdown(false); }}>
+                      <Camera size={18}/><span>Video & Camera</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('call-history'); setShowMenuDropdown(false); }}>
+                      <Activity size={18}/><span>Call History</span>
+                      {callHistory?.length > 0 && <span className="menu-badge">{callHistory.length}</span>}
+                    </button>
+                  </div>
+
+                  {/* STREAMING SETTINGS SECTION */}
+                  <div className="menu-section">
+                    <div className="menu-header">🎥 Streaming Settings</div>
+                    <button className="menu-item" onClick={() => { navigateTo('stream-settings'); setShowMenuDropdown(false); }}>
+                      <Radio size={18}/><span>Stream Preferences</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMenuDropdown(false); }}>
+                      <Radio size={18}/><span>Start Stream</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMenuDropdown(false); }}>
+                      <PlayCircle size={18}/><span>Join Stream</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('stream-quality'); setShowMenuDropdown(false); }}>
+                      <Settings size={18}/><span>Stream Quality</span>
+                    </button>
+                  </div>
+
+                  {/* GENERAL SETTINGS */}
+                  <div className="menu-section">
+                    <div className="menu-header">⚙️ General</div>
+                    <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}>
+                      <Hash size={18}/><span>Rooms</span>
+                      {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('notifications'); setShowMenuDropdown(false); }}>
+                      <Bell size={18}/><span>Notifications</span>
+                      {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('app-settings'); setShowMenuDropdown(false); }}>
+                      <Settings size={18}/><span>App Settings</span>
+                    </button>
+                    <button className="menu-item" onClick={() => setShowQuickReplies(!showQuickReplies)}>
+                      <MessageSquare size={18}/><span>Quick Replies</span>
+                    </button>
+                  </div>
+
+                  {/* DEVICE INFO & STATS */}
+                  <div className="menu-section">
+                    <div className="menu-header">📊 Info</div>
+                    <div className="menu-item menu-info" onClick={() => setShowMenuDropdown(false)}>
+                      <Activity size={18}/>
+                      <div className="menu-info-content">
+                        <span>Stats: {conversationStats.totalMessages} msgs</span>
+                        <small>{conversationStats.totalUsers} users • {conversationStats.avgMessageLength} avg chars</small>
+                      </div>
+                    </div>
+                    {recentMentions > 0 && (
+                      <button className="menu-item" onClick={() => { 
+                        const firstMention = mentionedMessages[0];
+                        if (firstMention && msgRefsMap.current[firstMention._id]) {
+                          msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        setShowMenuDropdown(false); 
+                      }}>
+                        <AtSign size={18}/>
+                        <span>Mentions</span>
+                        <span className="menu-badge">{recentMentions}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* PWA INSTALL */}
+                  <div className="menu-section">
+                    <button 
+                      className="menu-item"
+                      onClick={() => { if (deferredPrompt) { handleInstallClick(); setShowMenuDropdown(false); } }}
+                      disabled={!deferredPrompt}
+                      style={{ opacity: deferredPrompt ? 1 : 0.6 }}
+                    >
+                      <Smartphone size={18}/>
+                      <span>{isAppInstalled ? '✓ App Installed' : deferredPrompt ? 'Install as App' : 'Install (Desktop Only)'}</span>
+                    </button>
+                  </div>
+
+                  {/* LOGOUT */}
+                  <div className="menu-section">
+                    <button className="menu-item menu-item-danger" onClick={handleLogout}>
+                      <LogOut size={18}/>
+                      <span>Logout</span>
+                    </button>
+                  </div>
+
+                  <div className="menu-footer">
+                    <div>Session ends when browser closes</div>
+                    <div className="menu-version">v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div>
+                  </div>
                 </motion.div>
               </AnimatePresence>
             </div>
           )}
-          {/* Livestream header below menu dropdown */}
+          
+          {/* Livestream header */}
           <div className="livestream-header" style={{ position: 'absolute', top: 0, width: '100%', zIndex: 10000, display: 'flex', justifyContent: 'space-between', padding: '15px', background: 'var(--header)', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Radio size={24} color="var(--error)" className="pulse-animation" />
-                  <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
-                      {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
-                  </h2>
-              </div>
-              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Leave Stream
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Radio size={24} color="var(--error)" className="pulse-animation" />
+              <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>
+                {isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}
+              </h2>
+            </div>
+            <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+              Leave Stream
+            </button>
           </div>
 
           <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
-              <LiveKitRoom
-                video={isStreamHost}
-                audio={isStreamHost}
-                token={liveKitToken}
-                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
-                data-lk-theme="default"
-                onDisconnected={handleLeaveStream}
-              >
-                <VideoConference />
-                <RoomAudioRenderer />
-              </LiveKitRoom>
+            <LiveKitRoom
+              video={isStreamHost}
+              audio={isStreamHost}
+              token={liveKitToken}
+              serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+              data-lk-theme="default"
+              onDisconnected={handleLeaveStream}
+            >
+              <VideoConference />
+              <RoomAudioRenderer />
+            </LiveKitRoom>
           </div>
         </div>
       )}
+      
       {/* Streaming error/success toast */}
       {(callError || successMessage) && (
         <div className="stream-toast" style={{
@@ -5881,6 +5974,7 @@ useEffect(() => {
           {callError || successMessage}
         </div>
       )}
+      
       {/* PWA Install Banner */}
       <AnimatePresence>
         {showInstallPrompt && !showChat && (
@@ -5906,6 +6000,7 @@ useEffect(() => {
         )}
       </AnimatePresence>
 
+      {/* Chat Header */}
       <div className="chat-header">
         <div className="menu-container" ref={menuContainerRef}>
           <button 
@@ -5933,191 +6028,119 @@ useEffect(() => {
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="menu-header">Actions</div>
+                  <div className="menu-header">Main Menu</div>
                   
-                  <button 
-                    className="menu-item"
-                    onClick={() => {
-                      exportChat();
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <FileDown size={18}/>
-                    <span>Export Chat</span>
+                  {/* Chat Actions */}
+                  <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}>
+                    <FileDown size={18}/><span>Export Chat</span>
+                  </button>
+                  <button className="menu-item" onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}>
+                    <Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
                   </button>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => { navigateTo('starred'); setShowMenuDropdown(false); }}
-                  >
-                    <Star size={18}/>
-                    <span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span>
-                  </button>
-                  
-                  <button 
-                    className="menu-item"
-                    onClick={() => {
-                      if (deferredPrompt) {
-                        handleInstallClick();
-                        setShowMenuDropdown(false);
-                      }
-                    }}
-                    disabled={!deferredPrompt}
-                    style={{
-                      cursor: deferredPrompt ? 'pointer' : 'default',
-                      opacity: deferredPrompt ? 1 : 0.6
-                    }}
-                  >
-                    <Smartphone size={18}/>
-                    <span>
-                      {isAppInstalled 
-                        ? '✓ App Installed' 
-                        : deferredPrompt 
-                          ? 'Install as App' 
-                          : 'Install (Desktop Only)'}
-                    </span>
-                  </button>
-                  
-                  <div className="menu-divider"></div>
-                  
-                  <button 
-                    className="menu-item"
-                    onClick={() => {
-                      setShowRoomSidebar(true);
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <Users size={18}/>
-                    <span>Conversations {roomScopedOnlineUsers.filter((user) => user !== username).length > 0 && <span className="menu-badge">{roomScopedOnlineUsers.filter((user) => user !== username).length}</span>}</span>
-                  </button>
+                  {/* CALL SETTINGS SECTION */}
+                  <div className="menu-section">
+                    <div className="menu-header">📞 Call Settings</div>
+                    <button className="menu-item" onClick={() => { navigateTo('call-settings'); setShowMenuDropdown(false); }}>
+                      <Phone size={18}/><span>Call Preferences</span><span className="menu-badge new">New</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('audio-settings'); setShowMenuDropdown(false); }}>
+                      <Volume2 size={18}/><span>Audio Devices</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('video-settings'); setShowMenuDropdown(false); }}>
+                      <Camera size={18}/><span>Video & Camera</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('call-history'); setShowMenuDropdown(false); }}>
+                      <Activity size={18}/><span>Call History</span>
+                      {callHistory?.length > 0 && <span className="menu-badge">{callHistory.length}</span>}
+                    </button>
+                  </div>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      navigateTo('rooms');
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <Hash size={18}/>
-                    <span>Rooms {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}</span>
-                  </button>
+                  {/* STREAMING SETTINGS SECTION */}
+                  <div className="menu-section">
+                    <div className="menu-header">🎥 Streaming Settings</div>
+                    <button className="menu-item" onClick={() => { navigateTo('stream-settings'); setShowMenuDropdown(false); }}>
+                      <Radio size={18}/><span>Stream Preferences</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMenuDropdown(false); }}>
+                      <Radio size={18}/><span>Start Stream</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMenuDropdown(false); }}>
+                      <PlayCircle size={18}/><span>Join Stream</span>
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('stream-quality'); setShowMenuDropdown(false); }}>
+                      <Settings size={18}/><span>Stream Quality</span>
+                    </button>
+                  </div>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      navigateTo('media');
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <ImageIcon size={18}/>
-                    <span>Media {mediaMessages.length > 0 && <span className="menu-badge">{mediaMessages.length}</span>}</span>
-                  </button>
+                  {/* GENERAL SETTINGS */}
+                  <div className="menu-section">
+                    <div className="menu-header">⚙️ General</div>
+                    <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}>
+                      <Hash size={18}/><span>Rooms</span>
+                      {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('notifications'); setShowMenuDropdown(false); }}>
+                      <Bell size={18}/><span>Notifications</span>
+                      {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}
+                    </button>
+                    <button className="menu-item" onClick={() => { navigateTo('app-settings'); setShowMenuDropdown(false); }}>
+                      <Settings size={18}/><span>App Settings</span>
+                    </button>
+                    <button className="menu-item" onClick={() => setShowQuickReplies(!showQuickReplies)}>
+                      <MessageSquare size={18}/><span>Quick Replies</span>
+                    </button>
+                  </div>
 
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      navigateTo('notifications');
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <Bell size={18}/>
-                    <span>Notifications {notificationItems.length > 0 && <span className="menu-badge">{notificationItems.length}</span>}</span>
-                  </button>
+                  {/* DEVICE INFO & STATS */}
+                  <div className="menu-section">
+                    <div className="menu-header">📊 Info</div>
+                    <div className="menu-item menu-info" onClick={() => setShowMenuDropdown(false)}>
+                      <Activity size={18}/>
+                      <div className="menu-info-content">
+                        <span>Stats: {conversationStats.totalMessages} msgs</span>
+                        <small>{conversationStats.totalUsers} users • {conversationStats.avgMessageLength} avg chars</small>
+                      </div>
+                    </div>
+                    {recentMentions > 0 && (
+                      <button className="menu-item" onClick={() => { 
+                        const firstMention = mentionedMessages[0];
+                        if (firstMention && msgRefsMap.current[firstMention._id]) {
+                          msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        setShowMenuDropdown(false); 
+                      }}>
+                        <AtSign size={18}/>
+                        <span>Mentions</span>
+                        <span className="menu-badge">{recentMentions}</span>
+                      </button>
+                    )}
+                  </div>
 
-                  <div className="menu-divider"></div>
-
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      handleJoinStream(`${room}-stream`, true);
-                      setShowMenuDropdown(false);
-                    }}
-                    title="Start streaming with LiveKit"
-                  >
-                    <Disc3 size={18}/>
-                    <span>Start Stream</span>
-                  </button>
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      handleJoinStream(`${room}-stream`, false);
-                      setShowMenuDropdown(false);
-                    }}
-                    title="Join a LiveKit stream"
-                  >
-                    <PlayCircle size={18}/>
-                    <span>Join Stream</span>
-                  </button>
-
-                  <button 
-                    className="menu-item"
-                    onClick={() => setShowQuickReplies(!showQuickReplies)}
-                    title="Quick reply templates"
-                  >
-                    <MessageSquare size={18}/>
-                    <span>Quick Replies</span>
-                  </button>
-
-                  <button
-                    className="menu-item"
-                    onClick={() => {
-                      navigateTo('settings');
-                      setShowMenuDropdown(false);
-                    }}
-                  >
-                    <Settings size={18}/>
-                    <span>Settings</span>
-                  </button>
-
-                  {recentMentions > 0 && (
+                  {/* PWA INSTALL */}
+                  <div className="menu-section">
                     <button 
                       className="menu-item"
-                      onClick={() => {
-                        setChat(prev => {
-                          const firstMention = mentionedMessages[0];
-                          if (firstMention && msgRefsMap.current[firstMention._id]) {
-                            msgRefsMap.current[firstMention._id].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                          return prev;
-                        });
-                        setShowMenuDropdown(false);
-                      }}
-                      title={`You have ${recentMentions} mention${recentMentions !== 1 ? 's' : ''}`}
+                      onClick={() => { if (deferredPrompt) { handleInstallClick(); setShowMenuDropdown(false); } }}
+                      disabled={!deferredPrompt}
+                      style={{ opacity: deferredPrompt ? 1 : 0.6 }}
                     >
-                      <AtSign size={18}/>
-                      <span>Mentions {recentMentions > 0 && <span className="menu-badge">{recentMentions}</span>}</span>
+                      <Smartphone size={18}/>
+                      <span>{isAppInstalled ? '✓ App Installed' : deferredPrompt ? 'Install as App' : 'Install (Desktop Only)'}</span>
                     </button>
-                  )}
+                  </div>
 
-                  <button 
-                    className="menu-item"
-                    onClick={() => setShowMenuDropdown(false)}
-                    title="Conversation statistics"
-                  >
-                    <Hash size={18}/>
-                    <span>
-                      Stats: {conversationStats.totalMessages} msgs, {conversationStats.totalUsers} users
-                    </span>
-                  </button>
-                  
-                  <div className="menu-divider"></div>
-                  
-                  <button 
-                    className="menu-item menu-item-danger"
-                    onClick={handleLogout}
-                    title="Logout and end session"
-                  >
-                    <LogOut size={18}/>
-                    <span>Logout</span>
-                  </button>
-                  
+                  {/* LOGOUT */}
+                  <div className="menu-section">
+                    <button className="menu-item menu-item-danger" onClick={handleLogout}>
+                      <LogOut size={18}/>
+                      <span>Logout</span>
+                    </button>
+                  </div>
+
                   <div className="menu-footer">
                     <div>Session ends when browser closes</div>
-                    <div style={{ fontSize: '11px', opacity: 0.6, marginTop: '4px' }}>
-                      v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}
-                    </div>
+                    <div className="menu-version">v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div>
                   </div>
                 </motion.div>
               </>
@@ -6153,8 +6176,6 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* ...existing code... */}
-        
         {/* Call Buttons - Only show when a user is selected in DM */}
         {selectedUser && isSelectedUserOnline && callState !== 'active' && (
           <div className="call-buttons">
@@ -8338,6 +8359,22 @@ useEffect(() => {
       </AnimatePresence>
 
       // ...SettingsManager removed to avoid duplication and modal conflicts...
+            <SettingsManager
+        currentView={currentView}
+        onClose={() => {
+          setCurrentView('chat');
+          setShowCallSettings(false);
+          setShowAudioSettings(false);
+          setShowVideoSettings(false);
+          setShowStreamSettings(false);
+          setShowStreamQuality(false);
+          setShowAppSettings(false);
+          setShowCallHistory(false);
+        }}
+        callHistory={callHistory}
+        formatDuration={formatDuration}
+        getQualityLabelStyle={getQualityLabelStyle}
+      />
 
       {/* Incoming Call Modal */}
       <AnimatePresence>
@@ -8801,5 +8838,5 @@ if (module.hot) {
   module.hot.accept();
   console.log('🔥 HMR: App component updated');
 }
-v
+
 export default App;

@@ -1,11 +1,11 @@
 import React from 'react';
 import { AnimatePresence } from 'framer-motion';
-import CallSettings from './callSettings';
-import AudioSettings from './audioSettings';
-import VideoSettings from './VideoSettings';
-import StreamSettings from './StreamSettings';  // CORRECT
-import AppSettings from './AppSettings';
-import CallHistoryPanel from '../../CallHistoryPanel';
+import CallSettings from './CallSettings';        // Capital C, Capital S
+import AudioSettings from './AudioSettings';      // Capital A, Capital S
+import VideoSettings from './VideoSettings';      // Capital V, Capital S
+import StreamSettings from './StreamSettings';    // Capital S, Capital S
+import AppSettings from './AppSettings';          // Capital A, Capital S
+import CallHistoryPanel from './CallHistoryPanel';
 
 const SettingsManager = ({
   currentView,
