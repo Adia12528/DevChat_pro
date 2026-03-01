@@ -5826,19 +5826,6 @@ if (!showChat) return (
                     <button className="menu-item" onClick={() => { navigateTo('call-settings'); setShowMenuDropdown(false); }}>
                       <Phone size={18}/><span>Call Preferences</span><span className="menu-badge new">New</span>
                     </button>
-                    <button
-                        className="menu-item"
-                        onClick={() => {
-                        setShowRoomSidebar(true);
-                        setShowMenuDropdown(false);
-                      }}
-                    >
-                      <Users size={18}/>
-                      <span>Conversations</span>
-                      {globalOnlineUsers?.filter(u => u !== username).length > 0 && (
-                        <span className="menu-badge">{globalOnlineUsers.filter(u => u !== username).length}</span>
-                      )}
-                    </button>
                     <button className="menu-item" onClick={() => { navigateTo('audio-settings'); setShowMenuDropdown(false); }}>
                       <Volume2 size={18}/><span>Audio Devices</span>
                     </button>
@@ -5871,6 +5858,19 @@ if (!showChat) return (
                   {/* GENERAL SETTINGS */}
                   <div className="menu-section">
                     <div className="menu-header">⚙️ General</div>
+                    <button
+                      className="menu-item"
+                      onClick={() => {
+                        setShowRoomSidebar(true);
+                        setShowMenuDropdown(false);
+                      }}
+                    >
+                      <Users size={18}/>
+                      <span>Conversations</span>
+                      {globalOnlineUsers?.filter(u => u !== username).length > 0 && (
+                        <span className="menu-badge">{globalOnlineUsers.filter(u => u !== username).length}</span>
+                      )}
+                    </button>
                     <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}>
                       <Hash size={18}/><span>Rooms</span>
                       {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}
@@ -6094,6 +6094,19 @@ if (!showChat) return (
                   {/* GENERAL SETTINGS */}
                   <div className="menu-section">
                     <div className="menu-header">⚙️ General</div>
+                    <button
+                      className="menu-item"
+                      onClick={() => {
+                        setShowRoomSidebar(true);
+                        setShowMenuDropdown(false);
+                      }}
+                    >
+                      <Users size={18}/>
+                      <span>Conversations</span>
+                      {globalOnlineUsers?.filter(u => u !== username).length > 0 && (
+                        <span className="menu-badge">{globalOnlineUsers.filter(u => u !== username).length}</span>
+                      )}
+                    </button>
                     <button className="menu-item" onClick={() => { navigateTo('rooms'); setShowMenuDropdown(false); }}>
                       <Hash size={18}/><span>Rooms</span>
                       {activeGroupRoomCount > 0 && <span className="menu-badge">{activeGroupRoomCount}</span>}
