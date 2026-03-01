@@ -8363,8 +8363,7 @@ if (!showChat) return (
         )}
       </AnimatePresence>
 
-      // ...SettingsManager removed to avoid duplication and modal conflicts...
-            <SettingsManager
+      <SettingsManager
         currentView={currentView}
         onClose={() => {
           setCurrentView('chat');
