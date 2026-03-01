@@ -8370,21 +8370,11 @@ useEffect(() => {
       {/* Settings Modals */}
       <AnimatePresence>
         {showCallSettings && (
-          <CallSettings
-            settings={settings}
-            onUpdate={updateSettings}
-            onClose={() => setShowCallSettings(false)}
-          />
+          <CallSettings onClose={() => setShowCallSettings(false)} />
         )}
       </AnimatePresence>
 
-      <SettingsManager
-        currentView={currentView}
-        onClose={() => setCurrentView('chat')}
-        callHistory={callHistory}
-        formatDuration={formatDuration}
-        getQualityLabelStyle={getQualityLabelStyle}
-      />
+      // ...SettingsManager removed to avoid duplication and modal conflicts...
 
       {/* Incoming Call Modal */}
       <AnimatePresence>
