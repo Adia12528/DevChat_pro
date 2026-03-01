@@ -5826,6 +5826,19 @@ if (!showChat) return (
                     <button className="menu-item" onClick={() => { navigateTo('call-settings'); setShowMenuDropdown(false); }}>
                       <Phone size={18}/><span>Call Preferences</span><span className="menu-badge new">New</span>
                     </button>
+                    <button
+                        className="menu-item"
+                        onClick={() => {
+                        setShowRoomSidebar(true);
+                        setShowMenuDropdown(false);
+                      }}
+                    >
+                      <Users size={18}/>
+                      <span>Conversations</span>
+                      {globalOnlineUsers?.filter(u => u !== username).length > 0 && (
+                        <span className="menu-badge">{globalOnlineUsers.filter(u => u !== username).length}</span>
+                      )}
+                    </button>
                     <button className="menu-item" onClick={() => { navigateTo('audio-settings'); setShowMenuDropdown(false); }}>
                       <Volume2 size={18}/><span>Audio Devices</span>
                     </button>
@@ -7225,7 +7238,7 @@ if (!showChat) return (
                 )}
 
                 <div className="sidebar-section">
-                  <div className="sidebar-section-title">Your Conversations</div>
+                <div className="sidebar-section-title">Your Conversations</div>
                 {rooms.map(r => (
                   <button
                     key={r.id}
@@ -8360,6 +8373,115 @@ if (!showChat) return (
       <AnimatePresence>
         {showCallSettings && (
           <CallSettings onClose={() => setShowCallSettings(false)} />
+        )}
+      </AnimatePresence>
+
+      {/* Room Sidebar for Conversations & DMs */}
+      <AnimatePresence>
+        {showRoomSidebar && (
+          <motion.div 
+            className="room-sidebar-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setShowRoomSidebar(false)}
+          >
+            <motion.div 
+              className="room-sidebar"
+              initial={{ x: -300 }} 
+              animate={{ x: 0 }} 
+              exit={{ x: -300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sidebar-header">
+                <h3>Conversations</h3>
+                <button onClick={() => setShowRoomSidebar(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="sidebar-rooms">
+                {/* Group Chat Section */}
+                {groupRoomId && (
+                  <div className="sidebar-section">
+                    <div className="sidebar-section-title">Group Chat</div>
+                    <button
+                      className={`room-item ${(activeRoom || room) === groupRoomId ? 'active' : ''}`}
+                      onClick={() => {
+                        switchRoom(groupRoomId);
+                        setShowRoomSidebar(false);
+                      }}
+                    >
+                      <div className="room-icon">#</div>
+                      <div className="room-details">
+                        <div className="room-name">{groupRoomId}</div>
+                        <div className="room-meta">
+                          {roomScopedOnlineUsers?.length || 0} online
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Direct Messages Section */}
+                <div className="sidebar-section">
+                  <div className="sidebar-section-title">Direct Messages</div>
+                  {rooms.filter(r => r.type === 'dm').length === 0 ? (
+                    <div className="sidebar-empty">No DM conversations yet</div>
+                  ) : (
+                    rooms.filter(r => r.type === 'dm').map(r => (
+                      <button
+                        key={r.id}
+                        className={`room-item ${activeRoom === r.id ? 'active' : ''}`}
+                        onClick={() => {
+                          switchRoom(r.id);
+                          setShowRoomSidebar(false);
+                        }}
+                      >
+                        <div className="room-icon">
+                          <MessageSquare size={16} />
+                        </div>
+                        <div className="room-details">
+                          <div className="room-name">{r.name}</div>
+                          <div className="room-meta">
+                            {userStatus[r.name] === 'online' ? 'Online' : 'Offline'}
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* Online Members Section (for creating new DMs) */}
+                <div className="sidebar-section">
+                  <div className="sidebar-section-title">Online Members</div>
+                  {globalOnlineUsers?.filter(u => u !== username).length === 0 ? (
+                    <div className="sidebar-empty">No other members online</div>
+                  ) : (
+                    globalOnlineUsers
+                      .filter(u => u !== username)
+                      .map((user) => (
+                        <div className="sidebar-user-row" key={`online-${user}`}>
+                          <div className="sidebar-user-meta">
+                            <span className="sidebar-user-dot"></span>
+                            <span>{user}</span>
+                          </div>
+                          <button 
+                            className="sidebar-dm-btn" 
+                            onClick={() => {
+                              createDM(user);
+                              setShowRoomSidebar(false);
+                            }}
+                          >
+                            DM
+                          </button>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
