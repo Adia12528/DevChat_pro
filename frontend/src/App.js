@@ -1,6 +1,5 @@
 // DevChat Pro - Auto-versioning enabled
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-// ...existing code...
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -14,46 +13,13 @@ import {
   Headphones, Radio as RadioIcon, Volume, Video as VideoIcon, Mic as MicIcon 
 } from 'lucide-react';
 import SettingsManager from './components/settings/SettingsManager';
-import { useSettings } from './context/settingsContext';  // all lowercase
+import { useSettings } from './context/settingsContext';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { APP_VERSION, BUILD_DATE } from './version';
-
-import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
-import {
-  ICE_SERVERS,
-  getAdaptiveMediaConstraints,
-  getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
-  optimizeRtpSenders,
-  waitForIceGatheringComplete,
-  CallStatistics,
-  CallRecorder,
-  VideoEffectsProcessor,
-  CallHistory,
-  AdaptiveQualityController,
-  getScreenStream,
-  switchToScreenShare,
-  switchBackToCamera,
-  getQualityIndicator
-} from './callUtils';
-import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
-import '@livekit/components-styles';
-
-// ...rest of the user's provided App.js code...
-import io from 'socket.io-client';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, Zoomable, Share2, Radio, BarChart3, Clock, StopCircle, Disc3, Bell } from 'lucide-react';
-import EmojiPicker from 'emoji-picker-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { APP_VERSION, BUILD_DATE } from './version';
-
 import { formatRelativeTime, formatDateSeparator, needsDateSeparator, isGroupedMessage, formatFileSize, playNotificationSound, copyToClipboard, getUserColor, getInitials, getAvatarStyle, detectLinks, extractMentions } from './utils';
 import {
   ICE_SERVERS,
