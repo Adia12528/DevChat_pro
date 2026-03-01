@@ -17,6 +17,7 @@ import {
   Headphones, Radio as RadioIcon, Volume, Video as VideoIcon, Mic as MicIcon 
 } from 'lucide-react';
 import SettingsManager from './components/settings/SettingsManager';
+import { useSettings } from './context/settingsContext';  // all lowercase
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
