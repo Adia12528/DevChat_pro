@@ -5,7 +5,7 @@ import AudioSettings from './audioSettings';
 import VideoSettings from './VideoSettings';
 import StreamSettings from './StreamSettings';  // CORRECT
 import AppSettings from './AppSettings';
-import CallHistoryPanel from '../CallHistoryPanel';
+import CallHistoryPanel from '../../CallHistoryPanel';
 
 const SettingsManager = ({
   currentView,
