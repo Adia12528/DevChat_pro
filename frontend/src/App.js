@@ -14,6 +14,11 @@ import {
 } from 'lucide-react';
 import SettingsManager from './components/settings/SettingsManager';
 import { useSettings } from './context/settingsContext';
+import CallSettings from './components/settings/CallSettings';
+import AudioSettings from './components/settings/AudioSettings';
+import VideoSettings from './components/settings/VideoSettings';
+import StreamSettings from './components/settings/StreamSettings';
+import AppSettings from './components/settings/AppSettings';
 import EmojiPicker from 'emoji-picker-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

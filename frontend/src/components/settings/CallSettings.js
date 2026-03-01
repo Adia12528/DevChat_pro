@@ -6,7 +6,7 @@ import { useSettings } from '../../context/settingsContext';
 
 const CallSettings = ({ onClose }) => {
   const { settings, devices, updateSettings, resetSection } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings.calls);
+  const [localSettings, setLocalSettings] = useState(settings.calls || {});
   const [activeTest, setActiveTest] = useState(null);
 
   const handleChange = (key, value) => {
@@ -14,16 +14,24 @@ const CallSettings = ({ onClose }) => {
   };
 
   const handleSave = () => {
-    updateSettings('calls', localSettings);
-    onClose();
+    try {
+      updateSettings('calls', localSettings);
+      onClose();
+    } catch (error) {
+      console.error('Failed to save call settings:', error);
+    }
   };
 
   const handleReset = () => {
-    resetSection('calls');
-    setLocalSettings(settings.calls);
+    try {
+      resetSection('calls');
+      setLocalSettings(settings.calls);
+    } catch (error) {
+      console.error('Failed to reset call settings:', error);
+    }
   };
 
-  const testMicrophone = (deviceId) => {
+  const testMicrophone = () => {
     setActiveTest('microphone');
   };
 
@@ -31,7 +39,7 @@ const CallSettings = ({ onClose }) => {
     setActiveTest('speaker');
   };
 
-  const testCamera = (deviceId) => {
+  const testCamera = () => {
     setActiveTest('camera');
   };
 
@@ -57,7 +65,7 @@ const CallSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Ringtone Style</label>
           <select
-            value={localSettings.ringtoneStyle}
+            value={localSettings.ringtoneStyle || 'soft'}
             onChange={(e) => handleChange('ringtoneStyle', e.target.value)}
           >
             <option value="soft">Soft (Default)</option>
@@ -73,10 +81,10 @@ const CallSettings = ({ onClose }) => {
             type="range"
             min="0"
             max="100"
-            value={localSettings.ringtoneVolume}
+            value={localSettings.ringtoneVolume || 80}
             onChange={(e) => handleChange('ringtoneVolume', parseInt(e.target.value))}
           />
-          <span className="settings-value">{localSettings.ringtoneVolume}%</span>
+          <span className="settings-value">{localSettings.ringtoneVolume || 80}%</span>
         </div>
 
         <button className="settings-btn-test" onClick={testSpeaker}>
@@ -96,7 +104,7 @@ const CallSettings = ({ onClose }) => {
           <label>Echo Cancellation</label>
           <input
             type="checkbox"
-            checked={localSettings.echoCancellation}
+            checked={localSettings.echoCancellation !== false}
             onChange={(e) => handleChange('echoCancellation', e.target.checked)}
           />
         </div>
@@ -105,7 +113,7 @@ const CallSettings = ({ onClose }) => {
           <label>Noise Suppression</label>
           <input
             type="checkbox"
-            checked={localSettings.noiseSuppression}
+            checked={localSettings.noiseSuppression !== false}
             onChange={(e) => handleChange('noiseSuppression', e.target.checked)}
           />
         </div>
@@ -114,7 +122,7 @@ const CallSettings = ({ onClose }) => {
           <label>Auto Gain Control</label>
           <input
             type="checkbox"
-            checked={localSettings.autoGainControl}
+            checked={localSettings.autoGainControl !== false}
             onChange={(e) => handleChange('autoGainControl', e.target.checked)}
           />
         </div>
@@ -139,7 +147,7 @@ const CallSettings = ({ onClose }) => {
 
         <button 
           className="settings-btn-test" 
-          onClick={() => testMicrophone(settings.devices.preferredMicrophone)}
+          onClick={testMicrophone}
           disabled={!devices.microphones?.length}
         >
           <Mic size={14} /> Test Microphone
@@ -161,7 +169,7 @@ const CallSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Video Quality</label>
           <select
-            value={localSettings.videoQuality}
+            value={localSettings.videoQuality || 'auto'}
             onChange={(e) => handleChange('videoQuality', e.target.value)}
           >
             <option value="auto">Auto (Recommended)</option>
@@ -174,7 +182,7 @@ const CallSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Frame Rate</label>
           <select
-            value={localSettings.frameRate}
+            value={localSettings.frameRate || 30}
             onChange={(e) => handleChange('frameRate', parseInt(e.target.value))}
           >
             <option value="15">15 fps (Low bandwidth)</option>
@@ -204,7 +212,7 @@ const CallSettings = ({ onClose }) => {
 
         <button 
           className="settings-btn-test" 
-          onClick={() => testCamera(settings.devices.preferredCamera)}
+          onClick={testCamera}
           disabled={!devices.cameras?.length}
         >
           <Camera size={14} /> Test Camera
@@ -227,7 +235,7 @@ const CallSettings = ({ onClose }) => {
           <label>Auto-record calls</label>
           <input
             type="checkbox"
-            checked={localSettings.autoRecordCalls}
+            checked={localSettings.autoRecordCalls || false}
             onChange={(e) => handleChange('autoRecordCalls', e.target.checked)}
           />
         </div>
@@ -236,7 +244,7 @@ const CallSettings = ({ onClose }) => {
           <label>Show call statistics</label>
           <input
             type="checkbox"
-            checked={localSettings.enableStats}
+            checked={localSettings.enableStats || false}
             onChange={(e) => handleChange('enableStats', e.target.checked)}
           />
         </div>

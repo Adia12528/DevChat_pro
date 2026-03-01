@@ -6,7 +6,7 @@ import { useSettings } from '../../context/settingsContext';
 
 const AudioSettings = ({ onClose }) => {
   const { settings, devices, updateSettings, resetSection } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings.calls);
+  const [localSettings, setLocalSettings] = useState(settings.calls || {});
   const [activeTest, setActiveTest] = useState(null);
 
   const handleChange = (key, value) => {
@@ -14,13 +14,21 @@ const AudioSettings = ({ onClose }) => {
   };
 
   const handleSave = () => {
-    updateSettings('calls', localSettings);
-    onClose();
+    try {
+      updateSettings('calls', localSettings);
+      onClose();
+    } catch (error) {
+      console.error('Failed to save audio settings:', error);
+    }
   };
 
   const handleReset = () => {
-    resetSection('calls');
-    setLocalSettings(settings.calls);
+    try {
+      resetSection('calls');
+      setLocalSettings(settings.calls);
+    } catch (error) {
+      console.error('Failed to reset audio settings:', error);
+    }
   };
 
   return (
@@ -99,7 +107,7 @@ const AudioSettings = ({ onClose }) => {
           <label>Echo Cancellation</label>
           <input
             type="checkbox"
-            checked={localSettings.echoCancellation}
+            checked={localSettings.echoCancellation !== false}
             onChange={(e) => handleChange('echoCancellation', e.target.checked)}
           />
         </div>
@@ -108,7 +116,7 @@ const AudioSettings = ({ onClose }) => {
           <label>Noise Suppression</label>
           <input
             type="checkbox"
-            checked={localSettings.noiseSuppression}
+            checked={localSettings.noiseSuppression !== false}
             onChange={(e) => handleChange('noiseSuppression', e.target.checked)}
           />
         </div>
@@ -117,7 +125,7 @@ const AudioSettings = ({ onClose }) => {
           <label>Auto Gain Control</label>
           <input
             type="checkbox"
-            checked={localSettings.autoGainControl}
+            checked={localSettings.autoGainControl !== false}
             onChange={(e) => handleChange('autoGainControl', e.target.checked)}
           />
         </div>
@@ -138,7 +146,7 @@ const AudioSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Ringtone Style</label>
           <select
-            value={localSettings.ringtoneStyle}
+            value={localSettings.ringtoneStyle || 'soft'}
             onChange={(e) => handleChange('ringtoneStyle', e.target.value)}
           >
             <option value="soft">Soft (Default)</option>
@@ -156,10 +164,10 @@ const AudioSettings = ({ onClose }) => {
             type="range"
             min="0"
             max="100"
-            value={localSettings.ringtoneVolume}
+            value={localSettings.ringtoneVolume || 80}
             onChange={(e) => handleChange('ringtoneVolume', parseInt(e.target.value))}
           />
-          <span className="settings-value">{localSettings.ringtoneVolume}%</span>
+          <span className="settings-value">{localSettings.ringtoneVolume || 80}%</span>
         </div>
 
         <button className="settings-btn-test" onClick={() => setActiveTest('speaker')}>
@@ -325,6 +333,11 @@ const AudioSettings = ({ onClose }) => {
         .settings-btn-test:hover:not(:disabled) {
           background: var(--primary);
           color: #000;
+        }
+
+        .settings-btn-test:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
 
         @media (max-width: 768px) {

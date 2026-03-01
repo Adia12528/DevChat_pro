@@ -5,20 +5,28 @@ import { useSettings } from '../../context/settingsContext';
 
 const StreamSettings = ({ onClose }) => {
   const { settings, updateSettings, resetSection } = useSettings();
-  const [localSettings, setLocalSettings] = useState(settings.streaming);
+  const [localSettings, setLocalSettings] = useState(settings.streaming || {});
 
   const handleChange = (key, value) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSave = () => {
-    updateSettings('streaming', localSettings);
-    onClose();
+    try {
+      updateSettings('streaming', localSettings);
+      onClose();
+    } catch (error) {
+      console.error('Failed to save stream settings:', error);
+    }
   };
 
   const handleReset = () => {
-    resetSection('streaming');
-    setLocalSettings(settings.streaming);
+    try {
+      resetSection('streaming');
+      setLocalSettings(settings.streaming);
+    } catch (error) {
+      console.error('Failed to reset stream settings:', error);
+    }
   };
 
   return (
@@ -35,7 +43,7 @@ const StreamSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Default Quality</label>
           <select
-            value={localSettings.defaultQuality}
+            value={localSettings.defaultQuality || 'auto'}
             onChange={(e) => handleChange('defaultQuality', e.target.value)}
           >
             <option value="auto">Auto (Adaptive)</option>
@@ -49,7 +57,7 @@ const StreamSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Default Source</label>
           <select
-            value={localSettings.defaultSource}
+            value={localSettings.defaultSource || 'camera'}
             onChange={(e) => handleChange('defaultSource', e.target.value)}
           >
             <option value="camera">Camera</option>
@@ -61,7 +69,7 @@ const StreamSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Default Visibility</label>
           <select
-            value={localSettings.defaultVisibility}
+            value={localSettings.defaultVisibility || 'room'}
             onChange={(e) => handleChange('defaultVisibility', e.target.value)}
           >
             <option value="room">Room Only</option>
@@ -73,7 +81,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Auto-publish stream</label>
           <input
             type="checkbox"
-            checked={localSettings.autoPublish}
+            checked={localSettings.autoPublish || false}
             onChange={(e) => handleChange('autoPublish', e.target.checked)}
           />
         </div>
@@ -82,7 +90,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Save streams after end</label>
           <input
             type="checkbox"
-            checked={localSettings.saveStreams}
+            checked={localSettings.saveStreams || false}
             onChange={(e) => handleChange('saveStreams', e.target.checked)}
           />
         </div>
@@ -135,7 +143,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Auto-show chat</label>
           <input
             type="checkbox"
-            checked={localSettings.autoShowChat}
+            checked={localSettings.autoShowChat || true}
             onChange={(e) => handleChange('autoShowChat', e.target.checked)}
           />
         </div>
@@ -143,7 +151,7 @@ const StreamSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Chat position</label>
           <select
-            value={localSettings.chatPosition}
+            value={localSettings.chatPosition || 'bottom'}
             onChange={(e) => handleChange('chatPosition', e.target.value)}
           >
             <option value="bottom">Bottom</option>
@@ -155,7 +163,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Enable emoji reactions</label>
           <input
             type="checkbox"
-            checked={localSettings.enableEmojiReactions}
+            checked={localSettings.enableEmojiReactions !== false}
             onChange={(e) => handleChange('enableEmojiReactions', e.target.checked)}
           />
         </div>
@@ -164,7 +172,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Enable raise hand</label>
           <input
             type="checkbox"
-            checked={localSettings.enableRaiseHand}
+            checked={localSettings.enableRaiseHand || false}
             onChange={(e) => handleChange('enableRaiseHand', e.target.checked)}
           />
         </div>
@@ -173,7 +181,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Enable polling</label>
           <input
             type="checkbox"
-            checked={localSettings.enablePolling}
+            checked={localSettings.enablePolling || false}
             onChange={(e) => handleChange('enablePolling', e.target.checked)}
           />
         </div>
@@ -186,7 +194,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Auto-moderate chat</label>
           <input
             type="checkbox"
-            checked={localSettings.autoModerate}
+            checked={localSettings.autoModerate || false}
             onChange={(e) => handleChange('autoModerate', e.target.checked)}
           />
         </div>
@@ -195,7 +203,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Profanity filter</label>
           <input
             type="checkbox"
-            checked={localSettings.profanityFilter}
+            checked={localSettings.profanityFilter || true}
             onChange={(e) => handleChange('profanityFilter', e.target.checked)}
           />
         </div>
@@ -204,7 +212,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Require approval to chat</label>
           <input
             type="checkbox"
-            checked={localSettings.requireApproval}
+            checked={localSettings.requireApproval || false}
             onChange={(e) => handleChange('requireApproval', e.target.checked)}
           />
         </div>
@@ -228,7 +236,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Auto-record streams</label>
           <input
             type="checkbox"
-            checked={localSettings.autoRecordStreams}
+            checked={localSettings.autoRecordStreams || false}
             onChange={(e) => handleChange('autoRecordStreams', e.target.checked)}
           />
         </div>
@@ -256,7 +264,7 @@ const StreamSettings = ({ onClose }) => {
         <div className="settings-row">
           <label>Storage location</label>
           <select
-            value={localSettings.recordStorage}
+            value={localSettings.recordStorage || 'cloud'}
             onChange={(e) => handleChange('recordStorage', e.target.value)}
             disabled={!localSettings.autoRecordStreams}
           >
@@ -273,7 +281,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Closed captions</label>
           <input
             type="checkbox"
-            checked={localSettings.closedCaptions}
+            checked={localSettings.closedCaptions || false}
             onChange={(e) => handleChange('closedCaptions', e.target.checked)}
           />
         </div>
@@ -282,7 +290,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Sign language view</label>
           <input
             type="checkbox"
-            checked={localSettings.signLanguage}
+            checked={localSettings.signLanguage || false}
             onChange={(e) => handleChange('signLanguage', e.target.checked)}
           />
         </div>
@@ -291,7 +299,7 @@ const StreamSettings = ({ onClose }) => {
           <label>Audio descriptions</label>
           <input
             type="checkbox"
-            checked={localSettings.audioDescriptions}
+            checked={localSettings.audioDescriptions || false}
             onChange={(e) => handleChange('audioDescriptions', e.target.checked)}
           />
         </div>
