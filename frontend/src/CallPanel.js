@@ -30,7 +30,11 @@ const CallPanel = ({
   formatDuration,
   getQualityLabelStyle,
   localStream,
-  remoteStream
+  remoteStream,
+  remoteIsScreenSharing,
+  isLivestreamViewer,
+  livestreamViewerExpanded,
+  onToggleLivestreamExpand
 }) => {
   const [showEffects, setShowEffects] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
@@ -49,7 +53,10 @@ const CallPanel = ({
             <div className="call-peer-name">{callPeer}</div>
             <div className="call-timer">{formatDuration(callDuration)}</div>
           </div>
-          <div className={`quality-dot ${connectionQuality >= 70 ? 'good' : connectionQuality >= 40 ? 'fair' : 'poor'}`}></div>
+          <div className={`quality-dot ${
+            connectionQuality >= 70 ? 'good' : 
+            connectionQuality >= 40 ? 'fair' : 'poor'
+          }`}></div>
         </div>
       </div>
     );
@@ -58,83 +65,87 @@ const CallPanel = ({
   const qualityStyle = getQualityLabelStyle(connectionQuality);
 
   return (
-    <div className="call-panel-container">
-      <div className="call-panel">
-        {/* Header */}
-        <div className="call-header">
-          <div className="call-info">
-            <h2 className="call-peer-name">
-              {callType === 'video' ? '📹' : '☎️'} {callPeer}
-            </h2>
-            <div className="call-details">
-              <span className="call-duration">{formatDuration(callDuration)}</span>
-              <span className="quality-badge" style={{ backgroundColor: qualityStyle.color }}>
-                {qualityStyle.label}
-              </span>
-              {isRecording && <span className="recording-badge">🎙️ Recording</span>}
-            </div>
-          </div>
-          <div className="call-actions">
-            <button
-              className="call-btn stats-btn"
-              onClick={onShowStats}
-              title="Show Call Stats"
-            >
-              📊
-            </button>
-            <button
-              className="call-btn minimize-btn"
-              onClick={onToggleMinimize}
-              title="Minimize Call"
-            >
-              ➖
-            </button>
-          </div>
-        </div>
+    <div className="call-interface fullscreen">
+      <div className="call-video-container">
+        
+        {/* Remote Video */}
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="remote-video"
+          style={{ transform: 'scaleX(-1)' }}
+        />
 
-        {/* Video Display */}
-        {callType === 'video' && (
-          <div className="video-container">
-            <div className="video-grid">
-              <div className="video-wrapper remote">
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="video-element"
-                  style={{ transform: 'scaleX(-1)' }}
-                />
-                <div className="video-label">Remote</div>
-              </div>
-              <div className="video-wrapper local">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="video-element"
-                  style={{ transform: 'scaleX(-1)' }}
-                />
-                <div className="video-label">You</div>
-                {isVideoOff && <div className="video-off-overlay">📹 Camera Off</div>}
+        {/* Local Video (only for video calls) */}
+        {callType === 'video' && localStream && (
+          <div className="local-video-shell">
+            <div className="local-video-toolbar">
+              <span className="local-video-label">You</span>
+              <div className="local-video-size-controls">
+                <button className="local-video-size-btn" title="Smaller">−</button>
+                <button className="local-video-size-btn" title="Larger">+</button>
               </div>
             </div>
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              playsInline
+              className="local-video"
+              style={{ transform: 'scaleX(-1)' }}
+            />
           </div>
         )}
+
+        {/* Call Info Overlay */}
+        <div className="call-info-overlay">
+          <div className="call-peer-info">
+            <div className="call-peer-name">
+              {callType === 'video' ? '📹' : '☎️'} {callPeer}
+              {remoteIsScreenSharing && (
+                <span className="screen-share-badge">📺 Sharing Screen</span>
+              )}
+            </div>
+            <div className="call-duration">{formatDuration(callDuration)}</div>
+          </div>
+          
+          <div className="call-status-badges">
+            {isRecording && (
+              <span className="call-status-badge recording">🔴 Recording</span>
+            )}
+            {isScreenSharing && (
+              <span className="local-screen-share-indicator">
+                <span className="screen-share-pulse"></span>
+                Sharing Screen
+              </span>
+            )}
+            {connectionQuality && (
+              <span className={`quality-badge ${connectionQuality.toLowerCase()}`}>
+                {connectionQuality}
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* Audio-only view */}
         {callType === 'voice' && (
           <div className="audio-call-view">
-            <div className="avatar-large">☎️</div>
+            <div className="audio-call-avatar">
+              {callPeer.charAt(0).toUpperCase()}
+            </div>
             <div className="audio-call-info">
               <h3>{callPeer}</h3>
               <p className="call-status">Active call</p>
               <div className="audio-waveform">
-                <div className="wave"></div>
-                <div className="wave"></div>
-                <div className="wave"></div>
-                <div className="wave"></div>
-                <div className="wave"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
+                <div className="audio-waveform-bar"></div>
               </div>
             </div>
           </div>
@@ -144,15 +155,15 @@ const CallPanel = ({
         {callStats && (
           <div className="call-stats-bar">
             <div className="stat-item">
-              <span className="stat-label">Latency:</span>
+              <span className="stat-label">Latency</span>
               <span className="stat-value">{Math.round(callStats.latency || 0)}ms</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Packets Lost:</span>
+              <span className="stat-label">Packet Loss</span>
               <span className="stat-value">{(callStats.packetLoss || 0).toFixed(1)}%</span>
             </div>
             <div className="stat-item">
-              <span className="stat-label">Video FPS:</span>
+              <span className="stat-label">Bitrate</span>
               <span className="stat-value">{Math.round(callStats.videoBitrate || 0)} kbps</span>
             </div>
           </div>
@@ -160,71 +171,82 @@ const CallPanel = ({
 
         {/* Control Bar */}
         <div className="call-controls">
-          {/* Basic controls */}
+          {/* Mute Button */}
           <button
-            className={`call-btn ${isMuted ? 'muted' : ''}`}
+            className={`call-control-btn ${isMuted ? 'active' : ''}`}
             onClick={onToggleMute}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? '🔇 Muted' : '🎤 Mute'}
+            {isMuted ? '🔇' : '🎤'}
           </button>
 
+          {/* Video Button */}
           {callType === 'video' && (
             <button
-              className={`call-btn ${isVideoOff ? 'video-off' : ''}`}
+              className={`call-control-btn ${isVideoOff ? 'active' : ''}`}
               onClick={onToggleVideo}
               title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
             >
-              {isVideoOff ? '📹️ Off' : '📹 Video'}
+              {isVideoOff ? '📹❌' : '📹'}
             </button>
           )}
 
+          {/* Screen Share Button */}
           {callType === 'video' && (
             <button
-              className={`call-btn ${isScreenSharing ? 'screen-active' : ''}`}
+              className={`call-control-btn ${isScreenSharing ? 'active' : ''}`}
               onClick={onToggleScreenShare}
-              title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+              title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
             >
-              {isScreenSharing ? '🖥️ Sharing' : '🖥️ Share'}
+              🖥️
             </button>
           )}
 
           {/* Recording Button */}
           <button
-            className={`call-btn ${isRecording ? 'recording' : ''}`}
+            className={`call-control-btn ${isRecording ? 'active' : ''}`}
             onClick={onToggleRecording}
             title={isRecording ? 'Stop recording' : 'Start recording'}
           >
-            {isRecording ? '🔴 Recording' : '⭕ Record'}
+            {isRecording ? '🔴' : '⏺️'}
           </button>
 
           {/* Effects Button */}
           {callType === 'video' && (
             <button
-              className="call-btn"
+              className="call-control-btn"
               onClick={() => setShowEffects(!showEffects)}
               title="Video effects"
             >
-              🎨 Effects
+              🎨
             </button>
           )}
 
           {/* More Options */}
           <button
-            className="call-btn"
+            className="call-control-btn"
             onClick={() => setShowMoreOptions(!showMoreOptions)}
             title="More options"
           >
             ⋯
           </button>
 
-          {/* End Call */}
+          {/* Minimize Button */}
           <button
-            className="call-btn end-btn"
+            className="call-control-btn minimize-btn"
+            onClick={onToggleMinimize}
+            title="Minimize"
+          >
+            ➖
+          </button>
+
+          {/* End Call Button */}
+          <button
+            className="call-control-btn end-call-btn"
             onClick={onEndCall}
             title="End call"
           >
-            ☐ End
+            📴
           </button>
         </div>
 
@@ -234,7 +256,7 @@ const CallPanel = ({
             <h4>Video Effects</h4>
             <div className="effect-group">
               <label>
-                <span>Brightness:</span>
+                <span>Brightness</span>
                 <input
                   type="range"
                   min="50"
@@ -247,7 +269,7 @@ const CallPanel = ({
             </div>
             <div className="effect-group">
               <label>
-                <span>Contrast:</span>
+                <span>Contrast</span>
                 <input
                   type="range"
                   min="50"
@@ -260,7 +282,7 @@ const CallPanel = ({
             </div>
             <div className="effect-group">
               <label>
-                <span>Saturation:</span>
+                <span>Saturation</span>
                 <input
                   type="range"
                   min="0"
@@ -281,12 +303,15 @@ const CallPanel = ({
                 Background Blur
               </label>
             </div>
-            <button className="btn-reset-effects" onClick={() => {
-              onApplyEffect('brightness', 100);
-              onApplyEffect('contrast', 100);
-              onApplyEffect('saturation', 100);
-              onApplyEffect('blur', false);
-            }}>
+            <button 
+              className="btn-reset-effects" 
+              onClick={() => {
+                onApplyEffect('brightness', 100);
+                onApplyEffect('contrast', 100);
+                onApplyEffect('saturation', 100);
+                onApplyEffect('blur', false);
+              }}
+            >
               Reset Effects
             </button>
           </div>
@@ -306,12 +331,8 @@ const CallPanel = ({
               />
             </div>
             <div className="option-item">
-              <span>Network Stats</span>
-              <span className="info-text">
-                {callStats
-                  ? `Latency: ${Math.round(callStats.latency || 0)}ms | Loss: ${(callStats.packetLoss || 0).toFixed(1)}%`
-                  : 'Not available'}
-              </span>
+              <span>Connection Quality</span>
+              <span className="info-text">{connectionQuality || 'Unknown'}</span>
             </div>
           </div>
         )}
