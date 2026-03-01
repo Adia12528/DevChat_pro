@@ -1,0 +1,8 @@
+# Create .gitattributes file
+@"
+# Handle case sensitivity
+* text=auto eol=lf
+
+# Force git to be case-sensitive
+frontend/src/components/settings/**/*.js -crlf
+"@ | Out-File -FilePath "frontend/.gitattributes" -Encoding utf8
