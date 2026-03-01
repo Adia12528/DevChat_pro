@@ -6024,9 +6024,14 @@ if (!showChat) return (
           <button 
             className="menu-toggle"
             onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              setShowMenuDropdown(!showMenuDropdown);
+            }}
             title="Menu"
+            aria-label="Menu"
           >
-            <Menu size={20}/>
+          <Menu size={24}/>
           </button>
           
           <AnimatePresence>
