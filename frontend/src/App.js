@@ -421,6 +421,7 @@ function AppContent() {
   const localPreviewDragOffsetRef = useRef({ x: 0, y: 0 });
   const localPreviewMovedRef = useRef(false);
   const subscribedRoomsRef = useRef(new Set());
+  const ignoreMenuClickUntilRef = useRef(0);
   const soundEnabledRef = useRef(true);
   const ringtoneRef = useRef(null);
   const ringtoneIntervalRef = useRef(null);
@@ -482,6 +483,17 @@ useEffect(() => {
     onlineUsers: onlineUsers.length
   });
 }, [showRoomSidebar, activeRoom, rooms, onlineUsers]);
+
+  const toggleMenuDropdown = useCallback((source = 'click') => {
+    const now = Date.now();
+    if (source === 'click' && now < ignoreMenuClickUntilRef.current) {
+      return;
+    }
+    if (source === 'touch') {
+      ignoreMenuClickUntilRef.current = now + 500;
+    }
+    setShowMenuDropdown(prev => !prev);
+  }, []);
 
   // ==================== THEME ====================
   useEffect(() => {
@@ -630,13 +642,25 @@ useEffect(() => {
 
     // User events
     socket.on('user_joined', (data) => {
-      setOnlineUsers(data.users);
+      if (data.room === roomRef.current) {
+        setOnlineUsers(data.users);
+      }
       setRoomUserMap(prev => ({ ...prev, [data.room]: data.users }));
     });
 
     socket.on('user_left', (data) => {
-      setOnlineUsers(data.users);
+      if (data.room === roomRef.current) {
+        setOnlineUsers(data.users);
+      }
       setRoomUserMap(prev => ({ ...prev, [data.room]: data.users }));
+    });
+
+    socket.on('user_list_updated', (data) => {
+      if (!data?.room) return;
+      if (data.room === roomRef.current) {
+        setOnlineUsers(data.users || []);
+      }
+      setRoomUserMap(prev => ({ ...prev, [data.room]: data.users || [] }));
     });
 
     socket.on('user_typing', (data) => {
@@ -793,6 +817,33 @@ useEffect(() => {
       if (audioContextRef.current) audioContextRef.current.close();
     };
   }, [soundEnabled, blockedUsers, liveStreamInfo]);
+
+  useEffect(() => {
+    const currentRoomId = activeRoom || room;
+    if (!currentRoomId) return;
+    const usersInRoom = roomUserMap[currentRoomId];
+    if (Array.isArray(usersInRoom)) {
+      setOnlineUsers(usersInRoom);
+    }
+  }, [activeRoom, room, roomUserMap]);
+
+  useEffect(() => {
+    if (!Array.isArray(activeRoomRegistry) || activeRoomRegistry.length === 0) return;
+
+    setRooms(prev => {
+      const byId = new Map(prev.map(item => [item.id, item]));
+
+      activeRoomRegistry.forEach((entry) => {
+        const roomId = typeof entry === 'string' ? entry : entry?.room;
+        if (!roomId || roomId.includes('_dm_')) return;
+
+        const existing = byId.get(roomId);
+        byId.set(roomId, existing || { id: roomId, name: roomId, type: 'group' });
+      });
+
+      return Array.from(byId.values());
+    });
+  }, [activeRoomRegistry]);
 
   // ==================== SCROLL TO BOTTOM ====================
   useEffect(() => {
@@ -1556,6 +1607,13 @@ useEffect(() => {
     setActiveRoom(dmRoom);
     setRoom(dmRoom);
     socketRef.current.emit('join_room', { room: dmRoom, username, fetchHistory: true });
+    setRoomUserMap(prev => {
+      const currentUsers = Array.isArray(prev[dmRoom]) ? prev[dmRoom] : [username];
+      const nextUsers = currentUsers.includes(targetUser)
+        ? currentUsers
+        : [...new Set([...currentUsers, targetUser])];
+      return { ...prev, [dmRoom]: nextUsers };
+    });
     setMessage(roomDrafts[dmRoom] || '');
     setShowRoomSidebar(false);
     setShowProfileModal(null);
@@ -2264,8 +2322,10 @@ useEffect(() => {
 
   const isSelectedUserOnline = useMemo(() => {
     if (!selectedUser) return false;
-    return onlineUsers.includes(selectedUser);
-  }, [selectedUser, onlineUsers]);
+    return onlineUsers.includes(selectedUser)
+      || globalPresenceUsers.includes(selectedUser)
+      || userStatus[selectedUser] === 'online';
+  }, [selectedUser, onlineUsers, globalPresenceUsers, userStatus]);
 
   const currentRoomInfo = useMemo(() => {
     return rooms.find(r => r.id === (activeRoom || room)) || null;
@@ -2276,8 +2336,12 @@ useEffect(() => {
   }, [activeRoom, room]);
 
   const globalOnlineUsers = useMemo(() => {
-    return [...new Set([...onlineUsers, ...Object.keys(userStatus).filter(u => userStatus[u] === 'online')])];
-  }, [onlineUsers, userStatus]);
+    return [...new Set([
+      ...onlineUsers,
+      ...globalPresenceUsers,
+      ...Object.keys(userStatus).filter(u => userStatus[u] === 'online')
+    ])];
+  }, [onlineUsers, globalPresenceUsers, userStatus]);
 
   const groupRoomSummaries = useMemo(() => {
     return rooms.filter(r => r.type !== 'dm').map(r => ({
@@ -2402,7 +2466,12 @@ useEffect(() => {
         <div className="menu-container" ref={menuContainerRef}>
           <button 
             className="menu-toggle"
-            onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+            onClick={() => toggleMenuDropdown('click')}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleMenuDropdown('touch');
+            }}
             title="Menu"
           >
             <Menu size={24}/>
