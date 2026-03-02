@@ -1,4 +1,4 @@
-// CORRECT IMPORTS FOR YOUR STRUCTURE
+// DevChat Pro - Complete Refactored App.js
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,45 +9,38 @@ import {
   ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, 
   FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, 
   Maximize2, Minimize2, Settings, Share2, Radio, Bell, Activity,
-  Headphones, Radio as RadioIcon, Volume, Video as VideoIcon, Mic as MicIcon 
+  Headphones, Radio as RadioIcon, Volume, Video as VideoIcon, Mic as MicIcon,
+  Monitor, ScreenShare, ScreenShareOff
 } from 'lucide-react';
 
-// ✅ CORRECT PATHS FOR YOUR STRUCTURE
+// Context Providers
+import { CallProvider, useCall } from './contexts/CallContext';
+
+// Components
+import CallPanel from './components/calls/CallPanel';
+import { 
+  LiveStreamControls, 
+  LiveStreamChat, 
+  StreamSettings,
+  ViewerGrid,
+  StreamQualityIndicator 
+} from './components/streams/LiveStream';
+import MessageBubble from './components/chat/MessageBubble';
+import MessageInput from './components/chat/MessageInput';
+import ChatHeader from './components/chat/ChatHeader';
+import Modals from './components/common/Modals';
+import Toasts from './components/common/Toasts';
+
+// Settings Components
 import SettingsManager from './components/settings/SettingsManager';
-import { useSettings } from './context/settingsContext';
 import CallSettings from './components/settings/CallSettings';
 import AudioSettings from './components/settings/AudioSettings';
 import VideoSettings from './components/settings/VideoSettings';
-import StreamSettings from './components/settings/StreamSettings';
+import { StreamSettings as LiveStreamSettings } from './components/streams/LiveStream';
 import AppSettings from './components/settings/AppSettings';
-import CallPanel from './components/calls/CallPanel';  // Changed from './CallPanel'
-import EmojiPicker from 'emoji-picker-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+// Utils
 import { APP_VERSION, BUILD_DATE } from './version';
-
-// ✅ IMPORT FROM CORRECT LOCATION (components/calls/CallUtils.js)
-import { 
-  ICE_SERVERS,
-  getAdaptiveMediaConstraints,
-  getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
-  optimizeRtpSenders,
-  waitForIceGatheringComplete,
-  CallStatistics,
-  CallRecorder,
-  VideoEffectsProcessor,
-  CallHistory,
-  AdaptiveQualityController,
-  getScreenStream,
-  switchToScreenShare,
-  switchBackToCamera,
-  getQualityIndicator
-} from './components/calls/CallUtils';  // ← THIS IS THE CORRECT PATH
-
-// ✅ IMPORT FROM CORRECT LOCATION (you need to create utils/helpers.js)
 import { 
   formatRelativeTime, 
   formatDateSeparator, 
@@ -61,9 +54,9 @@ import {
   getAvatarStyle, 
   detectLinks, 
   extractMentions 
-} from './utils/helpers';  // ← YOU NEED TO CREATE THIS FILE
+} from './utils/helpers';
 
-// LiveKit imports
+// LiveKit
 import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
 import '@livekit/components-styles';
 

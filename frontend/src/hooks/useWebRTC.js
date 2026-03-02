@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
+// src/hooks/useWebRTC.js
+import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
@@ -36,6 +37,8 @@ export const useWebRTC = (username, socketRef) => {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
   const callTimerRef = useRef(null);
   const pendingIceCandidatesRef = useRef([]);
   const callStatsRef = useRef(null);
@@ -328,6 +331,8 @@ export const useWebRTC = (username, socketRef) => {
     callStats,
     isCallRecording,
     connectionQuality,
+    localVideoRef,
+    remoteVideoRef,
     setIncomingCall,
     startCall,
     answerCall,

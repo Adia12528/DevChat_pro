@@ -6,11 +6,13 @@ import { SettingsProvider } from './context/settingsContext';
 // Import all CSS files directly
 import './styles/variables.css';
 import './styles/base.css';
-import './styles/components/chat.css';
+// CORRECT CSS IMPORTS
+import './styles/index.css';
 import './styles/components/calls.css';
-import './styles/components/streaming.css';
+import './styles/components/chat.css';
 import './styles/components/modals.css';
 import './styles/components/panels.css';
+import './styles/components/streaming.css';  // This combines with your streamStyles.css
 import './styles/responsive.css';
 
 // Service worker for PWA
