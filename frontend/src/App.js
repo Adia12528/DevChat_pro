@@ -473,6 +473,16 @@ function AppContent() {
     };
   }, []);
 
+  // Add this for debugging
+useEffect(() => {
+  console.log("🔄 App rendered with state:", {
+    showRoomSidebar,
+    activeRoom,
+    rooms: rooms.length,
+    onlineUsers: onlineUsers.length
+  });
+}, [showRoomSidebar, activeRoom, rooms, onlineUsers]);
+
   // ==================== THEME ====================
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
