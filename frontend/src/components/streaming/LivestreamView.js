@@ -3,7 +3,7 @@ import {
   Radio, Users, MessageSquare, Send, Smile, Maximize2, Minimize2,
   Heart, ThumbsUp, PartyPopper, Volume2, VolumeX
 } from 'lucide-react';
-import '../../streamStyles.css';
+import '../../styles/components/streaming.css';
 
 const LivestreamView = ({
   streamInfo,

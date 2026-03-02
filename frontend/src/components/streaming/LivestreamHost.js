@@ -4,7 +4,7 @@ import {
   MessageSquare, Users, Radio, Settings, Maximize2, Minimize2,
   Send, Smile, Heart, ThumbsUp, PartyPopper
 } from 'lucide-react';
-import '../../streamStyles.css';
+import '../../styles/components/streaming.css';
 
 const LivestreamHost = ({ 
   streamInfo, 
