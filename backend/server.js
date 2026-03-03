@@ -24,7 +24,28 @@ const CALL_EVENTS = Object.freeze({
     REJECT: 'call:reject',
     REJECTED: 'call:rejected',
     END: 'call:end',
-    ENDED: 'call:ended'
+    ENDED: 'call:ended',
+    SCREEN_SHARE_START: 'call:screen-share-start',
+    SCREEN_SHARE_END: 'call:screen-share-end'
+});
+
+const LIVESTREAM_EVENTS = Object.freeze({
+    START: 'livestream:start',
+    STARTED: 'livestream:started',
+    AVAILABLE: 'livestream:available',
+    JOIN_REQUEST: 'livestream:join-request',
+    OFFER: 'livestream:offer',
+    ANSWER: 'livestream:answer',
+    ICE_CANDIDATE: 'livestream:ice-candidate',
+    STOP: 'livestream:stop',
+    STOPPED: 'livestream:stopped',
+    DECLINE: 'livestream:decline',
+    LEAVE: 'livestream:leave',
+    VIEWERS_UPDATE: 'livestream:viewers-update',
+    COMMENT: 'livestream:comment',
+    COMMENTED: 'livestream:commented',
+    REACTION: 'livestream:reaction',
+    REACTED: 'livestream:reacted'
 });
 
 const ROOM_EVENTS = Object.freeze({
@@ -234,6 +255,7 @@ const roomUsers = {};
 const roomPolicies = {};
 const blockedUsers = {};
 const userReports = [];
+const livestreamSessions = new Map();
 
 const toSet = (list = []) => [...new Set((Array.isArray(list) ? list : []).filter(Boolean))];
 
@@ -682,6 +704,53 @@ io.on('connection', (socket) => {
         socket.emit(CALL_EVENTS.REJECTED, { reason });
     };
 
+    const getLivestreamSession = (sessionId) => {
+        if (!sessionId) return null;
+        return livestreamSessions.get(sessionId) || null;
+    };
+
+    const resolveLivestreamTargetSocket = (session, targetUsername) => {
+        if (!targetUsername) return null;
+        if (session?.room) {
+            const inRoom = findTargetSocketInRoom(session.room, targetUsername);
+            if (inRoom) return inRoom;
+        }
+        const fallbackSockets = getSocketIdsByUsername(targetUsername);
+        return fallbackSockets.length > 0 ? fallbackSockets[0] : null;
+    };
+
+    const emitLivestreamViewerCount = (session) => {
+        if (!session?.sessionId) return;
+        const payload = {
+            sessionId: session.sessionId,
+            count: session.viewers.size,
+            viewers: [...session.viewers]
+        };
+        if (session.room) {
+            io.to(session.room).emit(LIVESTREAM_EVENTS.VIEWERS_UPDATE, payload);
+        } else {
+            io.emit(LIVESTREAM_EVENTS.VIEWERS_UPDATE, payload);
+        }
+    };
+
+    const stopLivestreamSession = (session, reason = 'stopped') => {
+        if (!session?.sessionId) return;
+        livestreamSessions.delete(session.sessionId);
+        const payload = {
+            sessionId: session.sessionId,
+            host: session.host,
+            room: session.room,
+            visibility: session.visibility,
+            source: session.source,
+            reason
+        };
+        if (session.room) {
+            io.to(session.room).emit(LIVESTREAM_EVENTS.STOPPED, payload);
+        } else {
+            io.emit(LIVESTREAM_EVENTS.STOPPED, payload);
+        }
+    };
+
     socket.on(CALL_EVENTS.OFFER, (data) => {
         try {
             if (!data?.to || !data?.from || !data?.offer || !data?.callType) {
@@ -755,6 +824,252 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on(CALL_EVENTS.SCREEN_SHARE_START, (data) => {
+        try {
+            if (!data?.to || !data?.from) return;
+            const targetSocket = resolveCallTargetSocket(data.to);
+            if (targetSocket) {
+                io.to(targetSocket).emit(CALL_EVENTS.SCREEN_SHARE_START, { from: data.from });
+            }
+        } catch (err) {
+            console.error('❌ Failed to forward screen share start:', err);
+        }
+    });
+
+    socket.on(CALL_EVENTS.SCREEN_SHARE_END, (data) => {
+        try {
+            if (!data?.to || !data?.from) return;
+            const targetSocket = resolveCallTargetSocket(data.to);
+            if (targetSocket) {
+                io.to(targetSocket).emit(CALL_EVENTS.SCREEN_SHARE_END, { from: data.from });
+            }
+        } catch (err) {
+            console.error('❌ Failed to forward screen share end:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.START, (data, callback) => {
+        try {
+            const host = data?.host || socket.username;
+            const room = data?.room || socket.room;
+            if (!host || !room) {
+                callback?.({ success: false, error: 'Missing host or room' });
+                return;
+            }
+
+            const sessionId = `${room}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const session = {
+                sessionId,
+                host,
+                room,
+                visibility: data?.visibility === 'public' ? 'public' : 'room',
+                source: data?.source || 'camera',
+                hostSocketId: socket.id,
+                viewers: new Set()
+            };
+
+            livestreamSessions.set(sessionId, session);
+
+            const targets = getUniqueRoomUsers(room).filter((username) => username && username !== host);
+            callback?.({ success: true, sessionId, targets });
+
+            socket.to(room).emit(LIVESTREAM_EVENTS.STARTED, {
+                sessionId,
+                host,
+                room,
+                visibility: session.visibility,
+                source: session.source,
+                time: new Date().toISOString()
+            });
+
+            if (session.visibility === 'public') {
+                socket.broadcast.emit(LIVESTREAM_EVENTS.AVAILABLE, {
+                    sessionId,
+                    host,
+                    room,
+                    visibility: session.visibility,
+                    source: session.source,
+                    time: new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            console.error('❌ Failed to start livestream:', err);
+            callback?.({ success: false, error: 'Failed to start livestream' });
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.JOIN_REQUEST, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.from) {
+                socket.emit(LIVESTREAM_EVENTS.DECLINE, {
+                    sessionId: data?.sessionId,
+                    reason: 'Livestream unavailable'
+                });
+                return;
+            }
+
+            const hostSocket = resolveLivestreamTargetSocket(session, session.host);
+            if (!hostSocket) {
+                socket.emit(LIVESTREAM_EVENTS.DECLINE, {
+                    sessionId: session.sessionId,
+                    reason: 'Host offline'
+                });
+                return;
+            }
+
+            io.to(hostSocket).emit(LIVESTREAM_EVENTS.JOIN_REQUEST, {
+                sessionId: session.sessionId,
+                from: data.from
+            });
+        } catch (err) {
+            console.error('❌ Failed to process livestream join request:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.OFFER, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.to || !data?.offer) return;
+            const targetSocket = resolveLivestreamTargetSocket(session, data.to);
+            if (!targetSocket) return;
+
+            io.to(targetSocket).emit(LIVESTREAM_EVENTS.OFFER, {
+                sessionId: session.sessionId,
+                from: data.from,
+                offer: data.offer,
+                visibility: session.visibility,
+                source: session.source,
+                room: session.room
+            });
+        } catch (err) {
+            console.error('❌ Failed to forward livestream offer:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.ANSWER, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.to || !data?.answer) return;
+            const targetSocket = resolveLivestreamTargetSocket(session, data.to);
+            if (!targetSocket) return;
+
+            io.to(targetSocket).emit(LIVESTREAM_EVENTS.ANSWER, {
+                sessionId: session.sessionId,
+                from: data.from,
+                answer: data.answer
+            });
+
+            if (data.from) {
+                session.viewers.add(data.from);
+                emitLivestreamViewerCount(session);
+            }
+        } catch (err) {
+            console.error('❌ Failed to forward livestream answer:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.ICE_CANDIDATE, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.to || !data?.candidate) return;
+            const targetSocket = resolveLivestreamTargetSocket(session, data.to);
+            if (!targetSocket) return;
+
+            io.to(targetSocket).emit(LIVESTREAM_EVENTS.ICE_CANDIDATE, {
+                sessionId: session.sessionId,
+                from: data.from || socket.username,
+                candidate: data.candidate
+            });
+        } catch (err) {
+            console.error('❌ Failed to forward livestream ICE candidate:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.COMMENT, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            const text = typeof data?.text === 'string' ? data.text.trim() : '';
+            if (!session || !text) return;
+
+            io.to(session.room).emit(LIVESTREAM_EVENTS.COMMENTED, {
+                id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                sessionId: session.sessionId,
+                from: data.from || socket.username,
+                text,
+                time: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('❌ Failed to broadcast livestream comment:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.REACTION, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.emoji) return;
+
+            io.to(session.room).emit(LIVESTREAM_EVENTS.REACTED, {
+                id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                sessionId: session.sessionId,
+                from: data.from || socket.username,
+                emoji: data.emoji,
+                time: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('❌ Failed to broadcast livestream reaction:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.LEAVE, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            const from = data?.viewer || data?.from || socket.username;
+            if (!session || !from) return;
+
+            if (session.viewers.delete(from)) {
+                emitLivestreamViewerCount(session);
+                const hostSocket = resolveLivestreamTargetSocket(session, session.host);
+                if (hostSocket) {
+                    io.to(hostSocket).emit(LIVESTREAM_EVENTS.LEAVE, {
+                        sessionId: session.sessionId,
+                        from
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('❌ Failed to process livestream leave:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.DECLINE, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session || !data?.to) return;
+            const targetSocket = resolveLivestreamTargetSocket(session, data.to);
+            if (!targetSocket) return;
+
+            io.to(targetSocket).emit(LIVESTREAM_EVENTS.DECLINE, {
+                sessionId: session.sessionId,
+                from: data.from || socket.username,
+                reason: data.reason || 'Declined'
+            });
+        } catch (err) {
+            console.error('❌ Failed to forward livestream decline:', err);
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.STOP, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session) return;
+            if (session.host !== (data?.host || socket.username)) return;
+            stopLivestreamSession(session, 'stopped');
+        } catch (err) {
+            console.error('❌ Failed to stop livestream:', err);
+        }
+    });
+
     socket.on('user_leaving', (data) => {
         console.log("👋 User explicitly leaving:", data.username);
         if (socket.room && roomUsers[socket.room]) {
@@ -767,6 +1082,24 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log("❌ Disconnected:", socket.id, "Username:", socket.username, "Room:", socket.room);
         const username = socket.username || 'User';
+
+        for (const session of livestreamSessions.values()) {
+            if (session.hostSocketId === socket.id || session.host === username) {
+                stopLivestreamSession(session, 'host-disconnected');
+                continue;
+            }
+
+            if (username && session.viewers.delete(username)) {
+                emitLivestreamViewerCount(session);
+                const hostSocket = resolveLivestreamTargetSocket(session, session.host);
+                if (hostSocket) {
+                    io.to(hostSocket).emit(LIVESTREAM_EVENTS.LEAVE, {
+                        sessionId: session.sessionId,
+                        from: username
+                    });
+                }
+            }
+        }
         
         const joinedRooms = Object.keys(roomUsers).filter((room) => roomUsers[room] && roomUsers[room][socket.id]);
         joinedRooms.forEach((room) => {

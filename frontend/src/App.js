@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
+import './App.css';
 import { 
   Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, 
   Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, 
@@ -1018,6 +1019,55 @@ function AppContent() {
           source: data.source
         });
         playRingtone();
+      }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.JOIN_REQUEST, async (data) => {
+      if (!data?.sessionId || !data?.from) return;
+      const activeSession = liveStreamInfoRef.current;
+      if (!activeSession?.isHost || activeSession.sessionId !== data.sessionId) return;
+
+      const hostStream = livestreamLocalStreamRef.current || localStreamRef.current;
+      if (!hostStream) return;
+
+      try {
+        await createLivestreamHostPeer(data.from, data.sessionId, hostStream);
+      } catch (err) {
+        console.error('Failed to create livestream host peer:', err);
+      }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.ANSWER, async (data) => {
+      if (!data?.from || !data?.answer) return;
+      const hostPeer = livestreamHostPeersRef.current.get(data.from);
+      if (!hostPeer) return;
+      try {
+        if (!hostPeer.remoteDescription) {
+          await hostPeer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+      } catch (err) {
+        console.error('Failed to apply livestream answer:', err);
+      }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.ICE_CANDIDATE, async (data) => {
+      if (!data?.candidate) return;
+
+      try {
+        const activeSession = liveStreamInfoRef.current;
+        if (activeSession?.isHost) {
+          const hostPeer = livestreamHostPeersRef.current.get(data.from);
+          if (hostPeer?.remoteDescription) {
+            await hostPeer.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+        } else {
+          const viewerPeer = livestreamViewerPeerRef.current;
+          if (viewerPeer?.remoteDescription) {
+            await viewerPeer.addIceCandidate(new RTCIceCandidate(data.candidate));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to add livestream ICE candidate:', err);
       }
     });
 
