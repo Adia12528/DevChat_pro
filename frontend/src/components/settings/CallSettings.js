@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Mic, Volume2, Wifi, Shield, Bell } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 
-const CallSettings = ({ onClose }) => {
-  const { settings, updateCallSettings } = useEnhancedCall();
+const CallSettings = ({ onClose, callHook }) => {
+  const callApi = callHook || useEnhancedCall();
+  const { settings, updateCallSettings } = callApi;
   const [localSettings, setLocalSettings] = useState(settings);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
 
   const handleChange = (key, value) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
@@ -15,16 +20,31 @@ const CallSettings = ({ onClose }) => {
     onClose();
   };
 
-  return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <h2>Call Settings</h2>
-        <button className="close-btn" onClick={onClose}>
-          <X size={20} />
-        </button>
-      </div>
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [onClose]);
 
-      <div className="settings-content">
+  return (
+    <div className="settings-panel-overlay" onClick={onClose}>
+      <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="settings-header">
+          <h2>Call Settings</h2>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="settings-content">
         <div className="settings-section">
           <h3>
             <Mic size={18} />
@@ -155,9 +175,10 @@ const CallSettings = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="settings-actions">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          <div className="settings-actions">
+            <button className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          </div>
         </div>
       </div>
     </div>

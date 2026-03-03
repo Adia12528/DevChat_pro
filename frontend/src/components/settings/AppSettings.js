@@ -68,173 +68,190 @@ const AppSettings = ({ onClose }) => {
     onClose();
   };
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
   return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <h2>App Settings</h2>
-        <button className="close-btn" onClick={onClose}>
-          <X size={20} />
-        </button>
-      </div>
-
-      <div className="settings-content">
-        <div className="settings-section">
-          <h3>
-            <Palette size={18} />
-            Appearance
-          </h3>
-
-          <div className="setting-item">
-            <label>Theme</label>
-            <div className="theme-grid">
-              {themes.map(t => (
-                <button
-                  key={t.id}
-                  className={`theme-option ${theme === t.id ? 'active' : ''}`}
-                  onClick={() => handleThemeChange(t.id)}
-                >
-                  {t.icon}
-                  <span>{t.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <label>Font Size</label>
-            <div className="font-size-options">
-              {fontSizes.map(f => (
-                <button
-                  key={f.id}
-                  className={`font-option ${fontSize === f.id ? 'active' : ''}`}
-                  onClick={() => setFontSize(f.id)}
-                >
-                  {f.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <label>Compact Mode</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={compactMode}
-                onChange={(e) => setCompactMode(e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
+    <div className="app-settings-overlay" onClick={onClose}>
+      <div className="app-settings-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="app-settings-header">
+          <h2>App Settings</h2>
+          <button className="app-settings-close-btn" onClick={onClose} aria-label="Close app settings">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="settings-section">
-          <h3>
-            <Bell size={18} />
-            Notifications
-          </h3>
+        <div className="app-settings-content">
+          <div className="app-settings-section">
+            <h3>
+              <Palette size={18} />
+              Appearance
+            </h3>
 
-          <div className="setting-item">
-            <label>Sound Notifications</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={notifications.soundEnabled !== false}
-                onChange={(e) => setNotifications({ ...notifications, soundEnabled: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+            <div className="app-settings-item">
+              <label>Theme</label>
+              <div className="app-settings-theme-grid">
+                {themes.map(t => (
+                  <button
+                    key={t.id}
+                    className={`app-settings-theme-option ${theme === t.id ? 'active' : ''}`}
+                    onClick={() => handleThemeChange(t.id)}
+                  >
+                    {t.icon}
+                    <span>{t.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="app-settings-item">
+              <label>Font Size</label>
+              <div className="app-settings-font-size-options">
+                {fontSizes.map(f => (
+                  <button
+                    key={f.id}
+                    className={`app-settings-font-option ${fontSize === f.id ? 'active' : ''}`}
+                    onClick={() => setFontSize(f.id)}
+                  >
+                    {f.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="app-settings-item">
+              <label>Compact Mode</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={compactMode}
+                  onChange={(e) => setCompactMode(e.target.checked)}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
             </div>
           </div>
 
-          <div className="setting-item">
-            <label>Desktop Notifications</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={notifications.desktopNotifications !== false}
-                onChange={(e) => setNotifications({ ...notifications, desktopNotifications: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+          <div className="app-settings-section">
+            <h3>
+              <Bell size={18} />
+              Notifications
+            </h3>
+
+            <div className="app-settings-item">
+              <label>Sound Notifications</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notifications.soundEnabled !== false}
+                  onChange={(e) => setNotifications({ ...notifications, soundEnabled: e.target.checked })}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
+            </div>
+
+            <div className="app-settings-item">
+              <label>Desktop Notifications</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notifications.desktopNotifications !== false}
+                  onChange={(e) => setNotifications({ ...notifications, desktopNotifications: e.target.checked })}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
+            </div>
+
+            <div className="app-settings-item">
+              <label>Mention Only</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notifications.mentionOnly || false}
+                  onChange={(e) => setNotifications({ ...notifications, mentionOnly: e.target.checked })}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
             </div>
           </div>
 
-          <div className="setting-item">
-            <label>Mention Only</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={notifications.mentionOnly || false}
-                onChange={(e) => setNotifications({ ...notifications, mentionOnly: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+          <div className="app-settings-section">
+            <h3>
+              <Shield size={18} />
+              Privacy
+            </h3>
+
+            <div className="app-settings-item">
+              <label>Show Last Seen</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={privacy.showLastSeen !== false}
+                  onChange={(e) => setPrivacy({ ...privacy, showLastSeen: e.target.checked })}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
+            </div>
+
+            <div className="app-settings-item">
+              <label>Show Read Receipts</label>
+              <div className="app-settings-toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={privacy.showReadReceipts !== false}
+                  onChange={(e) => setPrivacy({ ...privacy, showReadReceipts: e.target.checked })}
+                />
+                <span className="app-settings-toggle-slider"></span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="settings-section">
-          <h3>
-            <Shield size={18} />
-            Privacy
-          </h3>
+          <div className="app-settings-section">
+            <h3>
+              <Download size={18} />
+              Data Management
+            </h3>
 
-          <div className="setting-item">
-            <label>Show Last Seen</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={privacy.showLastSeen !== false}
-                onChange={(e) => setPrivacy({ ...privacy, showLastSeen: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
+            <div className="app-settings-data-management">
+              <button className="app-settings-data-btn" onClick={handleExportSettings}>
+                <Download size={16} />
+                Export Settings
+              </button>
+
+              <label className="app-settings-data-btn">
+                <Upload size={16} />
+                Import Settings
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportSettings}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              <button className="app-settings-data-btn warning" onClick={handleResetSettings}>
+                <RefreshCw size={16} />
+                Reset to Default
+              </button>
             </div>
           </div>
 
-          <div className="setting-item">
-            <label>Show Read Receipts</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={privacy.showReadReceipts !== false}
-                onChange={(e) => setPrivacy({ ...privacy, showReadReceipts: e.target.checked })}
-              />
-              <span className="toggle-slider"></span>
-            </div>
+          <div className="app-settings-actions">
+            <button className="app-settings-btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="app-settings-btn-primary" onClick={handleSave}>Save Changes</button>
           </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>
-            <Download size={18} />
-            Data Management
-          </h3>
-
-          <div className="data-management">
-            <button className="data-btn" onClick={handleExportSettings}>
-              <Download size={16} />
-              Export Settings
-            </button>
-            
-            <label className="data-btn">
-              <Upload size={16} />
-              Import Settings
-              <input 
-                type="file" 
-                accept=".json" 
-                onChange={handleImportSettings}
-                style={{ display: 'none' }}
-              />
-            </label>
-
-            <button className="data-btn warning" onClick={handleResetSettings}>
-              <RefreshCw size={16} />
-              Reset to Default
-            </button>
-          </div>
-        </div>
-
-        <div className="settings-actions">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
         </div>
       </div>
     </div>

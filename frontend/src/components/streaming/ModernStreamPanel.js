@@ -32,7 +32,13 @@ const ModernStreamPanel = ({
   streamQuality = '1080p',
   streamDuration = 0,
   likes = 0,
-  shares = 0
+  shares = 0,
+  onSettingsChange,
+  cameraDevices = [],
+  selectedCameraId = '',
+  audioOutputDevices = [],
+  selectedAudioOutput = 'default',
+  streamSettings
 }) => {
   const [showChat, setShowChat] = useState(true);
   const [showControls, setShowControls] = useState(true);
@@ -42,6 +48,15 @@ const ModernStreamPanel = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [reactions, setReactions] = useState([]);
+  const [selectedQuality, setSelectedQuality] = useState(streamSettings?.quality || streamQuality || '1080p');
+  const [selectedMicrophone, setSelectedMicrophone] = useState(streamSettings?.microphone || 'Default');
+  const [selectedCamera, setSelectedCamera] = useState(selectedCameraId || 'default');
+  const [selectedSpeaker, setSelectedSpeaker] = useState(selectedAudioOutput || 'default');
+  const [noiseSuppression, setNoiseSuppression] = useState(streamSettings?.noiseSuppression ?? true);
+  const [slowMode, setSlowMode] = useState(streamSettings?.slowMode ?? false);
+  const [subOnlyMode, setSubOnlyMode] = useState(streamSettings?.subOnlyMode ?? false);
+  const [fallbackCameraDevices, setFallbackCameraDevices] = useState([]);
+  const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
   const streamVideoRef = useRef(null);
 
   useEffect(() => {
@@ -56,6 +71,71 @@ const ModernStreamPanel = ({
       streamVideoRef.current.srcObject = null;
     }
   }, [stream]);
+
+  useEffect(() => {
+    setSelectedQuality(streamQuality || '1080p');
+  }, [streamQuality]);
+
+  useEffect(() => {
+    if (!streamSettings) return;
+    setSelectedQuality(streamSettings.quality || streamQuality || '1080p');
+    setSelectedMicrophone(streamSettings.microphone || 'Default');
+    setNoiseSuppression(streamSettings.noiseSuppression ?? true);
+    setSlowMode(streamSettings.slowMode ?? false);
+    setSubOnlyMode(streamSettings.subOnlyMode ?? false);
+  }, [streamSettings, streamQuality]);
+
+  useEffect(() => {
+    setSelectedCamera(selectedCameraId || 'default');
+  }, [selectedCameraId]);
+
+  useEffect(() => {
+    setSelectedSpeaker(selectedAudioOutput || 'default');
+  }, [selectedAudioOutput]);
+
+  useEffect(() => {
+    const loadDeviceOptions = async () => {
+      if (!showSettings || !navigator.mediaDevices?.enumerateDevices) return;
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices
+          .filter((device) => device.kind === 'videoinput')
+          .map((device, index) => ({
+            deviceId: device.deviceId,
+            label: device.label || `External Camera ${index + 1}`
+          }));
+        const outputs = devices
+          .filter((device) => device.kind === 'audiooutput')
+          .map((device, index) => ({
+            deviceId: device.deviceId,
+            label: device.label || `External Speaker ${index + 1}`
+          }));
+        setFallbackCameraDevices(cameras);
+        setFallbackAudioOutputs(outputs);
+      } catch (error) {
+        setFallbackCameraDevices([]);
+        setFallbackAudioOutputs([]);
+      }
+    };
+
+    loadDeviceOptions();
+  }, [showSettings]);
+
+  useEffect(() => {
+    const mediaElement = streamVideoRef.current;
+    if (!mediaElement || typeof mediaElement.setSinkId !== 'function') return;
+    mediaElement.setSinkId(selectedSpeaker || 'default').catch(() => {});
+  }, [selectedSpeaker, stream]);
+
+  const availableCameraOptions = [
+    { deviceId: 'default', label: 'Default Camera' },
+    ...(cameraDevices.length > 0 ? cameraDevices : fallbackCameraDevices).filter((device) => !!device?.deviceId)
+  ];
+
+  const availableSpeakerOptions = [
+    { deviceId: 'default', label: 'Default Speaker' },
+    ...(audioOutputDevices.length > 0 ? audioOutputDevices : fallbackAudioOutputs).filter((device) => !!device?.deviceId)
+  ];
 
   const formatDuration = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
@@ -80,6 +160,36 @@ const ModernStreamPanel = ({
     }, 3000);
     onReact?.(emoji);
   };
+
+  const closeSettings = () => {
+    setShowSettings(false);
+  };
+
+  const applySettings = () => {
+    onSettingsChange?.({
+      quality: selectedQuality,
+      microphone: selectedMicrophone,
+      cameraId: selectedCamera,
+      audioOutput: selectedSpeaker,
+      noiseSuppression,
+      slowMode,
+      subOnlyMode
+    });
+    closeSettings();
+  };
+
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape' && showSettings) {
+        closeSettings();
+      }
+    };
+
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [showSettings]);
 
   return (
     <motion.div 
@@ -127,6 +237,18 @@ const ModernStreamPanel = ({
                   <span className="streamer-name">{streamerName}</span>
                   {isHost && <span className="host-badge">Host</span>}
                 </div>
+                {isHost && (
+                  <div className="stream-privacy-status">
+                    <span className={`privacy-pill ${isMuted ? 'off' : 'on'}`}>
+                      {isMuted ? <MicOff size={12} /> : <Mic size={12} />}
+                      {isMuted ? 'Mic Off' : 'Mic On'}
+                    </span>
+                    <span className={`privacy-pill ${isVideoOff ? 'off' : 'on'}`}>
+                      {isVideoOff ? <CameraOff size={12} /> : <Camera size={12} />}
+                      {isVideoOff ? 'Camera Off' : 'Camera On'}
+                    </span>
+                  </div>
+                )}
               </div>
               
               <div className="stream-info-right">
@@ -322,67 +444,101 @@ const ModernStreamPanel = ({
 
       <AnimatePresence>
         {showSettings && (
-          <motion.div 
-            className="stream-settings-modal"
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
+          <motion.div
+            className="stream-settings-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeSettings}
           >
-            <div className="settings-header">
-              <h3>Stream Settings</h3>
-              <button onClick={() => setShowSettings(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="settings-content">
-              <div className="settings-group">
-                <h4>Video Quality</h4>
-                <div className="quality-presets">
-                  {['Auto', '480p', '720p', '1080p', '4K'].map(q => (
-                    <button 
-                      key={q} 
-                      className={`preset ${streamQuality === q ? 'active' : ''}`}
-                    >
-                      {q}
-                    </button>
-                  ))}
+            <motion.div 
+              className="stream-settings-modal"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="settings-header">
+                <h3>Stream Settings</h3>
+                <button onClick={closeSettings} aria-label="Close stream settings">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="settings-content">
+                <div className="settings-group">
+                  <h4>Video Quality</h4>
+                  <div className="quality-presets">
+                    {['Auto', '480p', '720p', '1080p', '4K'].map(q => (
+                      <button 
+                        key={q} 
+                        className={`preset ${selectedQuality === q ? 'active' : ''}`}
+                        onClick={() => setSelectedQuality(q)}
+                        type="button"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-group">
+                  <h4>Video Devices</h4>
+                  <div className="setting-item">
+                    <span>Camera</span>
+                    <select value={selectedCamera} onChange={(event) => setSelectedCamera(event.target.value)}>
+                      {availableCameraOptions.map((camera, index) => (
+                        <option key={`${camera.deviceId}-${index}`} value={camera.deviceId}>{camera.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="settings-group">
+                  <h4>Audio</h4>
+                  <div className="setting-item">
+                    <span>Microphone</span>
+                    <select value={selectedMicrophone} onChange={(event) => setSelectedMicrophone(event.target.value)}>
+                      <option>Default</option>
+                      <option>External Mic</option>
+                    </select>
+                  </div>
+                  <div className="setting-item">
+                    <span>Audio Output</span>
+                    <select value={selectedSpeaker} onChange={(event) => setSelectedSpeaker(event.target.value)}>
+                      {availableSpeakerOptions.map((speaker, index) => (
+                        <option key={`${speaker.deviceId}-${index}`} value={speaker.deviceId}>{speaker.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="setting-item">
+                    <span>Noise Suppression</span>
+                    <label className="toggle">
+                      <input type="checkbox" checked={noiseSuppression} onChange={(event) => setNoiseSuppression(event.target.checked)} />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+                </div>
+                <div className="settings-group">
+                  <h4>Chat</h4>
+                  <div className="setting-item">
+                    <span>Slow Mode</span>
+                    <label className="toggle">
+                      <input type="checkbox" checked={slowMode} onChange={(event) => setSlowMode(event.target.checked)} />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
+                  <div className="setting-item">
+                    <span>Sub Only Mode</span>
+                    <label className="toggle">
+                      <input type="checkbox" checked={subOnlyMode} onChange={(event) => setSubOnlyMode(event.target.checked)} />
+                      <span className="toggle-slider" />
+                    </label>
+                  </div>
                 </div>
               </div>
-              <div className="settings-group">
-                <h4>Audio</h4>
-                <div className="setting-item">
-                  <span>Microphone</span>
-                  <select>
-                    <option>Default</option>
-                    <option>External Mic</option>
-                  </select>
-                </div>
-                <div className="setting-item">
-                  <span>Noise Suppression</span>
-                  <label className="toggle">
-                    <input type="checkbox" defaultChecked />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
+              <div className="settings-actions">
+                <button className="settings-btn secondary" onClick={closeSettings} type="button">Cancel</button>
+                <button className="settings-btn primary" onClick={applySettings} type="button">Save & Close</button>
               </div>
-              <div className="settings-group">
-                <h4>Chat</h4>
-                <div className="setting-item">
-                  <span>Slow Mode</span>
-                  <label className="toggle">
-                    <input type="checkbox" />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <span>Sub Only Mode</span>
-                  <label className="toggle">
-                    <input type="checkbox" />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-              </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

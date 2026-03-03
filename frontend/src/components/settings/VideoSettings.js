@@ -3,19 +3,22 @@ import { X, Camera, Monitor, Settings, RefreshCw } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 import { detectDevices } from '../../utils/settings';
 
-const VideoSettings = ({ onClose }) => {
+const VideoSettings = ({ onClose, callHook }) => {
+  const callApi = callHook || useEnhancedCall();
   const { 
     settings,
     activeDevices, 
     setActiveDevices,
+    updateCallSettings,
     savePreferredDevices 
-  } = useEnhancedCall();
+  } = callApi;
 
   const [devices, setDevices] = useState({
     cameras: []
   });
   const [isLoading, setIsLoading] = useState(false);
   const [previewStream, setPreviewStream] = useState(null);
+  const [localSettings, setLocalSettings] = useState(settings);
   const videoPreviewRef = React.useRef(null);
 
   useEffect(() => {
@@ -28,6 +31,27 @@ const VideoSettings = ({ onClose }) => {
   }, []);
 
   useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+      if (previewStream) {
+        previewStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [onClose, previewStream]);
+
+  useEffect(() => {
     if (videoPreviewRef.current && previewStream) {
       videoPreviewRef.current.srcObject = previewStream;
     }
@@ -36,7 +60,11 @@ const VideoSettings = ({ onClose }) => {
   const loadDevices = async () => {
     setIsLoading(true);
     try {
-      const deviceList = await detectDevices();
+      const deviceList = await detectDevices({
+        requestPermission: true,
+        requestAudio: false,
+        requestVideo: true,
+      });
       setDevices({
         cameras: deviceList.cameras || []
       });
@@ -67,6 +95,10 @@ const VideoSettings = ({ onClose }) => {
   };
 
   const handleSave = () => {
+    updateCallSettings({
+      videoQuality: localSettings.videoQuality,
+      frameRate: Number(localSettings.frameRate),
+    });
     savePreferredDevices();
     if (previewStream) {
       previewStream.getTracks().forEach(track => track.stop());
@@ -75,15 +107,16 @@ const VideoSettings = ({ onClose }) => {
   };
 
   return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <h2>Video Settings</h2>
-        <button className="close-btn" onClick={onClose}>
-          <X size={20} />
-        </button>
-      </div>
+    <div className="settings-panel-overlay" onClick={onClose}>
+      <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="settings-header">
+          <h2>Video Settings</h2>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
 
-      <div className="settings-content">
+        <div className="settings-content">
         <div className="settings-section">
           <h3>
             <Camera size={18} />
@@ -133,7 +166,10 @@ const VideoSettings = ({ onClose }) => {
 
           <div className="setting-item">
             <label>Resolution</label>
-            <select value={settings.videoQuality}>
+            <select
+              value={localSettings.videoQuality}
+              onChange={(event) => setLocalSettings((prev) => ({ ...prev, videoQuality: event.target.value }))}
+            >
               <option value="auto">Auto</option>
               <option value="low">640x360 (Low)</option>
               <option value="medium">854x480 (Medium)</option>
@@ -144,7 +180,10 @@ const VideoSettings = ({ onClose }) => {
 
           <div className="setting-item">
             <label>Frame Rate</label>
-            <select value={settings.frameRate}>
+            <select
+              value={localSettings.frameRate}
+              onChange={(event) => setLocalSettings((prev) => ({ ...prev, frameRate: Number(event.target.value) }))}
+            >
               <option value="15">15 fps</option>
               <option value="24">24 fps</option>
               <option value="30">30 fps</option>
@@ -169,9 +208,10 @@ const VideoSettings = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="settings-actions">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          <div className="settings-actions">
+            <button className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          </div>
         </div>
       </div>
     </div>

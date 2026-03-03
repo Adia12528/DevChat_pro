@@ -3,7 +3,8 @@ import { X, Mic, Volume2, Headphones, Speaker, RefreshCw } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 import { detectDevices } from '../../utils/settings';
 
-const AudioSettings = ({ onClose }) => {
+const AudioSettings = ({ onClose, callHook }) => {
+  const callApi = callHook || useEnhancedCall();
   const { 
     settings, 
     activeDevices, 
@@ -13,7 +14,7 @@ const AudioSettings = ({ onClose }) => {
     testMicrophone,
     stopTest,
     savePreferredDevices 
-  } = useEnhancedCall();
+  } = callApi;
 
   const [devices, setDevices] = useState({
     microphones: [],
@@ -25,10 +26,29 @@ const AudioSettings = ({ onClose }) => {
     loadDevices();
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+      stopTest();
+    };
+  }, [onClose, stopTest]);
+
   const loadDevices = async () => {
     setIsLoading(true);
     try {
-      const deviceList = await detectDevices();
+      const deviceList = await detectDevices({
+        requestPermission: true,
+        requestAudio: true,
+        requestVideo: false,
+      });
       setDevices({
         microphones: deviceList.microphones || [],
         speakers: deviceList.speakers || []
@@ -62,15 +82,16 @@ const AudioSettings = ({ onClose }) => {
   };
 
   return (
-    <div className="settings-panel">
-      <div className="settings-header">
-        <h2>Audio Settings</h2>
-        <button className="close-btn" onClick={onClose}>
-          <X size={20} />
-        </button>
-      </div>
+    <div className="settings-panel-overlay" onClick={onClose}>
+      <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="settings-header">
+          <h2>Audio Settings</h2>
+          <button className="close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
 
-      <div className="settings-content">
+        <div className="settings-content">
         <div className="settings-section">
           <h3>
             <Mic size={18} />
@@ -181,9 +202,10 @@ const AudioSettings = ({ onClose }) => {
           </div>
         </div>
 
-        <div className="settings-actions">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          <div className="settings-actions">
+            <button className="btn-secondary" onClick={onClose}>Cancel</button>
+            <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+          </div>
         </div>
       </div>
     </div>

@@ -217,7 +217,10 @@ function AppContent() {
   const [selectedVideoInputId, setSelectedVideoInputId] = useState(() => 
     localStorage.getItem('devchatPreferredCameraId') || ''
   );
-  const [audioOutputDevice, setAudioOutputDevice] = useState('default');
+  const [audioOutputDevices, setAudioOutputDevices] = useState([]);
+  const [audioOutputDevice, setAudioOutputDevice] = useState(() =>
+    localStorage.getItem('devchatPreferredAudioOutput') || 'default'
+  );
   
   // ==================== NOTIFICATION PREFERENCES ====================
   const [notificationPrefs, setNotificationPrefs] = useState(() => {
@@ -364,6 +367,26 @@ function AppContent() {
   const [showStreamSettings, setShowStreamSettings] = useState(false);
   const [showStreamQuality, setShowStreamQuality] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
+  const [streamPanelSettings, setStreamPanelSettings] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('devchatStreamPanelSettings') || '{}');
+      return {
+        quality: parsed.quality || '1080p',
+        microphone: parsed.microphone || 'Default',
+        noiseSuppression: parsed.noiseSuppression ?? true,
+        slowMode: parsed.slowMode ?? false,
+        subOnlyMode: parsed.subOnlyMode ?? false
+      };
+    } catch {
+      return {
+        quality: '1080p',
+        microphone: 'Default',
+        noiseSuppression: true,
+        slowMode: false,
+        subOnlyMode: false
+      };
+    }
+  });
   const [videoEffectSettings, setVideoEffectSettings] = useState({
     backgroundBlur: 0,
     brightness: 1,
@@ -578,10 +601,30 @@ function AppContent() {
   }, [typingTimeoutByRoom]);
 
   useEffect(() => {
+    localStorage.setItem('devchatStreamPanelSettings', JSON.stringify(streamPanelSettings));
+  }, [streamPanelSettings]);
+
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => setSuccessMessage(''), 2600);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
+  useEffect(() => {
+    if (!errorMessage) return;
+    const timer = setTimeout(() => setErrorMessage(''), 4200);
+    return () => clearTimeout(timer);
+  }, [errorMessage]);
+
+  useEffect(() => {
     if (selectedVideoInputId) {
       localStorage.setItem('devchatPreferredCameraId', selectedVideoInputId);
     }
   }, [selectedVideoInputId]);
+
+  useEffect(() => {
+    localStorage.setItem('devchatPreferredAudioOutput', audioOutputDevice || 'default');
+  }, [audioOutputDevice]);
 
   // ==================== MOBILE DETECTION ====================
   useEffect(() => {
@@ -604,16 +647,22 @@ function AppContent() {
         .filter(d => d.kind === 'videoinput')
         .map((d, i) => ({
           deviceId: d.deviceId,
-          label: d.label || `Camera ${i + 1}`
+          label: d.label || `External Camera ${i + 1}`
+        }));
+      const speakers = devices
+        .filter(d => d.kind === 'audiooutput')
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `External Speaker ${i + 1}`
         }));
       setVideoInputDevices(cameras);
+      setAudioOutputDevices(speakers);
     } catch (err) {
       console.warn('Failed to enumerate cameras:', err);
     }
   }, []);
 
   useEffect(() => {
-    refreshVideoInputs();
     navigator.mediaDevices?.addEventListener('devicechange', refreshVideoInputs);
     return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshVideoInputs);
   }, [refreshVideoInputs]);
@@ -629,6 +678,103 @@ function AppContent() {
       }
     };
   }, [selectedVideoInputId]);
+
+  const applyCameraSelectionToActiveStream = useCallback(async (cameraId) => {
+    const hasActiveVideoSession =
+      callStateRef.current === 'active' ||
+      Boolean(liveStreamInfoRef.current?.isHost);
+
+    if (!hasActiveVideoSession || !navigator.mediaDevices?.getUserMedia) return;
+
+    const currentLocalStream = localStreamRef.current;
+    if (!currentLocalStream) return;
+
+    try {
+      const preferredId = cameraId && cameraId !== 'default' ? cameraId : '';
+      const constraints = {
+        video: preferredId ? { deviceId: { exact: preferredId } } : true,
+        audio: false
+      };
+
+      const replacementStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const replacementVideoTrack = replacementStream.getVideoTracks()[0];
+      if (!replacementVideoTrack) {
+        replacementStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      const oldVideoTracks = currentLocalStream.getVideoTracks();
+      oldVideoTracks.forEach(track => {
+        currentLocalStream.removeTrack(track);
+        track.stop();
+      });
+      currentLocalStream.addTrack(replacementVideoTrack);
+
+      const viewerLocalStream = livestreamLocalStreamRef.current;
+      if (viewerLocalStream && viewerLocalStream !== currentLocalStream) {
+        viewerLocalStream.getVideoTracks().forEach(track => {
+          viewerLocalStream.removeTrack(track);
+          track.stop();
+        });
+        viewerLocalStream.addTrack(replacementVideoTrack.clone());
+      }
+
+      const replaceOnPeerConnection = async (peerConnection) => {
+        if (!peerConnection) return;
+        const videoSender = peerConnection.getSenders().find(sender => sender.track?.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(replacementVideoTrack);
+        }
+      };
+
+      await replaceOnPeerConnection(peerConnectionRef.current);
+      await Promise.allSettled(
+        Array.from(livestreamHostPeersRef.current.values()).map(replaceOnPeerConnection)
+      );
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = currentLocalStream;
+      }
+
+      setLocalStream(currentLocalStream);
+      setSuccessMessage('Camera switched successfully');
+    } catch (error) {
+      console.warn('Failed to switch camera immediately:', error);
+      setErrorMessage('Could not switch camera right now. It will apply next start.');
+    }
+  }, []);
+
+  const handleStreamSettingsChange = useCallback((settings = {}) => {
+    setStreamPanelSettings(prev => ({ ...prev, ...settings }));
+
+    if (typeof settings.cameraId === 'string') {
+      const normalizedCameraId = settings.cameraId === 'default' ? '' : settings.cameraId;
+      setSelectedVideoInputId(normalizedCameraId);
+      applyCameraSelectionToActiveStream(settings.cameraId);
+    }
+
+    if (typeof settings.audioOutput === 'string' && settings.audioOutput.trim()) {
+      setAudioOutputDevice(settings.audioOutput);
+    }
+  }, [applyCameraSelectionToActiveStream]);
+
+  useEffect(() => {
+    const applyAudioOutput = async () => {
+      const mediaElements = Array.from(document.querySelectorAll('audio, video'));
+      if (!mediaElements.length) return;
+
+      for (const mediaElement of mediaElements) {
+        if (typeof mediaElement.setSinkId !== 'function') continue;
+        try {
+          await mediaElement.setSinkId(audioOutputDevice || 'default');
+        } catch (error) {
+          console.warn('Failed to set audio output device:', error);
+        }
+      }
+    };
+
+    applyAudioOutput();
+  }, [audioOutputDevice, callState, liveStreamInfo, remoteStream]);
 
   // ==================== SOCKET SETUP ====================
   useEffect(() => {
@@ -1164,7 +1310,7 @@ function AppContent() {
     });
 
     socket.on(LIVESTREAM_EVENTS.COMMENTED, (data) => {
-      if (liveStreamInfo?.sessionId === data.sessionId) {
+      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
         setLivestreamComments(prev => [...prev, {
           id: data.id,
           from: data.from,
@@ -1175,7 +1321,7 @@ function AppContent() {
     });
 
     socket.on(LIVESTREAM_EVENTS.REACTED, (data) => {
-      if (liveStreamInfo?.sessionId === data.sessionId) {
+      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
         setLivestreamComments(prev => [...prev, {
           id: data.id,
           type: 'reaction',
@@ -1191,9 +1337,12 @@ function AppContent() {
     });
 
     socket.on(LIVESTREAM_EVENTS.STOPPED, (data) => {
-      if (liveStreamInfo?.sessionId === data.sessionId) {
+      if (liveStreamInfoRef.current?.sessionId === data.sessionId) {
         setLiveStreamInfo(null);
         setLivestreamComments([]);
+        setShowStreamSettings(false);
+        setShowStreamingTab(false);
+        setSuccessMessage('Livestream stopped');
       }
     });
 
@@ -2659,19 +2808,6 @@ function AppContent() {
     });
   }, []);
 
-  const checkPermissions = useCallback(async (type) => {
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) return false;
-      const constraints = type === 'video' ? { video: true, audio: true } : { audio: true, video: false };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      stream.getTracks().forEach(t => t.stop());
-      return true;
-    } catch (err) {
-      console.error('Permission check failed:', err);
-      return false;
-    }
-  }, []);
-
   const stopRingtone = useCallback(() => {
     if (ringtoneIntervalRef.current) {
       clearInterval(ringtoneIntervalRef.current);
@@ -3106,6 +3242,8 @@ function AppContent() {
     setCallType(null);
     setCallPeer(null);
     setCallDuration(0);
+    setShowStreamSettings(false);
+    setShowStreamingTab(false);
     stopCallTimer();
     setLiveStreamInfo(null);
     setLivestreamComments([]);
@@ -3420,13 +3558,6 @@ function AppContent() {
       setCallState('calling');
       setCallError(null);
 
-      const hasPermission = await checkPermissions(type);
-      if (!hasPermission) {
-        setCallError(`Please grant ${type} permissions`);
-        setCallState('idle');
-        return;
-      }
-
       const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
         callType: type,
         userAgent: navigator.userAgent,
@@ -3510,7 +3641,7 @@ function AppContent() {
       stopRingtone();
       clearCallTimeout();
     }
-  }, [username, createPeerConnection, playRingtone, stopRingtone, checkPermissions, clearCallTimeout, waitForIceGatheringComplete, withPreferredVideoDevice, refreshVideoInputs]);
+  }, [username, createPeerConnection, playRingtone, stopRingtone, clearCallTimeout, waitForIceGatheringComplete, withPreferredVideoDevice, refreshVideoInputs]);
 
   const rejectCall = useCallback(() => {
     if (!incomingCall || !socketRef.current) return;
@@ -4884,36 +5015,6 @@ function AppContent() {
         )}
       </AnimatePresence>
 
-      {/* Streaming Panel */}
-      <AnimatePresence>
-        {showStreamingTab && !liveStreamInfo && (
-          <motion.div className="streaming-tab" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
-            <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '16px' }}>Loading stream panel...</div>}>
-              <ModernStreamPanel
-                isHost={!!liveStreamInfo?.isHost}
-                streamSource={streamSource}
-                stream={liveStreamInfo?.isHost ? localStream : remoteStream}
-                isMuted={isMuted}
-                isVideoOff={isVideoOff}
-                viewerCount={liveStreamInfo?.viewerCount || 0}
-                onToggleMute={toggleMute}
-                onToggleVideo={toggleVideo}
-                onEndStream={() => stopHostedLivestream(true)}
-                onSwitchSource={toggleScreenShare}
-                streamTitle={`${room || 'Room'} Live Stream`}
-                streamerName={liveStreamInfo?.host || username}
-                viewers={liveStreamInfo?.viewers || []}
-                chatMessages={livestreamComments.map(c => ({ sender: c.from, text: c.text || c.emoji, time: formatRelativeTime(c.time) }))}
-                onSendChat={sendLivestreamComment}
-                onReact={sendLivestreamReaction}
-                streamDuration={callDuration}
-                likes={livestreamComments.filter(c => c.type === 'reaction').length}
-              />
-            </Suspense>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Image Viewer Modal */}
       <AnimatePresence>
         {imageViewer && (
@@ -5080,10 +5181,16 @@ function AppContent() {
             chatMessages={livestreamComments.map(c => ({ sender: c.from, text: c.text || c.emoji, time: formatRelativeTime(c.time) }))}
             onSendChat={sendLivestreamComment}
             onReact={sendLivestreamReaction}
-            streamQuality="1080p"
+            streamQuality={streamPanelSettings.quality}
             streamDuration={callDuration}
             likes={livestreamComments.filter(c => c.type === 'reaction').length}
             shares={liveStreamInfo?.viewerCount || viewers || 0}
+            cameraDevices={videoInputDevices}
+            selectedCameraId={selectedVideoInputId}
+            audioOutputDevices={audioOutputDevices}
+            selectedAudioOutput={audioOutputDevice}
+            streamSettings={streamPanelSettings}
+            onSettingsChange={handleStreamSettingsChange}
           />
         </Suspense>
       )}
@@ -5092,17 +5199,17 @@ function AppContent() {
       <AnimatePresence>
         {showCallSettings && (
           <Suspense fallback={null}>
-            <CallSettings onClose={() => setShowCallSettings(false)} />
+            <CallSettings onClose={() => setShowCallSettings(false)} callHook={enhancedCall} />
           </Suspense>
         )}
         {showAudioSettings && (
           <Suspense fallback={null}>
-            <AudioSettings onClose={() => setShowAudioSettings(false)} />
+            <AudioSettings onClose={() => setShowAudioSettings(false)} callHook={enhancedCall} />
           </Suspense>
         )}
         {showVideoSettings && (
           <Suspense fallback={null}>
-            <VideoSettings onClose={() => setShowVideoSettings(false)} />
+            <VideoSettings onClose={() => setShowVideoSettings(false)} callHook={enhancedCall} />
           </Suspense>
         )}
         {showStreamSettings && (
@@ -5114,6 +5221,8 @@ function AppContent() {
               onSourceChange={setStreamSource}
               onStartStream={() => { startLivestream(streamVisibility, streamSource); setShowStreamSettings(false); }}
               onClose={() => setShowStreamSettings(false)}
+              isMobile={isMobileView}
+              isWindows={/Win/i.test(navigator.platform || navigator.userAgent || '')}
             />
           </Suspense>
         )}
@@ -5176,9 +5285,11 @@ function App() {
   const socketRef = useRef(null);
 
   return (
-    <CallProvider socket={socketRef.current} username={username} room={room} onlineUsers={onlineUsers}>
-      <AppContent />
-    </CallProvider>
+    <SettingsProvider>
+      <CallProvider socket={socketRef.current} username={username} room={room} onlineUsers={onlineUsers}>
+        <AppContent />
+      </CallProvider>
+    </SettingsProvider>
   );
 }
 

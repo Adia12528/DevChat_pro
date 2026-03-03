@@ -20,12 +20,12 @@ export const useEnhancedCall = (socket, username) => {
     const loadDevices = async () => {
       const deviceList = await detectDevices();
       setDevices(deviceList);
-      
-      setActiveDevices({
-        camera: settings.devices.preferredCameraId || 'system',
-        microphone: settings.devices.preferredMicrophoneId || 'system',
-        speaker: settings.devices.preferredSpeakerId || 'system',
-      });
+
+      setActiveDevices((previous) => ({
+        camera: previous?.camera || settings.devices.preferredCameraId || 'system',
+        microphone: previous?.microphone || settings.devices.preferredMicrophoneId || 'system',
+        speaker: previous?.speaker || settings.devices.preferredSpeakerId || 'system',
+      }));
     };
     
     loadDevices();

@@ -158,8 +158,14 @@ export const validateSettings = (settings) => {
 };
 
 // ==================== DETECT DEVICES ====================
-export const detectDevices = async () => {
+export const detectDevices = async (options = {}) => {
   try {
+    const {
+      requestPermission = false,
+      requestAudio = true,
+      requestVideo = true,
+    } = options;
+
     if (!navigator.mediaDevices?.enumerateDevices) {
       return {
         cameras: [],
@@ -170,12 +176,17 @@ export const detectDevices = async () => {
     }
     
     let hasPermission = false;
-    try {
-      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      tempStream.getTracks().forEach(track => track.stop());
-      hasPermission = true;
-    } catch {
-      // No permission yet
+    if (requestPermission) {
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          audio: requestAudio,
+          video: requestVideo,
+        });
+        tempStream.getTracks().forEach(track => track.stop());
+        hasPermission = true;
+      } catch {
+        // No permission yet
+      }
     }
     
     const devices = await navigator.mediaDevices.enumerateDevices();
