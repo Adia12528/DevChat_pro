@@ -1,16 +1,14 @@
 // DevChat Pro - Complete Working Version with Modern UI
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import io from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, User, Hash, Trash2, Zap, Wifi, WifiOff, Users, Search, Copy, CheckCircle, 
   Edit2, X, AlertCircle, Smile, Image as ImageIcon, Pin, Download, Moon, Sun, 
-  AtSign, Reply, Eye, EyeOff, Menu, FileDown, Smartphone, LogOut, Lock, ChevronLeft, 
+  AtSign, Reply, Eye, EyeOff, Menu, FileDown, LogOut, Lock, ChevronLeft, 
   ChevronUp, ChevronRight, PlayCircle, Mic, Camera, Volume2, VolumeX, Play, Pause, 
-  FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, PhoneMissed, 
-  PhoneIncoming, PhoneOutgoing, Maximize2, Minimize2, Monitor, VideoOff, Settings, 
-  Share2, Radio, BarChart3, Clock, StopCircle, Disc3, Bell, Activity,
-  Headphones, Radio as RadioIcon, Volume, Video as VideoIcon, Mic as MicIcon 
+  FileText, ChevronDown, MessageSquare, Star, Phone, Video, PhoneOff, Settings, 
+  Radio, Bell, Activity, Volume
 } from 'lucide-react';
 
 // ==================== CONTEXT IMPORTS ====================
@@ -18,19 +16,8 @@ import { CallProvider, useCall } from './context/CallContext';
 import { SettingsProvider, useSettings } from './context/settingsContext';
 
 // ==================== COMPONENT IMPORTS ====================
-import SettingsManager from './components/settings/SettingsManager';
-import CallSettings from './components/settings/CallSettings';
-import AudioSettings from './components/settings/AudioSettings';
-import VideoSettings from './components/settings/VideoSettings';
-import StreamSettings from './components/settings/StreamSettings';
-import AppSettings from './components/settings/AppSettings';
-import CallPanel from './components/calls/CallPanel';
-import CallManager from './components/calls/CallManager';
-import EnhancedCallControls from './components/calls/EnhancedCallControls';
-import CallHistoryPanel from './components/calls/CallHistoryPanel';
 
 // ==================== STREAMING IMPORTS ====================
-import ModernStreamPanel from './components/streaming/ModernStreamPanel';
 
 // ==================== UTILITY IMPORTS ====================
 import { APP_VERSION, BUILD_DATE } from './version';
@@ -42,10 +29,8 @@ import {
   formatFileSize, 
   playNotificationSound, 
   copyToClipboard, 
-  getUserColor, 
   getInitials, 
   getAvatarStyle, 
-  detectLinks, 
   extractMentions 
 } from './utils/helpers';
 
@@ -72,14 +57,18 @@ import {
 import { useEnhancedCall } from './hooks/useEnhancedcall';
 import { useWebRTC } from './hooks/useWebRTC';
 
-// ==================== THIRD PARTY ====================
-import EmojiPicker from 'emoji-picker-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { LiveKitRoom, VideoConference, RoomAudioRenderer } from '@livekit/components-react';
-import '@livekit/components-styles';
+const ModernStreamPanel = React.lazy(() => import('./components/streaming/ModernStreamPanel'));
+const LiveKitStage = React.lazy(() => import('./components/streaming/LiveKitStage'));
+const MarkdownMessageRenderer = React.lazy(() => import('./components/MarkdownMessageRenderer'));
+const SettingsManager = React.lazy(() => import('./components/settings/SettingsManager'));
+const CallSettings = React.lazy(() => import('./components/settings/CallSettings'));
+const AudioSettings = React.lazy(() => import('./components/settings/AudioSettings'));
+const VideoSettings = React.lazy(() => import('./components/settings/VideoSettings'));
+const StreamSettings = React.lazy(() => import('./components/settings/StreamSettings'));
+const AppSettings = React.lazy(() => import('./components/settings/AppSettings'));
+const CallPanel = React.lazy(() => import('./components/calls/CallPanel'));
+const CallHistoryPanel = React.lazy(() => import('./components/calls/CallHistoryPanel'));
+const EmojiPicker = React.lazy(() => import('emoji-picker-react'));
 
 // ==================== CONSTANTS ====================
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🎉', '🔥'];
@@ -2001,33 +1990,9 @@ function AppContent() {
     }
     
     return (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({node, inline, className, children, ...props}) {
-            const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
-              <SyntaxHighlighter
-                style={vscDarkPlus}
-                language={match[1]}
-                PreTag="div"
-                {...props}
-              >
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
-            ) : (
-              <code className={className} {...props}>
-                {children}
-              </code>
-            );
-          },
-          a({node, children, ...props}) {
-            return <a {...props} target="_blank" rel="noopener noreferrer" className="message-link">{children}</a>;
-          }
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+      <Suspense fallback={<p>{msg.text}</p>}>
+        <MarkdownMessageRenderer content={content} />
+      </Suspense>
     );
   };
 
@@ -4056,16 +4021,14 @@ function AppContent() {
             <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Leave Stream</button>
           </div>
           <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
-            <LiveKitRoom
-              video={isStreamHost}
-              audio={isStreamHost}
-              token={liveKitToken}
-              serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
-              onDisconnected={handleLeaveStream}
-            >
-              <VideoConference />
-              <RoomAudioRenderer />
-            </LiveKitRoom>
+            <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '16px' }}>Loading stream...</div>}>
+              <LiveKitStage
+                isHost={isStreamHost}
+                token={liveKitToken}
+                serverUrl={process.env.REACT_APP_LIVEKIT_URL || "wss://devchat-pro-f8nd2p1j.livekit.cloud"}
+                onDisconnected={handleLeaveStream}
+              />
+            </Suspense>
           </div>
         </div>
       )}
@@ -4355,7 +4318,9 @@ function AppContent() {
       {/* Emoji Picker */}
       {showEmojiPicker && (
         <div className="emoji-picker-container">
-          <EmojiPicker onEmojiClick={handleEmojiClick} theme={theme} />
+          <Suspense fallback={<div style={{ minWidth: 260, minHeight: 240 }} />}>
+            <EmojiPicker onEmojiClick={handleEmojiClick} theme={theme} />
+          </Suspense>
         </div>
       )}
 
@@ -4553,6 +4518,38 @@ function AppContent() {
         )}
       </AnimatePresence>
 
+      {/* Streaming Panel */}
+      <AnimatePresence>
+        {showStreamingTab && (
+          <motion.div className="streaming-tab" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
+            <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '16px' }}>Loading stream panel...</div>}>
+              <ModernStreamPanel
+                isHost={!!liveStreamInfo?.isHost}
+                streamSource={streamSource}
+                isMuted={isMuted}
+                isVideoOff={isVideoOff}
+                viewerCount={liveStreamInfo?.viewerCount || 0}
+                onToggleMute={toggleMute}
+                onToggleVideo={toggleVideo}
+                onEndStream={() => stopHostedLivestream(true)}
+                onSwitchSource={toggleScreenShare}
+                streamTitle={`${room || 'Room'} Live Stream`}
+                streamerName={liveStreamInfo?.host || username}
+                viewers={liveStreamInfo?.viewers || []}
+                chatMessages={livestreamComments.map(c => ({ sender: c.from, text: c.text || c.emoji, time: formatRelativeTime(c.time) }))}
+                onSendChat={(text) => {
+                  setLivestreamCommentInput(text);
+                  setTimeout(sendLivestreamComment, 0);
+                }}
+                onReact={sendLivestreamReaction}
+                streamDuration={callDuration}
+                likes={livestreamComments.filter(c => c.type === 'reaction').length}
+              />
+            </Suspense>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Image Viewer Modal */}
       <AnimatePresence>
         {imageViewer && (
@@ -4673,92 +4670,118 @@ function AppContent() {
 
       {/* Active Call Panel */}
       {callState === 'active' && callPeer && (
-        <CallPanel
-          callType={callType}
-          callPeer={callPeer.username}
-          callDuration={callDuration}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          isScreenSharing={isScreenSharing}
-          isCallMinimized={isCallMinimized}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-          onToggleScreenShare={toggleScreenShare}
-          onEndCall={endCall}
-          onToggleMinimize={toggleCallMinimize}
-          localVideoRef={localVideoRef}
-          remoteVideoRef={remoteVideoRef}
-          formatDuration={formatCallDuration}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          remoteIsScreenSharing={remoteIsScreenSharing}
-          connectionQuality={connectionQuality}
-        />
+        <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '12px' }}>Loading call panel...</div>}>
+          <CallPanel
+            callType={callType}
+            callPeer={callPeer.username}
+            callDuration={callDuration}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            isScreenSharing={isScreenSharing}
+            isCallMinimized={isCallMinimized}
+            onToggleMute={toggleMute}
+            onToggleVideo={toggleVideo}
+            onToggleScreenShare={toggleScreenShare}
+            onEndCall={endCall}
+            onToggleMinimize={toggleCallMinimize}
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            formatDuration={formatCallDuration}
+            localStream={localStream}
+            remoteStream={remoteStream}
+            remoteIsScreenSharing={remoteIsScreenSharing}
+            connectionQuality={connectionQuality}
+          />
+        </Suspense>
       )}
 
       {/* Livestream Panel */}
       {liveStreamInfo && (
-        <ModernStreamPanel
-          isHost={liveStreamInfo.isHost}
-          streamSource={liveStreamInfo.source}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          viewerCount={viewers}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-          onEndStream={stopHostedLivestream}
-          onSwitchSource={() => startLivestream(streamVisibility, streamSource === 'camera' ? 'screen' : 'camera')}
-          streamTitle="My Awesome Stream"
-          streamerName={username}
-          streamThumbnail="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1280"
-          viewers={[]}
-          chatMessages={livestreamComments}
-          onSendChat={sendLivestreamComment}
-          onReact={sendLivestreamReaction}
-          streamQuality="1080p"
-          streamDuration={callDuration}
-          likes={1234}
-          shares={567}
-        />
+        <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '12px' }}>Loading stream panel...</div>}>
+          <ModernStreamPanel
+            isHost={liveStreamInfo.isHost}
+            streamSource={liveStreamInfo.source}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            viewerCount={viewers}
+            onToggleMute={toggleMute}
+            onToggleVideo={toggleVideo}
+            onEndStream={stopHostedLivestream}
+            onSwitchSource={() => startLivestream(streamVisibility, streamSource === 'camera' ? 'screen' : 'camera')}
+            streamTitle="My Awesome Stream"
+            streamerName={username}
+            streamThumbnail="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1280"
+            viewers={[]}
+            chatMessages={livestreamComments}
+            onSendChat={sendLivestreamComment}
+            onReact={sendLivestreamReaction}
+            streamQuality="1080p"
+            streamDuration={callDuration}
+            likes={1234}
+            shares={567}
+          />
+        </Suspense>
       )}
 
       {/* Settings Modals */}
       <AnimatePresence>
-        {showCallSettings && <CallSettings onClose={() => setShowCallSettings(false)} />}
-        {showAudioSettings && <AudioSettings onClose={() => setShowAudioSettings(false)} />}
-        {showVideoSettings && <VideoSettings onClose={() => setShowVideoSettings(false)} />}
-        {showStreamSettings && (
-          <StreamSettings 
-            visibility={streamVisibility}
-            source={streamSource}
-            onVisibilityChange={setStreamVisibility}
-            onSourceChange={setStreamSource}
-            onStartStream={() => { startLivestream(streamVisibility, streamSource); setShowStreamSettings(false); }}
-            onClose={() => setShowStreamSettings(false)}
-          />
+        {showCallSettings && (
+          <Suspense fallback={null}>
+            <CallSettings onClose={() => setShowCallSettings(false)} />
+          </Suspense>
         )}
-        {showAppSettings && <AppSettings onClose={() => setShowAppSettings(false)} />}
+        {showAudioSettings && (
+          <Suspense fallback={null}>
+            <AudioSettings onClose={() => setShowAudioSettings(false)} />
+          </Suspense>
+        )}
+        {showVideoSettings && (
+          <Suspense fallback={null}>
+            <VideoSettings onClose={() => setShowVideoSettings(false)} />
+          </Suspense>
+        )}
+        {showStreamSettings && (
+          <Suspense fallback={null}>
+            <StreamSettings 
+              visibility={streamVisibility}
+              source={streamSource}
+              onVisibilityChange={setStreamVisibility}
+              onSourceChange={setStreamSource}
+              onStartStream={() => { startLivestream(streamVisibility, streamSource); setShowStreamSettings(false); }}
+              onClose={() => setShowStreamSettings(false)}
+            />
+          </Suspense>
+        )}
+        {showAppSettings && (
+          <Suspense fallback={null}>
+            <AppSettings onClose={() => setShowAppSettings(false)} />
+          </Suspense>
+        )}
       </AnimatePresence>
 
       {/* Call History Panel */}
       <AnimatePresence>
         {showCallHistory && (
-          <CallHistoryPanel
-            history={callHistory}
-            onClose={() => setShowCallHistory(false)}
-            formatDuration={formatDuration}
-          />
+          <Suspense fallback={null}>
+            <CallHistoryPanel
+              history={callHistory}
+              onClose={() => setShowCallHistory(false)}
+              formatDuration={formatDuration}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
 
       {/* Settings Manager */}
-      <SettingsManager
-        currentView={currentView}
-        onClose={() => setCurrentView('chat')}
-        callHistory={callHistory}
-        formatDuration={formatDuration}
-        getQualityLabelStyle={getQualityLabelStyle}
-      />
+      <Suspense fallback={null}>
+        <SettingsManager
+          currentView={currentView}
+          onClose={() => setCurrentView('chat')}
+          callHistory={callHistory}
+          formatDuration={formatDuration}
+          getQualityLabelStyle={getQualityLabelStyle}
+        />
+      </Suspense>
 
       {/* Toast Messages */}
       <AnimatePresence>
