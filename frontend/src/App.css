@@ -103,6 +103,29 @@
   --font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
 }
 
+[data-font-size="small"] {
+  font-size: 14px;
+}
+
+[data-font-size="medium"] {
+  font-size: 16px;
+}
+
+[data-font-size="large"] {
+  font-size: 18px;
+}
+
+body.compact-mode .chat-header,
+body.compact-mode .search-bar,
+body.compact-mode .chat-footer {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+body.compact-mode .msg-bubble {
+  padding: 8px 10px;
+}
+
 /* ==================== GLOBAL STYLES ==================== */
 * {
   margin: 0;
@@ -2424,6 +2447,24 @@ input, textarea {
   .menu-dropdown-dm,
   .mobile-menu-sheet {
     z-index: 17001 !important;
+  }
+
+  .settings-panel-overlay,
+  .app-settings-overlay,
+  .stream-setup-overlay,
+  .stream-settings-backdrop {
+    z-index: 18000 !important;
+    pointer-events: auto !important;
+    background: rgba(8, 12, 20, 0.64) !important;
+  }
+
+  .settings-panel,
+  .app-settings-panel,
+  .stream-setup-modal,
+  .stream-settings-modal {
+    position: relative !important;
+    z-index: 18001 !important;
+    pointer-events: auto !important;
   }
 
   .menu-item,

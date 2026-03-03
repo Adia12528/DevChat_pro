@@ -117,6 +117,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function AppContent() {
+  const { settings: appSettings, updateSettings } = useSettings();
+
   // ==================== CORE STATES ====================
   const [username, setUsername] = useState('');
   const [room, setRoom] = useState('');
@@ -128,8 +130,8 @@ function AppContent() {
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+  const [soundEnabled, setSoundEnabled] = useState(() => appSettings?.notifications?.soundEnabled ?? true);
+  const [theme, setTheme] = useState(() => appSettings?.ui?.theme || localStorage.getItem('theme') || 'dark');
   const [fontStyle, setFontStyle] = useState(localStorage.getItem('fontStyle') || 'default');
   const [ringtoneStyle, setRingtoneStyle] = useState(localStorage.getItem('ringtoneStyle') || 'soft');
   const [ringtoneVolume, setRingtoneVolume] = useState(() => {
@@ -142,6 +144,9 @@ function AppContent() {
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [isIOS, setIsIOS] = useState(/iPhone|iPad|iPod/i.test(navigator.userAgent));
   const [isWindows, setIsWindows] = useState(/Windows/i.test(navigator.userAgent));
+
+  const showLastSeenEnabled = appSettings?.privacy?.showLastSeen !== false;
+  const showReadReceiptsEnabled = appSettings?.privacy?.showReadReceipts !== false;
   
   // ==================== MESSAGE STATES ====================
   const [editingMsgId, setEditingMsgId] = useState(null);
@@ -478,6 +483,7 @@ function AppContent() {
   const ringtoneAudioContextRef = useRef(null);
   const endCallRef = useRef(() => {});
   const idleStateRef = useRef(false);
+  const appSettingsRef = useRef(appSettings);
   const notificationPrefsRef = useRef(notificationPrefs);
   const blockedUsersRef = useRef(blockedUsers);
   const autoJoinLivestreamRef = useRef(autoJoinLivestream);
@@ -498,6 +504,7 @@ function AppContent() {
   useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
   useEffect(() => { liveStreamInfoRef.current = liveStreamInfo; }, [liveStreamInfo]);
   useEffect(() => { autoJoinLivestreamRef.current = autoJoinLivestream; }, [autoJoinLivestream]);
+  useEffect(() => { appSettingsRef.current = appSettings; }, [appSettings]);
   useEffect(() => { notificationPrefsRef.current = notificationPrefs; }, [notificationPrefs]);
   useEffect(() => { blockedUsersRef.current = blockedUsers; }, [blockedUsers]);
 
@@ -543,6 +550,147 @@ function AppContent() {
   }, []);
 
   // ==================== THEME ====================
+  useEffect(() => {
+    const nextTheme = appSettings?.ui?.theme || 'dark';
+    if (theme !== nextTheme) {
+      setTheme(nextTheme);
+    }
+  }, [appSettings?.ui?.theme, theme]);
+
+  useEffect(() => {
+    const contextSoundEnabled = appSettings?.notifications?.soundEnabled;
+    if (typeof contextSoundEnabled === 'boolean' && soundEnabled !== contextSoundEnabled) {
+      setSoundEnabled(contextSoundEnabled);
+    }
+  }, [appSettings?.notifications?.soundEnabled, soundEnabled]);
+
+  useEffect(() => {
+    const mentionOnlySetting = !!appSettings?.notifications?.mentionOnly;
+    if (notificationPrefs.mentionOnly !== mentionOnlySetting) {
+      setNotificationPrefs(prev => ({ ...prev, mentionOnly: mentionOnlySetting }));
+    }
+  }, [appSettings?.notifications?.mentionOnly, notificationPrefs.mentionOnly]);
+
+  useEffect(() => {
+    const quietHours = appSettings?.notifications?.quietHours || {};
+    const quietHoursEnabled = !!quietHours.enabled;
+    const quietStart = quietHours.start || '22:00';
+    const quietEnd = quietHours.end || '07:00';
+
+    if (
+      notificationPrefs.quietHoursEnabled !== quietHoursEnabled ||
+      notificationPrefs.quietStart !== quietStart ||
+      notificationPrefs.quietEnd !== quietEnd
+    ) {
+      setNotificationPrefs(prev => ({
+        ...prev,
+        quietHoursEnabled,
+        quietStart,
+        quietEnd
+      }));
+    }
+  }, [
+    appSettings?.notifications?.quietHours?.enabled,
+    appSettings?.notifications?.quietHours?.start,
+    appSettings?.notifications?.quietHours?.end,
+    notificationPrefs.quietHoursEnabled,
+    notificationPrefs.quietStart,
+    notificationPrefs.quietEnd
+  ]);
+
+  useEffect(() => {
+    if (!showReadReceiptsEnabled) {
+      setShowDoubleTick(false);
+      setShowBlueTick(false);
+    }
+  }, [showReadReceiptsEnabled]);
+
+  useEffect(() => {
+    const fontSize = appSettings?.ui?.fontSize || 'medium';
+    document.documentElement.setAttribute('data-font-size', fontSize);
+  }, [appSettings?.ui?.fontSize]);
+
+  useEffect(() => {
+    const compactMode = !!appSettings?.ui?.compactMode;
+    document.body.classList.toggle('compact-mode', compactMode);
+    return () => document.body.classList.remove('compact-mode');
+  }, [appSettings?.ui?.compactMode]);
+
+  useEffect(() => {
+    const contextTheme = appSettings?.ui?.theme || 'dark';
+    if (contextTheme !== theme) {
+      updateSettings({
+        ui: {
+          ...(appSettings?.ui || {}),
+          theme
+        }
+      });
+    }
+  }, [theme, appSettings?.ui, updateSettings]);
+
+  useEffect(() => {
+    const contextSoundEnabled = appSettings?.notifications?.soundEnabled ?? true;
+    if (contextSoundEnabled !== soundEnabled) {
+      updateSettings({
+        notifications: {
+          ...(appSettings?.notifications || {}),
+          soundEnabled
+        }
+      });
+    }
+  }, [soundEnabled, appSettings?.notifications, updateSettings]);
+
+  useEffect(() => {
+    const contextMentionOnly = !!appSettings?.notifications?.mentionOnly;
+    if (contextMentionOnly !== notificationPrefs.mentionOnly) {
+      updateSettings({
+        notifications: {
+          ...(appSettings?.notifications || {}),
+          mentionOnly: notificationPrefs.mentionOnly
+        }
+      });
+    }
+  }, [notificationPrefs.mentionOnly, appSettings?.notifications, updateSettings]);
+
+  useEffect(() => {
+    const contextQuietHours = appSettings?.notifications?.quietHours || {};
+    const contextEnabled = !!contextQuietHours.enabled;
+    const contextStart = contextQuietHours.start || '22:00';
+    const contextEnd = contextQuietHours.end || '07:00';
+
+    if (
+      contextEnabled !== notificationPrefs.quietHoursEnabled ||
+      contextStart !== notificationPrefs.quietStart ||
+      contextEnd !== notificationPrefs.quietEnd
+    ) {
+      updateSettings({
+        notifications: {
+          ...(appSettings?.notifications || {}),
+          quietHours: {
+            enabled: notificationPrefs.quietHoursEnabled,
+            start: notificationPrefs.quietStart,
+            end: notificationPrefs.quietEnd
+          }
+        }
+      });
+    }
+  }, [
+    notificationPrefs.quietHoursEnabled,
+    notificationPrefs.quietStart,
+    notificationPrefs.quietEnd,
+    appSettings?.notifications,
+    updateSettings
+  ]);
+
+  useEffect(() => {
+    const desktopNotificationsEnabled = appSettings?.notifications?.desktopNotifications !== false;
+    if (!desktopNotificationsEnabled) return;
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [appSettings?.notifications?.desktopNotifications]);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
@@ -852,7 +1000,7 @@ function AppContent() {
       if (lastMessageIdRef.current === data._id) return;
       lastMessageIdRef.current = data._id;
       
-      if (blockedUsers.includes(data.sender)) return;
+      if (blockedUsersRef.current.includes(data.sender)) return;
       
       setChat(prev => [...prev, data]);
       
@@ -873,9 +1021,7 @@ function AppContent() {
       }
       
       // Play sound
-      if (soundEnabled && data.sender !== usernameRef.current && 
-          !notificationPrefs.mutedRooms.includes(data.room) && 
-          !isWithinQuietHours()) {
+      if (shouldPlaySoundForIncomingMessage(data)) {
         try {
           if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -883,6 +1029,26 @@ function AppContent() {
           playNotificationSound(audioContextRef.current);
         } catch (e) {
           console.log('Sound failed:', e);
+        }
+      }
+
+      const isDifferentRoom = data.room && data.room !== roomRef.current;
+      if (shouldNotifyForMessage(data, isDifferentRoom)) {
+        setNotificationItems(prev => {
+          const itemId = data._id || `${data.sender}-${data.time}-${data.room}`;
+          const nextItem = {
+            id: `msg-${itemId}`,
+            type: 'message',
+            sender: data.sender,
+            room: data.room,
+            preview: data.text || 'New message',
+            time: data.time || new Date().toISOString()
+          };
+          return [...prev.filter(item => item.id !== nextItem.id), nextItem].slice(-60);
+        });
+
+        if (!document.hasFocus()) {
+          showDesktopNotificationForMessage(data);
         }
       }
     });
@@ -1244,6 +1410,10 @@ function AppContent() {
         preview: `${data.host} is live`,
         time: new Date().toISOString()
       }]);
+
+      if (!document.hasFocus() && shouldNotifyForLivestreamEvent(data)) {
+        showDesktopNotificationForLivestream(data);
+      }
     });
 
     socket.on(LIVESTREAM_EVENTS.AVAILABLE, (data) => {
@@ -1256,6 +1426,10 @@ function AppContent() {
         preview: `${data.host} is live`,
         time: new Date().toISOString()
       }]);
+
+      if (!document.hasFocus() && shouldNotifyForLivestreamEvent(data)) {
+        showDesktopNotificationForLivestream(data);
+      }
     });
 
     socket.on(LIVESTREAM_EVENTS.OFFER, (data) => {
@@ -1386,7 +1560,7 @@ function AppContent() {
       stopRingtone();
       stopCallTimer();
     };
-  }, [soundEnabled, blockedUsers]);
+  }, []);
 
   // ==================== UTILITY FUNCTIONS ====================
   const getTypingTimeoutForRoom = useCallback((roomId) => {
@@ -1418,6 +1592,10 @@ function AppContent() {
     if (!isDifferentRoom) return false;
 
     const prefs = notificationPrefsRef.current;
+    const settings = appSettingsRef.current;
+    const desktopNotificationsEnabled = settings?.notifications?.desktopNotifications !== false;
+    if (!desktopNotificationsEnabled) return false;
+
     const roomId = messagePayload.room || '';
     if (prefs.mutedRooms.includes(roomId)) return false;
 
@@ -1432,6 +1610,75 @@ function AppContent() {
 
     return true;
   }, [isWithinQuietHours]);
+
+  const shouldPlaySoundForIncomingMessage = useCallback((messagePayload) => {
+    if (!messagePayload || messagePayload.sender === usernameRef.current) return false;
+
+    const prefs = notificationPrefsRef.current;
+    const roomId = messagePayload.room || '';
+    if (prefs.mutedRooms.includes(roomId)) return false;
+    if (isWithinQuietHours()) return false;
+
+    return soundEnabledRef.current;
+  }, [isWithinQuietHours]);
+
+  const showDesktopNotificationForMessage = useCallback((messagePayload) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const roomLabel = messagePayload.room || roomRef.current || 'chat';
+    const body = messagePayload.text || 'New message';
+    const notification = new Notification(`${messagePayload.sender} · ${roomLabel}`, {
+      body,
+      tag: `devchat-${roomLabel}`,
+      renotify: false,
+      silent: true
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    setTimeout(() => notification.close(), 5000);
+  }, []);
+
+  const shouldNotifyForLivestreamEvent = useCallback((streamPayload) => {
+    if (!streamPayload) return false;
+    if (streamPayload.host === usernameRef.current) return false;
+
+    const settings = appSettingsRef.current;
+    const desktopNotificationsEnabled = settings?.notifications?.desktopNotifications !== false;
+    if (!desktopNotificationsEnabled) return false;
+
+    const prefs = notificationPrefsRef.current;
+    const roomId = streamPayload.room || '';
+    if (prefs.mutedRooms.includes(roomId)) return false;
+    if (isWithinQuietHours()) return false;
+
+    return true;
+  }, [isWithinQuietHours]);
+
+  const showDesktopNotificationForLivestream = useCallback((streamPayload) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    const host = streamPayload.host || streamPayload.sender || 'Someone';
+    const roomLabel = streamPayload.room || roomRef.current || 'chat';
+    const notification = new Notification(`🔴 ${host} is live`, {
+      body: `Room: ${roomLabel}`,
+      tag: `devchat-live-${streamPayload.sessionId || host}`,
+      renotify: false,
+      silent: true
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    setTimeout(() => notification.close(), 6000);
+  }, []);
 
   const emitReliableMessage = useCallback((messagePayload, options = {}) => {
     const socket = socketRef.current;
@@ -1760,6 +2007,15 @@ function AppContent() {
       setShowStreamingTab(false);
     }
   }, [showMenuDropdown]);
+
+  useEffect(() => {
+    if (!(showCallSettings || showAudioSettings || showVideoSettings || showStreamSettings || showAppSettings)) {
+      return;
+    }
+    setShowMenuDropdown(false);
+    setShowMobileMenu(false);
+    setShowStreamingTab(false);
+  }, [showCallSettings, showAudioSettings, showVideoSettings, showStreamSettings, showAppSettings]);
 
   useEffect(() => {
     setShowStreamingTab(!!liveStreamInfo);
@@ -2586,20 +2842,24 @@ function AppContent() {
     
     setActiveRoom(dmRoom);
     setRoom(dmRoom);
+    roomRef.current = dmRoom;
     subscribedRoomsRef.current.add(dmRoom);
     
     socketRef.current.emit("join_room", { room: dmRoom, username: usernameRef.current, active: true, fetchHistory: true });
     
+    const dmUsers = roomUserMap[dmRoom];
+    setOnlineUsers(Array.isArray(dmUsers) ? dmUsers : []);
     setMessage(roomDrafts[dmRoom] || '');
     setShowRoomSidebar(false);
     setShowProfileModal(null);
-  }, [username, rooms, roomDrafts, blockedUsers]);
+  }, [username, rooms, roomDrafts, blockedUsers, roomUserMap]);
 
   const switchRoom = useCallback((roomId) => {
     const previousRoomId = roomRef.current;
     
     setActiveRoom(roomId);
     setRoom(roomId);
+    roomRef.current = roomId;
     subscribedRoomsRef.current.add(roomId);
     
     socketRef.current.emit("join_room", { room: roomId, username: usernameRef.current, active: true, fetchHistory: true });
@@ -4787,10 +5047,10 @@ function AppContent() {
           </div>
         </div>
 
-        {selectedUser && isSelectedUserOnline && callState !== 'active' && (
+        {selectedUser && callState !== 'active' && (
           <div className="call-buttons">
-            <button className="call-btn voice-call-btn" onClick={() => startCall('voice', selectedUser)} disabled={callState === 'calling' || callState === 'ringing'}><Phone size={18}/></button>
-            <button className="call-btn video-call-btn" onClick={() => startCall('video', selectedUser)} disabled={callState === 'calling' || callState === 'ringing'}><Video size={18}/></button>
+            <button className="call-btn voice-call-btn" onClick={() => startCall('voice', selectedUser)} disabled={callState === 'calling' || callState === 'ringing' || !connected} title={isSelectedUserOnline ? `Voice call ${selectedUser}` : `Call ${selectedUser} (status unknown/offline)`}><Phone size={18}/></button>
+            <button className="call-btn video-call-btn" onClick={() => startCall('video', selectedUser)} disabled={callState === 'calling' || callState === 'ringing' || !connected} title={isSelectedUserOnline ? `Video call ${selectedUser}` : `Call ${selectedUser} (status unknown/offline)`}><Video size={18}/></button>
           </div>
         )}
         
@@ -4924,7 +5184,7 @@ function AppContent() {
                   
                   <div className="msg-footer">
                     <span className="timestamp" title={new Date(msg.time).toLocaleString()}>{formatRelativeTime(msg.time)}</span>
-                    {isOwn && showDoubleTick && (() => {
+                    {isOwn && showReadReceiptsEnabled && showDoubleTick && (() => {
                       const readers = Array.isArray(msg.readBy) ? msg.readBy : [];
                       const seenByOthers = readers.some(r => r !== username);
                       return <span className={`message-ticks ${(seenByOthers && showBlueTick) ? 'blue' : ''}`}>✓✓</span>;
@@ -5090,7 +5350,7 @@ function AppContent() {
                 <div className="profile-avatar-large" style={getAvatarStyle(showProfileModal)}>{getInitials(showProfileModal)}</div>
                 <h2>{showProfileModal}</h2>
                 <span className={`profile-status status-${userStatus[showProfileModal] || 'online'}`}>{userStatus[showProfileModal] || 'online'}</span>
-                {userLastSeen[showProfileModal] && <span className="profile-status" style={{ opacity: 0.75 }}>last seen {formatRelativeTime(userLastSeen[showProfileModal])}</span>}
+                {showLastSeenEnabled && userLastSeen[showProfileModal] && <span className="profile-status" style={{ opacity: 0.75 }}>last seen {formatRelativeTime(userLastSeen[showProfileModal])}</span>}
               </div>
               <div className="profile-body">
                 {userProfiles[showProfileModal]?.bio && <div className="profile-bio"><strong>Bio</strong><p>{userProfiles[showProfileModal].bio}</p></div>}

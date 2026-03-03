@@ -709,8 +709,15 @@ io.on('connection', (socket) => {
     // --- Calling Logic ---
     const resolveCallTargetSocket = (toUsername) => {
         const activeRoom = socket.activeRoom || socket.room;
-        if (!activeRoom || !roomUsers[activeRoom] || !toUsername) return null;
-        return findTargetSocketInRoom(activeRoom, toUsername);
+        if (!toUsername) return null;
+
+        if (activeRoom && roomUsers[activeRoom]) {
+            const inActiveRoom = findTargetSocketInRoom(activeRoom, toUsername);
+            if (inActiveRoom) return inActiveRoom;
+        }
+
+        const fallbackSockets = getSocketIdsByUsername(toUsername);
+        return fallbackSockets.length > 0 ? fallbackSockets[0] : null;
     };
 
     const notifyCallerUnavailable = (reason = 'User not found or offline') => {
