@@ -1508,11 +1508,11 @@ function AppContent() {
     };
 
     if (showMenuDropdown) {
-      document.addEventListener('pointerdown', handleClickOutsideMenu, true);
+      document.addEventListener('click', handleClickOutsideMenu);
     }
 
     return () => {
-      document.removeEventListener('pointerdown', handleClickOutsideMenu, true);
+      document.removeEventListener('click', handleClickOutsideMenu);
     };
   }, [showMenuDropdown]);
 
@@ -1524,13 +1524,19 @@ function AppContent() {
     };
 
     if (showMobileMenu) {
-      document.addEventListener('pointerdown', handleClickOutsideMobileMenu, true);
+      document.addEventListener('click', handleClickOutsideMobileMenu);
     }
 
     return () => {
-      document.removeEventListener('pointerdown', handleClickOutsideMobileMenu, true);
+      document.removeEventListener('click', handleClickOutsideMobileMenu);
     };
   }, [showMobileMenu]);
+
+  useEffect(() => {
+    if (!isMobileView || !liveKitToken) {
+      setShowMobileMenu(false);
+    }
+  }, [isMobileView, liveKitToken]);
 
   useEffect(() => {
     if (!showMenuDropdown) {
@@ -4137,8 +4143,6 @@ function AppContent() {
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   style={{ margin: '0 auto', maxWidth: 360, zIndex: 10999 }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMobileMenu(false); }}><FileDown size={18}/><span>Export Chat</span></button>
@@ -4180,7 +4184,19 @@ function AppContent() {
               <Radio size={24} color="var(--error)" className="pulse-animation" />
               <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>{isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}</h2>
             </div>
-            <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Leave Stream</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {isMobileView && (
+                <button
+                  className="menu-toggle"
+                  onClick={() => setShowMobileMenu((prev) => !prev)}
+                  title="Open stream menu"
+                  aria-label="Open stream menu"
+                >
+                  <Menu size={20} />
+                </button>
+              )}
+              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Leave Stream</button>
+            </div>
           </div>
           <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
             <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '16px' }}>Loading stream...</div>}>
@@ -4210,11 +4226,7 @@ function AppContent() {
         <div className="menu-container" ref={menuContainerRef}>
           <button
             className="menu-toggle"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenuDropdown(!showMenuDropdown);
-            }}
+            onClick={() => setShowMenuDropdown(!showMenuDropdown)}
             title="Menu"
           ><Menu size={24}/></button>
           
@@ -4227,8 +4239,6 @@ function AppContent() {
                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
