@@ -1267,7 +1267,7 @@ function AppContent() {
 
     socket.on(ROOM_EVENTS.REGISTRY_UPDATED, (data) => {
       const nextRooms = Array.isArray(data?.rooms)
-        ? data.rooms.filter(r => r?.id && !r.id.includes('_dm_'))
+        ? data.rooms.filter(r => r?.id && !r.id.includes('_dm_') && Number(r.count || 0) > 0)
         : [];
       setActiveRoomRegistry(nextRooms);
     });
@@ -5434,10 +5434,10 @@ function AppContent() {
                     </div>
                     <div className="sidebar-section">
                       <div className="sidebar-section-title">Active Rooms</div>
-                      {activeRoomRegistry.length === 0 ? (
+                      {activeRoomRegistry.filter(entry => Number(entry?.count || 0) > 0).length === 0 ? (
                         <div className="sidebar-empty">No active rooms available</div>
                       ) : (
-                        activeRoomRegistry.map((entry) => (
+                        activeRoomRegistry.filter(entry => Number(entry?.count || 0) > 0).map((entry) => (
                           <button key={entry.id} className={`room-item ${(activeRoom || room) === entry.id ? 'active' : ''}`} onClick={() => { switchRoom(entry.id); setShowRoomSidebar(false); }}>
                             <div className="room-icon">#</div>
                             <span>{entry.name || entry.id}</span>
