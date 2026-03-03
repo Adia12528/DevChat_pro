@@ -2871,3 +2871,78 @@ input, textarea {
       width: min(64vw, 340px);
     }
   }
+
+/* ==================== MOBILE MENU FINAL FIX ==================== */
+@media (max-width: 768px) {
+  .menu-backdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 14000 !important;
+    background: rgba(7, 10, 16, 0.62) !important;
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    position: fixed !important;
+    left: max(8px, env(safe-area-inset-left)) !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    top: auto !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: 560px !important;
+    margin-left: auto;
+    margin-right: auto;
+    max-height: min(78dvh, calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom))) !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    border-radius: 16px !important;
+    padding: 10px !important;
+    border: 1px solid var(--border) !important;
+    background: var(--bg-secondary) !important;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45) !important;
+    transform: none !important;
+    z-index: 14001 !important;
+  }
+
+  .menu-dropdown::before,
+  .menu-dropdown-dm::before {
+    content: '';
+    position: sticky;
+    top: -2px;
+    display: block;
+    width: 42px;
+    height: 4px;
+    margin: 2px auto 8px;
+    border-radius: 999px;
+    background: rgba(134, 150, 160, 0.65);
+  }
+
+  .menu-item {
+    min-height: 46px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    left: max(6px, env(safe-area-inset-left)) !important;
+    right: max(6px, env(safe-area-inset-right)) !important;
+    bottom: max(6px, env(safe-area-inset-bottom)) !important;
+    max-height: min(82dvh, calc(100dvh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom))) !important;
+    border-radius: 14px !important;
+    padding: 8px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    left: max(4px, env(safe-area-inset-left)) !important;
+    right: max(4px, env(safe-area-inset-right)) !important;
+    border-radius: 12px !important;
+    max-height: 84dvh !important;
+  }
+}
