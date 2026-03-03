@@ -89,6 +89,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
@@ -106,6 +107,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
@@ -119,6 +121,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
@@ -139,6 +142,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   transition: all 0.2s;
 }
@@ -175,6 +179,7 @@
   width: 320px;
   height: 400px;
   background: rgba(30, 30, 30, 0.95);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -397,6 +402,7 @@
   justify-content: center;
   gap: 12px;
   background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   padding: 12px 24px;
   border-radius: 60px;
@@ -441,6 +447,7 @@
 .livestream-chat-panel {
   width: 300px;
   background: rgba(30, 30, 30, 0.95);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
@@ -646,6 +653,7 @@
   background: rgba(0, 0, 0, 0.5);
   padding: 4px 10px;
   border-radius: 20px;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
 }
 
@@ -660,6 +668,7 @@
   height: 40px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
@@ -692,6 +701,7 @@
 .livestream-viewer-chat {
   width: 300px;
   background: rgba(30, 30, 30, 0.95);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-left: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
@@ -775,6 +785,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
 }
 
@@ -784,6 +795,7 @@
   right: 0;
   width: 220px;
   background: rgba(30, 30, 30, 0.95);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);

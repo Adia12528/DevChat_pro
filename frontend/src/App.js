@@ -27,7 +27,7 @@ import AppSettings from './components/settings/AppSettings';
 import CallPanel from './components/calls/CallPanel';
 import CallManager from './components/calls/CallManager';
 import EnhancedCallControls from './components/calls/EnhancedCallControls';
-import CallHistoryPanel from './components/CallHistoryPanel';
+import CallHistoryPanel from './components/calls/CallHistoryPanel';
 
 // ==================== STREAMING IMPORTS ====================
 import ModernStreamPanel from './components/streaming/ModernStreamPanel';
@@ -70,7 +70,6 @@ import {
 
 // ==================== HOOK IMPORTS ====================
 import { useEnhancedCall } from './hooks/useEnhancedcall';
-import { useEnhancedStreaming } from './hooks/useEnhancedStreaming';
 import { useWebRTC } from './hooks/useWebRTC';
 
 // ==================== THIRD PARTY ====================
@@ -469,7 +468,6 @@ function AppContent() {
 
   // ==================== CUSTOM HOOKS ====================
   const enhancedCall = useEnhancedCall(socketRef.current, username);
-  const enhancedStreaming = useEnhancedStreaming(socketRef.current, username, room);
   const webrtc = useWebRTC(username, socketRef);
 
   // ==================== REF UPDATES ====================
