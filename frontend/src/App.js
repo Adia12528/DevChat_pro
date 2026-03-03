@@ -3234,16 +3234,19 @@ function AppContent() {
     }
   }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer]);
 
-  const sendLivestreamComment = useCallback(() => {
+  const sendLivestreamComment = useCallback((textOverride = '') => {
     const activeSession = liveStreamInfoRef.current;
-    const text = livestreamCommentInput.trim();
+    const hasOverride = typeof textOverride === 'string' && textOverride.trim().length > 0;
+    const text = hasOverride ? textOverride.trim() : livestreamCommentInput.trim();
     if (!activeSession?.sessionId || !socketRef.current || !text) return;
     socketRef.current.emit(LIVESTREAM_EVENTS.COMMENT, {
       sessionId: activeSession.sessionId,
       from: usernameRef.current,
       text
     });
-    setLivestreamCommentInput('');
+    if (!hasOverride) {
+      setLivestreamCommentInput('');
+    }
   }, [livestreamCommentInput]);
 
   const sendLivestreamReaction = useCallback((emoji) => {
@@ -4777,12 +4780,13 @@ function AppContent() {
 
       {/* Streaming Panel */}
       <AnimatePresence>
-        {showStreamingTab && (
+        {showStreamingTab && !liveStreamInfo && (
           <motion.div className="streaming-tab" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
             <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '16px' }}>Loading stream panel...</div>}>
               <ModernStreamPanel
                 isHost={!!liveStreamInfo?.isHost}
                 streamSource={streamSource}
+                stream={liveStreamInfo?.isHost ? localStream : remoteStream}
                 isMuted={isMuted}
                 isVideoOff={isVideoOff}
                 viewerCount={liveStreamInfo?.viewerCount || 0}
@@ -4794,10 +4798,7 @@ function AppContent() {
                 streamerName={liveStreamInfo?.host || username}
                 viewers={liveStreamInfo?.viewers || []}
                 chatMessages={livestreamComments.map(c => ({ sender: c.from, text: c.text || c.emoji, time: formatRelativeTime(c.time) }))}
-                onSendChat={(text) => {
-                  setLivestreamCommentInput(text);
-                  setTimeout(sendLivestreamComment, 0);
-                }}
+                onSendChat={sendLivestreamComment}
                 onReact={sendLivestreamReaction}
                 streamDuration={callDuration}
                 likes={livestreamComments.filter(c => c.type === 'reaction').length}
@@ -4957,6 +4958,7 @@ function AppContent() {
         <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '12px' }}>Loading stream panel...</div>}>
           <ModernStreamPanel
             isHost={liveStreamInfo.isHost}
+            stream={liveStreamInfo.isHost ? localStream : remoteStream}
             streamSource={liveStreamInfo.source}
             isMuted={isMuted}
             isVideoOff={isVideoOff}
@@ -4965,17 +4967,17 @@ function AppContent() {
             onToggleVideo={toggleVideo}
             onEndStream={stopHostedLivestream}
             onSwitchSource={() => startLivestream(streamVisibility, streamSource === 'camera' ? 'screen' : 'camera')}
-            streamTitle="My Awesome Stream"
-            streamerName={username}
+            streamTitle={`${liveStreamInfo?.room || room || 'Room'} Live Stream`}
+            streamerName={liveStreamInfo?.host || username}
             streamThumbnail="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1280"
-            viewers={[]}
-            chatMessages={livestreamComments}
+            viewers={liveStreamInfo?.viewers || []}
+            chatMessages={livestreamComments.map(c => ({ sender: c.from, text: c.text || c.emoji, time: formatRelativeTime(c.time) }))}
             onSendChat={sendLivestreamComment}
             onReact={sendLivestreamReaction}
             streamQuality="1080p"
             streamDuration={callDuration}
-            likes={1234}
-            shares={567}
+            likes={livestreamComments.filter(c => c.type === 'reaction').length}
+            shares={liveStreamInfo?.viewerCount || viewers || 0}
           />
         </Suspense>
       )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Users, MessageSquare, Heart, ThumbsUp, 
   Share2, Settings, Mic, MicOff, Camera, CameraOff,
@@ -13,6 +13,7 @@ import '../../styles/index.css';
 
 const ModernStreamPanel = ({
   isHost,
+  stream,
   streamSource,
   isMuted,
   isVideoOff,
@@ -41,6 +42,20 @@ const ModernStreamPanel = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
   const [reactions, setReactions] = useState([]);
+  const streamVideoRef = useRef(null);
+
+  useEffect(() => {
+    if (!streamVideoRef.current) return;
+    if (stream) {
+      streamVideoRef.current.srcObject = stream;
+      const playPromise = streamVideoRef.current.play?.();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    } else {
+      streamVideoRef.current.srcObject = null;
+    }
+  }, [stream]);
 
   const formatDuration = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
@@ -58,9 +73,10 @@ const ModernStreamPanel = ({
   };
 
   const handleReaction = (emoji) => {
-    setReactions(prev => [...prev, { emoji, id: Date.now() }]);
+    const reactionId = Date.now() + Math.random();
+    setReactions(prev => [...prev, { emoji, id: reactionId }]);
     setTimeout(() => {
-      setReactions(prev => prev.filter(r => r.id !== Date.now()));
+      setReactions(prev => prev.filter(r => r.id !== reactionId));
     }, 3000);
     onReact?.(emoji);
   };
@@ -79,8 +95,16 @@ const ModernStreamPanel = ({
       <div className="stream-video-area">
         <div className="stream-video-wrapper">
           <div className="stream-video-feed">
-            {isHost ? (
-              <video className="stream-video" autoPlay muted playsInline />
+            {stream ? (
+              <video ref={streamVideoRef} className="stream-video" autoPlay muted={isHost} playsInline />
+            ) : isHost ? (
+              <div className="video-placeholder">
+                <div className="placeholder-avatar">
+                  {streamerName?.charAt(0).toUpperCase() || 'L'}
+                </div>
+                <div className="placeholder-name">Preparing Stream...</div>
+                <div className="placeholder-status">Waiting for media input</div>
+              </div>
             ) : (
               <img 
                 src={streamThumbnail || "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1280"} 
