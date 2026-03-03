@@ -1,9 +1,4 @@
 // MediaManager.js - Manages media devices and streams
-import { 
-  getAdaptiveMediaConstraints,
-  getFallbackMediaConstraints,
-  optimizeRtpSenders
-} from '../../components/calls/CallUtils';
 
 class MediaManager {
   constructor() {
@@ -99,42 +94,73 @@ class MediaManager {
     }
   }
 
-  // ==================== GET ADAPTIVE CONSTRAINTS ====================
+  // ==================== GET CONSTRAINTS ====================
   getConstraints(callType, quality = 'auto', deviceIds = {}) {
-    const baseConstraints = getAdaptiveMediaConstraints({
-      callType,
-      userAgent: navigator.userAgent
-    });
+    const baseConstraints = {
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      }
+    };
 
     // Apply device preferences
-    if (deviceIds.camera && deviceIds.camera !== 'system') {
-      if (baseConstraints.video) {
-        baseConstraints.video.deviceId = { exact: deviceIds.camera };
-      }
-    }
-
     if (deviceIds.microphone && deviceIds.microphone !== 'system') {
-      if (baseConstraints.audio) {
-        baseConstraints.audio.deviceId = { exact: deviceIds.microphone };
-      }
+      baseConstraints.audio.deviceId = { exact: deviceIds.microphone };
     }
 
-    return baseConstraints;
-  }
-
-  // ==================== GET FALLBACK CONSTRAINTS ====================
-  getFallbackConstraints(callType, deviceIds = {}) {
-    const constraints = getFallbackMediaConstraints(callType);
-
-    if (deviceIds.camera && deviceIds.camera !== 'system' && constraints.video) {
-      constraints.video.deviceId = { exact: deviceIds.camera };
+    if (callType === 'audio') {
+      return { ...baseConstraints, video: false };
     }
 
-    if (deviceIds.microphone && deviceIds.microphone !== 'system' && constraints.audio) {
-      constraints.audio.deviceId = { exact: deviceIds.microphone };
+    // Video constraints
+    let videoConstraints = {};
+    
+    switch (quality) {
+      case 'low':
+        videoConstraints = {
+          width: { ideal: 640, max: 854 },
+          height: { ideal: 360, max: 480 },
+          frameRate: { ideal: 15, max: 24 },
+        };
+        break;
+      case 'medium':
+        videoConstraints = {
+          width: { ideal: 854, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 24, max: 30 },
+        };
+        break;
+      case 'high':
+        videoConstraints = {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 48 },
+        };
+        break;
+      case 'ultra':
+        videoConstraints = {
+          width: { ideal: 1920, max: 3840 },
+          height: { ideal: 1080, max: 2160 },
+          frameRate: { ideal: 48, max: 60 },
+        };
+        break;
+      default:
+        videoConstraints = {
+          width: { ideal: 1280, min: 320, max: 1920 },
+          height: { ideal: 720, min: 240, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+        };
     }
 
-    return constraints;
+    if (deviceIds.camera && deviceIds.camera !== 'system') {
+      videoConstraints.deviceId = { exact: deviceIds.camera };
+    }
+
+    return {
+      audio: baseConstraints.audio,
+      video: videoConstraints
+    };
   }
 
   // ==================== AUDIO ANALYSIS ====================
@@ -161,7 +187,7 @@ class MediaManager {
     this.analyser.getByteFrequencyData(dataArray);
     
     const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-    return average / 255; // Normalize to 0-1
+    return average / 255;
   }
 
   stopAudioAnalysis() {
@@ -191,7 +217,7 @@ class MediaManager {
       }
     };
 
-    this.mediaRecorder.start(1000); // Get data every second
+    this.mediaRecorder.start(1000);
     return this.mediaRecorder;
   }
 

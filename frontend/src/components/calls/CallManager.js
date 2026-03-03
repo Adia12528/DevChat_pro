@@ -1,4 +1,3 @@
-// CallManager.js - Manages call state and UI
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Monitor, Volume2 } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
@@ -16,8 +15,8 @@ import {
 } from './CallUtils';
 
 const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
-  const [callState, setCallState] = useState('idle'); // idle, calling, ringing, active
-  const [callType, setCallType] = useState(null); // voice, video
+  const [callState, setCallState] = useState('idle');
+  const [callType, setCallType] = useState(null);
   const [callPeer, setCallPeer] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -30,7 +29,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [callQuality, setCallQuality] = useState('excellent');
 
-  // Refs
   const peerConnectionRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -39,7 +37,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
   const qualityControllerRef = useRef(null);
   const screenStreamRef = useRef(null);
 
-  // Get enhanced call settings
   const { 
     settings, 
     devices, 
@@ -47,19 +44,16 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     getCallConstraints 
   } = useEnhancedCall(socket, username);
 
-  // ==================== CREATE PEER CONNECTION ====================
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection({
       iceServers: ICE_SERVERS,
       iceCandidatePoolSize: 10,
     });
 
-    // Initialize quality controller
     const qualityController = new AdaptiveQualityController(pc);
     qualityControllerRef.current = qualityController;
     qualityController.start();
 
-    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
         socket.emit('call:ice-candidate', {
@@ -70,7 +64,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
     };
 
-    // Handle remote stream
     pc.ontrack = (event) => {
       console.log('Remote track received:', event.track.kind);
       
@@ -86,7 +79,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
     };
 
-    // Monitor connection state
     pc.onconnectionstatechange = () => {
       console.log('Connection state:', pc.connectionState);
       
@@ -101,7 +93,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
     };
 
-    // Monitor ICE connection state
     pc.oniceconnectionstatechange = () => {
       console.log('ICE state:', pc.iceConnectionState);
       
@@ -114,7 +105,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     return pc;
   }, [socket, username, remoteStream]);
 
-  // ==================== START CALL ====================
   const startCall = useCallback(async (type, targetUser) => {
     try {
       setCallType(type);
@@ -122,10 +112,8 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       setCallState('calling');
       setCallError(null);
 
-      // Get media constraints from settings
       const constraints = getCallConstraints(type);
       
-      // Get user media
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
@@ -133,26 +121,21 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
       const pc = createPeerConnection(targetUser);
 
-      // Add local tracks
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
 
-      // Optimize RTP senders
       await optimizeRtpSenders(pc, {
         callType: type,
         userAgent: navigator.userAgent
       });
 
-      // Create offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      // Send offer to peer
       socket.emit('call:offer', {
         to: targetUser,
         from: username,
@@ -160,7 +143,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         offer: pc.localDescription
       });
 
-      // Set timeout for no answer
       setTimeout(() => {
         if (callState === 'calling') {
           setCallError('No answer');
@@ -175,7 +157,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }
   }, [username, socket, getCallConstraints, createPeerConnection, callState]);
 
-  // ==================== ANSWER CALL ====================
   const answerCall = useCallback(async () => {
     if (!incomingCall) return;
 
@@ -185,10 +166,8 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       setCallState('active');
       setIncomingCall(null);
 
-      // Get media constraints
       const constraints = getCallConstraints(incomingCall.callType);
       
-      // Get user media
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
@@ -196,35 +175,28 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
       const pc = createPeerConnection(incomingCall.from);
 
-      // Set remote description
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
 
-      // Add local tracks
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
 
-      // Create answer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Add any pending ICE candidates
       pendingIceCandidatesRef.current.forEach(candidate => {
         pc.addIceCandidate(new RTCIceCandidate(candidate));
       });
       pendingIceCandidatesRef.current = [];
 
-      // Send answer
       socket.emit('call:answer', {
         to: incomingCall.from,
         from: username,
         answer: pc.localDescription
       });
 
-      // Start call timer
       startCallTimer();
 
     } catch (err) {
@@ -234,39 +206,32 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }
   }, [incomingCall, username, socket, getCallConstraints, createPeerConnection]);
 
-  // ==================== END CALL ====================
   const endCall = useCallback(() => {
-    // Close peer connection
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
-    // Stop local stream
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
       setLocalStream(null);
     }
 
-    // Stop screen share
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach(track => track.stop());
       screenStreamRef.current = null;
     }
 
-    // Stop quality controller
     if (qualityControllerRef.current) {
       qualityControllerRef.current.stop();
       qualityControllerRef.current = null;
     }
 
-    // Stop timer
     if (callTimerRef.current) {
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
     }
 
-    // Notify peer
     if (socket && callPeer) {
       socket.emit('call:end', {
         to: callPeer,
@@ -274,7 +239,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       });
     }
 
-    // Reset state
     setCallState('idle');
     setCallType(null);
     setCallPeer(null);
@@ -288,7 +252,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
   }, [localStream, socket, callPeer, username]);
 
-  // ==================== TOGGLE MUTE ====================
   const toggleMute = useCallback(() => {
     if (localStream) {
       const audioTrack = localStream.getAudioTracks()[0];
@@ -299,7 +262,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }
   }, [localStream]);
 
-  // ==================== TOGGLE VIDEO ====================
   const toggleVideo = useCallback(() => {
     if (localStream && callType === 'video') {
       const videoTrack = localStream.getVideoTracks()[0];
@@ -310,7 +272,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }
   }, [localStream, callType]);
 
-  // ==================== TOGGLE SCREEN SHARE ====================
   const toggleScreenShare = useCallback(async () => {
     if (!peerConnectionRef.current) return;
 
@@ -324,7 +285,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         screenStreamRef.current = screenStream;
         setIsScreenSharing(true);
 
-        // Handle screen share end
         screenStream.getVideoTracks()[0].onended = () => {
           switchBackToCamera(peerConnectionRef.current, localStream);
           setIsScreenSharing(false);
@@ -336,7 +296,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }
   }, [isScreenSharing, localStream]);
 
-  // ==================== START CALL TIMER ====================
   const startCallTimer = useCallback(() => {
     setCallDuration(0);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
@@ -345,14 +304,12 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     }, 1000);
   }, []);
 
-  // ==================== FORMAT DURATION ====================
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // ==================== SOCKET EVENT LISTENERS ====================
   useEffect(() => {
     if (!socket) return;
 
@@ -371,7 +328,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
             new RTCSessionDescription(data.answer)
           );
           
-          // Add pending ICE candidates
           pendingIceCandidatesRef.current.forEach(candidate => {
             peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
           });
@@ -430,12 +386,10 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
     };
   }, [socket, username, callState, endCall, startCallTimer]);
 
-  // Render nothing if no call is active
   if (callState === 'idle' && !incomingCall) return null;
 
   return (
     <>
-      {/* Incoming Call Modal */}
       {incomingCall && (
         <div className="incoming-call-modal">
           <div className="incoming-call-content">
@@ -467,7 +421,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         </div>
       )}
 
-      {/* Active Call Panel */}
       {callState === 'active' && callPeer && (
         <CallPanel
           callType={callType}
@@ -491,7 +444,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
         />
       )}
 
-      {/* Calling/Ringing Modal */}
       {callState === 'calling' && callPeer && (
         <div className="calling-modal">
           <div className="calling-content">

@@ -1,8 +1,23 @@
-# Create .gitattributes file
-@"
-# Handle case sensitivity
-* text=auto eol=lf
+# Auto detect text files and perform LF normalization
+* text=auto
 
-# Force git to be case-sensitive
-frontend/src/components/settings/**/*.js -crlf
-"@ | Out-File -FilePath "frontend/.gitattributes" -Encoding utf8
+# JavaScript files
+*.js text eol=lf
+
+# JSON files
+*.json text eol=lf
+
+# CSS files
+*.css text eol=lf
+
+# HTML files
+*.html text eol=lf
+
+# Markdown files
+*.md text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
+*.webmanifest binary

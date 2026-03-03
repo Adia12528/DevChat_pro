@@ -1,5 +1,4 @@
-// src/contexts/CallContext.js
-import React, { createContext, useContext, useRef } from 'react';
+import React, { createContext, useContext } from 'react';
 import { useWebRTC } from '../hooks/useWebRTC';
 
 const CallContext = createContext(null);
@@ -12,8 +11,8 @@ export const useCall = () => {
   return context;
 };
 
-export const CallProvider = ({ children, username, socketRef }) => {
-  const webrtc = useWebRTC(username, socketRef);
+export const CallProvider = ({ children, socket, username, room, onlineUsers }) => {
+  const webrtc = useWebRTC(username, socket);
   
   return (
     <CallContext.Provider value={webrtc}>

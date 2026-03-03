@@ -1,166 +1,189 @@
-// frontend/src/hooks/useEnhancedStreaming.js
-import { useState, useEffect, useCallback } from 'react';
-import { loadSettings, saveSettings } from '../utils/settings';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { loadSettings, saveSettings, detectDevices } from '../utils/settings';
 
-export const useEnhancedStreaming = (socket, username, room) => {
+export const useEnhancedCall = (socket, username) => {
   const [settings, setSettings] = useState(loadSettings());
-  const [streamQuality, setStreamQuality] = useState('auto');
-  const [bandwidth, setBandwidth] = useState(null);
-  const [viewers, setViewers] = useState(0);
-  const [streamStats, setStreamStats] = useState({
-    bitrate: 0,
-    fps: 0,
-    resolution: '1280x720',
-    packetLoss: 0,
+  const [devices, setDevices] = useState([]);
+  const [activeDevices, setActiveDevices] = useState({
+    camera: null,
+    microphone: null,
+    speaker: null,
   });
+  const [isTesting, setIsTesting] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const mediaStreamRef = useRef(null);
 
-  // Monitor network conditions
+  // Load devices on mount
   useEffect(() => {
-    if ('connection' in navigator) {
-      const connection = navigator.connection || 
-                        navigator.mozConnection || 
-                        navigator.webkitConnection;
+    const loadDevices = async () => {
+      const deviceList = await detectDevices();
+      setDevices(deviceList);
       
-      if (connection) {
-        const updateBandwidth = () => {
-          setBandwidth({
-            type: connection.effectiveType,
-            downlink: connection.downlink,
-            rtt: connection.rtt,
-            saveData: connection.saveData,
-          });
-        };
-        
-        updateBandwidth();
-        connection.addEventListener('change', updateBandwidth);
-        
-        return () => {
-          connection.removeEventListener('change', updateBandwidth);
-        };
-      }
+      setActiveDevices({
+        camera: settings.devices.preferredCameraId || 'system',
+        microphone: settings.devices.preferredMicrophoneId || 'system',
+        speaker: settings.devices.preferredSpeakerId || 'system',
+      });
+    };
+    
+    loadDevices();
+    
+    navigator.mediaDevices?.addEventListener('devicechange', loadDevices);
+    return () => {
+      navigator.mediaDevices?.removeEventListener('devicechange', loadDevices);
+    };
+  }, [settings.devices]);
+
+  // Test microphone
+  const testMicrophone = useCallback(async () => {
+    try {
+      setIsTesting(true);
+      
+      const constraints = {
+        audio: {
+          deviceId: activeDevices.microphone !== 'system' 
+            ? { exact: activeDevices.microphone } 
+            : undefined,
+          echoCancellation: settings.calls.echoCancellation,
+          noiseSuppression: settings.calls.noiseSuppression,
+          autoGainControl: settings.calls.autoGainControl,
+        }
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      mediaStreamRef.current = stream;
+      
+      audioContextRef.current = new AudioContext();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+      
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      
+      const updateLevel = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setAudioLevel(average / 255);
+        requestAnimationFrame(updateLevel);
+      };
+      
+      updateLevel();
+      
+    } catch (error) {
+      console.error('Microphone test failed:', error);
     }
+  }, [activeDevices.microphone, settings.calls]);
+
+  // Stop testing
+  const stopTest = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevel(0);
+    setIsTesting(false);
   }, []);
 
-  // Auto-adjust quality based on network
-  useEffect(() => {
-    if (settings.streaming.defaultStreamQuality === 'auto' && bandwidth) {
-      if (bandwidth.saveData || bandwidth.downlink < 1.5) {
-        setStreamQuality('low');
-      } else if (bandwidth.downlink < 3) {
-        setStreamQuality('medium');
-      } else if (bandwidth.downlink < 6) {
-        setStreamQuality('high');
-      } else {
-        setStreamQuality('ultra');
-      }
-    }
-  }, [bandwidth, settings.streaming.defaultStreamQuality]);
-
-  // Get optimal stream constraints
-  const getStreamConstraints = useCallback((source) => {
-    let videoConstraints = {};
-
-    switch (streamQuality) {
-      case 'low':
-        videoConstraints = {
-          width: { ideal: 640, max: 854 },
-          height: { ideal: 360, max: 480 },
-          frameRate: { ideal: 15, max: 24 },
-          bitrate: 500000, // 500 kbps
-        };
-        break;
-      case 'medium':
-        videoConstraints = {
-          width: { ideal: 854, max: 1280 },
-          height: { ideal: 480, max: 720 },
-          frameRate: { ideal: 24, max: 30 },
-          bitrate: 1500000, // 1.5 mbps
-        };
-        break;
-      case 'high':
-        videoConstraints = {
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 48 },
-          bitrate: 3000000, // 3 mbps
-        };
-        break;
-      case 'ultra':
-        videoConstraints = {
-          width: { ideal: 1920, max: 3840 },
-          height: { ideal: 1080, max: 2160 },
-          frameRate: { ideal: 48, max: 60 },
-          bitrate: 6000000, // 6 mbps
-        };
-        break;
-      default:
-        videoConstraints = {
-          width: { ideal: 1280, min: 640, max: 1920 },
-          height: { ideal: 720, min: 360, max: 1080 },
-          frameRate: { ideal: 30, max: 60 },
-        };
-    }
-
-    if (source === 'screen') {
-      return {
-        video: {
-          ...videoConstraints,
-          cursor: 'always',
-          displaySurface: 'monitor',
-        },
-        audio: false,
-      };
-    }
-
-    return {
-      video: videoConstraints,
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      }
-    };
-  }, [streamQuality]);
-
-  // Get LiveKit options
-  const getLiveKitOptions = useCallback(() => {
-    return {
-      videoCaptureDefaults: {
-        resolution: streamQuality === 'ultra' ? 'full-hd' : 'hd',
-      },
-      adaptiveStream: true,
-      dynacast: true,
-      publishDefaults: {
-        videoSimulcastLayers: streamQuality === 'ultra' 
-          ? ['h', 'q'] 
-          : ['h'],
-        videoCodec: 'vp9',
-        dtx: true,
-        red: true,
-      },
-    };
-  }, [streamQuality]);
-
-  // Update streaming settings
-  const updateStreamingSettings = useCallback((newSettings) => {
+  // Update settings
+  const updateCallSettings = useCallback((newSettings) => {
     const updated = {
       ...settings,
-      streaming: { ...settings.streaming, ...newSettings }
+      calls: { ...settings.calls, ...newSettings }
     };
     setSettings(updated);
     saveSettings(updated);
   }, [settings]);
 
+  // Save preferred devices
+  const savePreferredDevices = useCallback(() => {
+    const updated = {
+      ...settings,
+      devices: {
+        ...settings.devices,
+        preferredCameraId: activeDevices.camera,
+        preferredMicrophoneId: activeDevices.microphone,
+        preferredSpeakerId: activeDevices.speaker,
+      }
+    };
+    setSettings(updated);
+    saveSettings(updated);
+  }, [settings, activeDevices]);
+
+  // Get optimal call constraints based on settings
+  const getCallConstraints = useCallback((type) => {
+    const baseConstraints = {
+      audio: {
+        echoCancellation: settings.calls.echoCancellation,
+        noiseSuppression: settings.calls.noiseSuppression,
+        autoGainControl: settings.calls.autoGainControl,
+        deviceId: activeDevices.microphone !== 'system' 
+          ? { exact: activeDevices.microphone } 
+          : undefined,
+      }
+    };
+
+    if (type === 'video') {
+      let videoConstraints = {};
+      
+      if (settings.calls.videoQuality === 'low') {
+        videoConstraints = {
+          width: { ideal: 640, max: 854 },
+          height: { ideal: 360, max: 480 },
+          frameRate: { ideal: 15, max: 24 },
+        };
+      } else if (settings.calls.videoQuality === 'medium') {
+        videoConstraints = {
+          width: { ideal: 854, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          frameRate: { ideal: 24, max: 30 },
+        };
+      } else if (settings.calls.videoQuality === 'high') {
+        videoConstraints = {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: settings.calls.frameRate },
+        };
+      } else {
+        videoConstraints = {
+          width: { ideal: 1280, min: 320, max: 1920 },
+          height: { ideal: 720, min: 240, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+        };
+      }
+
+      return {
+        ...baseConstraints,
+        video: {
+          ...videoConstraints,
+          deviceId: activeDevices.camera !== 'system'
+            ? { exact: activeDevices.camera }
+            : undefined,
+        }
+      };
+    }
+
+    return { ...baseConstraints, video: false };
+  }, [settings.calls, activeDevices]);
+
   return {
-    settings: settings.streaming,
-    streamQuality,
-    bandwidth,
-    viewers,
-    streamStats,
-    getStreamConstraints,
-    getLiveKitOptions,
-    updateStreamingSettings,
-    setViewers,
-    setStreamStats,
+    settings: settings.calls,
+    devices,
+    activeDevices,
+    setActiveDevices,
+    isTesting,
+    audioLevel,
+    testMicrophone,
+    stopTest,
+    updateCallSettings,
+    savePreferredDevices,
+    getCallConstraints,
   };
 };

@@ -1,14 +1,13 @@
 import React from 'react';
-import { AnimatePresence } from 'framer-motion';
-import CallSettings from './CallSettings';        // Capital C, Capital S
-import AudioSettings from './AudioSettings';      // Capital A, Capital S
-import VideoSettings from './VideoSettings';      // Capital V, Capital S
-import StreamSettings from './StreamSettings';    // Capital S, Capital S
-import AppSettings from './AppSettings';          // Capital A, Capital S
-import CallHistoryPanel from '../CallHistoryPanel'; // Capital C, Capital H, Capital P
+import { motion, AnimatePresence } from 'framer-motion';
+import CallSettings from './CallSettings';
+import AudioSettings from './AudioSettings';
+import VideoSettings from './VideoSettings';
+import StreamSettings from './StreamSettings';
+import AppSettings from './AppSettings';
 
-const SettingsManager = ({
-  currentView,
+const SettingsManager = ({ 
+  currentView, 
   onClose,
   callHistory,
   formatDuration,
@@ -17,32 +16,103 @@ const SettingsManager = ({
   return (
     <AnimatePresence>
       {currentView === 'call-settings' && (
-        <CallSettings onClose={onClose} />
+        <motion.div
+          className="settings-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="settings-modal"
+            initial={{ scale: 0.9, y: 50 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 50 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CallSettings onClose={onClose} />
+          </motion.div>
+        </motion.div>
       )}
 
       {currentView === 'audio-settings' && (
-        <AudioSettings onClose={onClose} />
+        <motion.div
+          className="settings-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="settings-modal"
+            initial={{ scale: 0.9, y: 50 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 50 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioSettings onClose={onClose} />
+          </motion.div>
+        </motion.div>
       )}
 
       {currentView === 'video-settings' && (
-        <VideoSettings onClose={onClose} />
+        <motion.div
+          className="settings-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="settings-modal"
+            initial={{ scale: 0.9, y: 50 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 50 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <VideoSettings onClose={onClose} />
+          </motion.div>
+        </motion.div>
       )}
 
       {currentView === 'stream-settings' && (
-        <StreamSettings onClose={onClose} />
+        <motion.div
+          className="settings-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="settings-modal"
+            initial={{ scale: 0.9, y: 50 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 50 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <StreamSettings onClose={onClose} />
+          </motion.div>
+        </motion.div>
       )}
 
       {currentView === 'app-settings' && (
-        <AppSettings onClose={onClose} />
-      )}
-
-      {currentView === 'call-history' && (
-        <CallHistoryPanel
-          callHistory={callHistory}
-          onClose={onClose}
-          formatDuration={formatDuration}
-          getQualityLabelStyle={getQualityLabelStyle}
-        />
+        <motion.div
+          className="settings-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <motion.div
+            className="settings-modal"
+            initial={{ scale: 0.9, y: 50 }}
+            animate={{ scale: 1, y: 0 }}
+            exit={{ scale: 0.9, y: 50 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AppSettings onClose={onClose} />
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

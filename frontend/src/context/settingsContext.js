@@ -1,71 +1,84 @@
-﻿import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { loadSettings, saveSettings, detectDevices } from '../utils/settings';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import { loadSettings, saveSettings } from '../utils/settings';
 
-const SettingsContext = createContext();
+const SettingsContext = createContext(null);
 
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (!context) {
-    throw new Error('useSettings must be used within a SettingsProvider');
+    throw new Error('useSettings must be used within SettingsProvider');
   }
   return context;
 };
 
 export const SettingsProvider = ({ children }) => {
   const [settings, setSettings] = useState(loadSettings());
-  const [devices, setDevices] = useState({
-    cameras: [],
-    microphones: [],
-    speakers: []
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const loadDevices = async () => {
-      try {
-        setIsLoading(true);
-        const deviceList = await detectDevices();
-        setDevices(deviceList || {
-          cameras: [],
-          microphones: [],
-          speakers: []
-        });
-      } catch (err) {
-        console.error('Failed to load devices:', err);
-        setError('Could not detect media devices');
-      } finally {
-        setIsLoading(false);
+    saveSettings(settings);
+  }, [settings]);
+
+  const updateSettings = (newSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      ...newSettings
+    }));
+  };
+
+  const updateCallSettings = (callSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      calls: {
+        ...prev.calls,
+        ...callSettings
       }
-    };
+    }));
+  };
 
-    loadDevices();
+  const updateStreamingSettings = (streamingSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      streaming: {
+        ...prev.streaming,
+        ...streamingSettings
+      }
+    }));
+  };
 
-    if (navigator.mediaDevices) {
-      navigator.mediaDevices.addEventListener('devicechange', loadDevices);
-      return () => {
-        navigator.mediaDevices.removeEventListener('devicechange', loadDevices);
-      };
-    }
-  }, []);
+  const updateDeviceSettings = (deviceSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      devices: {
+        ...prev.devices,
+        ...deviceSettings
+      }
+    }));
+  };
 
-  const updateSettings = useCallback((section, values) => {
-    setSettings(prev => {
-      const updated = {
-        ...prev,
-        [section]: { ...prev[section], ...values }
-      };
-      saveSettings(updated);
-      return updated;
-    });
-  }, []);
+  const updateNotificationSettings = (notificationSettings) => {
+    setSettings(prev => ({
+      ...prev,
+      notifications: {
+        ...prev.notifications,
+        ...notificationSettings
+      }
+    }));
+  };
+
+  const resetSettings = () => {
+    setSettings(loadSettings()); // Reset to defaults
+  };
 
   const value = {
     settings,
-    devices,
     isLoading,
-    error,
     updateSettings,
+    updateCallSettings,
+    updateStreamingSettings,
+    updateDeviceSettings,
+    updateNotificationSettings,
+    resetSettings
   };
 
   return (

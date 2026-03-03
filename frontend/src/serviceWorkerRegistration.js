@@ -1,8 +1,6 @@
 // This optional code is used to register a service worker.
 // register() is not called by default.
 
-let refreshing = false;
-
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     window.location.hostname === '[::1]' ||
@@ -10,7 +8,7 @@ const isLocalhost = Boolean(
 );
 
 export function register(config) {
-  if ('serviceWorker' in navigator) {
+  if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
     const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
     if (publicUrl.origin !== window.location.origin) {
       return;
@@ -35,17 +33,6 @@ function registerValidSW(swUrl, config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-      });
-
-      // Check for updates every 30 seconds
-      setInterval(() => {
-        registration.update();
-      }, 30000);
-
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {
@@ -54,12 +41,7 @@ function registerValidSW(swUrl, config) {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              console.log('%c🔄 New content is available! Applying update...', 'color: #ff9800; font-weight: bold;');
-
-              if (registration.waiting) {
-                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-              }
-              
+              console.log('New content is available and will be used when all tabs are closed.');
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
               }

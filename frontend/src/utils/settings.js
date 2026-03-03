@@ -1,4 +1,3 @@
-// src/utils/settings.js
 // Settings management for DevChat Pro
 
 // ==================== DEFAULT SETTINGS ====================
@@ -8,21 +7,21 @@ export const DEFAULT_SETTINGS = {
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
-    videoQuality: 'auto', // 'auto', 'low', 'medium', 'high'
+    videoQuality: 'auto',
     frameRate: 30,
-    bandwidthLimit: 0, // 0 = unlimited
+    bandwidthLimit: 0,
     stereoAudio: false,
-    opusDtx: true, // Discontinuous Transmission for reduced bandwidth
+    opusDtx: true,
   },
   
   // Streaming settings
   streaming: {
-    defaultStreamQuality: 'auto', // 'auto', 'low', 'medium', 'high', 'ultra'
+    defaultStreamQuality: 'auto',
     enableDynacast: true,
     enableSimulcast: true,
-    preferredCodec: 'vp9', // 'vp8', 'vp9', 'h264'
+    preferredCodec: 'vp9',
     adaptiveStream: true,
-    maxBitrate: 0, // 0 = auto
+    maxBitrate: 0,
     enableRecording: false,
     recordingFormat: 'webm',
   },
@@ -66,7 +65,7 @@ export const DEFAULT_SETTINGS = {
   
   // Network settings
   network: {
-    iceTransportPolicy: 'all', // 'all' or 'relay'
+    iceTransportPolicy: 'all',
     iceCandidatePoolSize: 10,
     enableIceRestart: true,
     reconnectAttempts: 5,
@@ -92,12 +91,10 @@ export const loadSettings = () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) {
-      // Initialize with defaults if nothing saved
       saveSettings(DEFAULT_SETTINGS);
       return { ...DEFAULT_SETTINGS };
     }
     
-    // Merge saved settings with defaults (to handle new fields)
     const parsed = JSON.parse(saved);
     return mergeWithDefaults(parsed, DEFAULT_SETTINGS);
   } catch (error) {
@@ -109,7 +106,6 @@ export const loadSettings = () => {
 // ==================== SAVE SETTINGS ====================
 export const saveSettings = (settings) => {
   try {
-    // Validate before saving
     const validated = validateSettings(settings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(validated));
     return true;
@@ -123,7 +119,6 @@ export const saveSettings = (settings) => {
 export const mergeWithDefaults = (saved, defaults) => {
   const merged = { ...defaults };
   
-  // Recursive merge
   const merge = (target, source) => {
     Object.keys(source).forEach(key => {
       if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
@@ -145,19 +140,16 @@ export const mergeWithDefaults = (saved, defaults) => {
 export const validateSettings = (settings) => {
   const validated = { ...settings };
   
-  // Validate video quality
   const validQualities = ['auto', 'low', 'medium', 'high', 'ultra'];
   if (validated.streaming?.defaultStreamQuality && 
       !validQualities.includes(validated.streaming.defaultStreamQuality)) {
     validated.streaming.defaultStreamQuality = 'auto';
   }
   
-  // Validate frame rate
   if (validated.calls?.frameRate) {
     validated.calls.frameRate = Math.min(60, Math.max(15, validated.calls.frameRate));
   }
   
-  // Validate volume
   if (validated.notifications?.volume) {
     validated.notifications.volume = Math.min(1, Math.max(0, validated.notifications.volume));
   }
@@ -177,7 +169,6 @@ export const detectDevices = async () => {
       };
     }
     
-    // Request permissions first to get labels
     let hasPermission = false;
     try {
       const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -371,7 +362,6 @@ export const getStreamConstraints = (type = 'video', quality = 'auto', deviceId 
     return { audio: audioConstraints, video: false };
   }
   
-  // Video constraints
   let videoConstraints = {};
   const activeQuality = quality === 'auto' ? callSettings.videoQuality : quality;
   
@@ -404,7 +394,7 @@ export const getStreamConstraints = (type = 'video', quality = 'auto', deviceId 
         frameRate: { ideal: 48, max: 60 },
       };
       break;
-    default: // auto
+    default:
       videoConstraints = {
         width: { ideal: 1280, min: 320, max: 1920 },
         height: { ideal: 720, min: 240, max: 1080 },
@@ -437,7 +427,6 @@ export const isQuietHours = () => {
   const startMinutes = startH * 60 + startM;
   let endMinutes = endH * 60 + endM;
   
-  // Handle overnight quiet hours
   if (endMinutes <= startMinutes) {
     endMinutes += 24 * 60;
   }
@@ -449,7 +438,7 @@ export const isQuietHours = () => {
 export const getAdaptiveQuality = (bandwidth) => {
   if (!bandwidth) return 'auto';
   
-  const downlink = bandwidth.downlink || 0; // Mbps
+  const downlink = bandwidth.downlink || 0;
   const saveData = bandwidth.saveData || false;
   
   if (saveData) return 'low';
@@ -461,8 +450,6 @@ export const getAdaptiveQuality = (bandwidth) => {
 
 // ==================== GET ICE SERVERS ====================
 export const getICEServers = () => {
-  const settings = loadSettings();
-  
   return [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },

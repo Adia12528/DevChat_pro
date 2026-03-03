@@ -6,23 +6,21 @@ import {
   CallStatistics,
   AdaptiveQualityController
 } from '../../components/calls/CallUtils';
-
 import MediaManager from './MediaManager';
 
 class PeerConnectionManager {
   constructor(socket, username) {
     this.socket = socket;
     this.username = username;
-    this.peerConnections = new Map(); // username -> RTCPeerConnection
+    this.peerConnections = new Map();
     this.mediaManager = new MediaManager();
-    this.callStats = new Map(); // username -> CallStatistics
-    this.qualityControllers = new Map(); // username -> AdaptiveQualityController
-    this.pendingCandidates = new Map(); // username -> RTCIceCandidate[]
+    this.callStats = new Map();
+    this.qualityControllers = new Map();
+    this.pendingCandidates = new Map();
   }
 
   // ==================== CREATE PEER CONNECTION ====================
   createPeerConnection(targetUsername, options = {}) {
-    // Check if connection already exists
     if (this.peerConnections.has(targetUsername)) {
       console.warn(`Peer connection to ${targetUsername} already exists`);
       return this.peerConnections.get(targetUsername);
@@ -38,16 +36,13 @@ class PeerConnectionManager {
       iceTransportPolicy
     });
 
-    // Initialize quality controller
     const qualityController = new AdaptiveQualityController(pc);
     this.qualityControllers.set(targetUsername, qualityController);
     qualityController.start();
 
-    // Initialize call statistics
     const stats = new CallStatistics();
     this.callStats.set(targetUsername, stats);
 
-    // Set up event handlers
     this.setupPeerConnectionEvents(pc, targetUsername);
 
     this.peerConnections.set(targetUsername, pc);
@@ -56,7 +51,6 @@ class PeerConnectionManager {
 
   // ==================== SETUP EVENTS ====================
   setupPeerConnectionEvents(pc, targetUsername) {
-    // ICE candidate handler
     pc.onicecandidate = (event) => {
       if (event.candidate && this.socket) {
         console.log(`Sending ICE candidate to ${targetUsername}`);
@@ -68,7 +62,6 @@ class PeerConnectionManager {
       }
     };
 
-    // Track handler
     pc.ontrack = (event) => {
       console.log(`Received track from ${targetUsername}:`, event.track.kind);
       
@@ -77,7 +70,6 @@ class PeerConnectionManager {
       }
     };
 
-    // Connection state change
     pc.onconnectionstatechange = () => {
       console.log(`Connection state to ${targetUsername}:`, pc.connectionState);
       
@@ -94,7 +86,6 @@ class PeerConnectionManager {
       }
     };
 
-    // ICE connection state change
     pc.oniceconnectionstatechange = () => {
       console.log(`ICE state to ${targetUsername}:`, pc.iceConnectionState);
       
@@ -103,12 +94,10 @@ class PeerConnectionManager {
       }
     };
 
-    // Signaling state change
     pc.onsignalingstatechange = () => {
       console.log(`Signaling state to ${targetUsername}:`, pc.signalingState);
     };
 
-    // Negotiation needed
     pc.onnegotiationneeded = async () => {
       console.log(`Negotiation needed with ${targetUsername}`);
       
@@ -161,7 +150,6 @@ class PeerConnectionManager {
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       
-      // Add any pending ICE candidates
       const pending = this.pendingCandidates.get(targetUsername) || [];
       for (const candidate of pending) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -202,7 +190,6 @@ class PeerConnectionManager {
     try {
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
       
-      // Add any pending ICE candidates
       const pending = this.pendingCandidates.get(targetUsername) || [];
       for (const candidate of pending) {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -266,7 +253,6 @@ class PeerConnectionManager {
       }
     }, 1000);
 
-    // Store interval for cleanup
     if (!this.statsIntervals) this.statsIntervals = new Map();
     this.statsIntervals.set(targetUsername, interval);
   }
@@ -277,7 +263,6 @@ class PeerConnectionManager {
     
     const pc = this.peerConnections.get(targetUsername);
     if (pc && pc.connectionState !== 'closed') {
-      // Attempt ICE restart
       pc.restartIce();
     }
   }
@@ -315,31 +300,25 @@ class PeerConnectionManager {
 
   // ==================== CLEANUP PEER CONNECTION ====================
   cleanupPeerConnection(targetUsername) {
-    // Close peer connection
     const pc = this.peerConnections.get(targetUsername);
     if (pc) {
       pc.close();
       this.peerConnections.delete(targetUsername);
     }
 
-    // Clear stats interval
     const statsInterval = this.statsIntervals?.get(targetUsername);
     if (statsInterval) {
       clearInterval(statsInterval);
       this.statsIntervals?.delete(targetUsername);
     }
 
-    // Stop quality controller
     const qualityController = this.qualityControllers.get(targetUsername);
     if (qualityController) {
       qualityController.stop();
       this.qualityControllers.delete(targetUsername);
     }
 
-    // Clear call stats
     this.callStats.delete(targetUsername);
-    
-    // Clear pending candidates
     this.pendingCandidates.delete(targetUsername);
 
     console.log(`Cleaned up connection to ${targetUsername}`);

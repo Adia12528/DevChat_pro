@@ -1,4 +1,3 @@
-// src/hooks/useWebRTC.js
 import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   ICE_SERVERS,
@@ -17,7 +16,6 @@ import {
 } from '../components/calls/CallUtils';
 
 export const useWebRTC = (username, socketRef) => {
-  // States
   const [callState, setCallState] = useState(null);
   const [callType, setCallType] = useState(null);
   const [callPeer, setCallPeer] = useState(null);
@@ -33,7 +31,6 @@ export const useWebRTC = (username, socketRef) => {
   const [isCallRecording, setIsCallRecording] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState('excellent');
 
-  // Refs
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -46,7 +43,6 @@ export const useWebRTC = (username, socketRef) => {
   const callRecorderRef = useRef(null);
   const screenStreamRef = useRef(null);
 
-  // ==================== UTILITY FUNCTIONS ====================
   const runtimeConnectionInfo = useMemo(() => {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     return {
@@ -66,7 +62,6 @@ export const useWebRTC = (username, socketRef) => {
     })
   }), [runtimeConnectionInfo]);
 
-  // ==================== CALL TIMER ====================
   const startCallTimer = useCallback(() => {
     setCallDuration(0);
     if (callTimerRef.current) clearInterval(callTimerRef.current);
@@ -82,20 +77,16 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, []);
 
-  // ==================== CREATE PEER CONNECTION ====================
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServersConfig);
     
-    // Initialize stats
     const stats = new CallStatistics();
     callStatsRef.current = stats;
 
-    // Initialize quality controller
     const qualityController = new AdaptiveQualityController(pc);
     qualityControllerRef.current = qualityController;
     qualityController.start();
 
-    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
         socketRef.current.emit('call:ice-candidate', {
@@ -105,7 +96,6 @@ export const useWebRTC = (username, socketRef) => {
       }
     };
 
-    // Handle remote stream
     pc.ontrack = (event) => {
       const stream = remoteStreamRef.current || new MediaStream();
       if (event.track) {
@@ -115,11 +105,9 @@ export const useWebRTC = (username, socketRef) => {
       remoteStreamRef.current = stream;
     };
 
-    // Monitor connection state
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
         setCallError(null);
-        // Start stats monitoring
         if (callStatsRef.current) {
           const interval = setInterval(async () => {
             await callStatsRef.current.updateStats(pc);
@@ -134,7 +122,6 @@ export const useWebRTC = (username, socketRef) => {
     return pc;
   }, [iceServersConfig, socketRef]);
 
-  // ==================== START CALL ====================
   const startCall = useCallback(async (type, targetUser) => {
     try {
       setCallType(type);
@@ -189,7 +176,6 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
 
-  // ==================== ANSWER CALL ====================
   const answerCall = useCallback(async () => {
     if (!incomingCall) return;
 
@@ -219,7 +205,6 @@ export const useWebRTC = (username, socketRef) => {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
-      // Handle pending ICE candidates
       pendingIceCandidatesRef.current.forEach(candidate => {
         pc.addIceCandidate(new RTCIceCandidate(candidate));
       });
@@ -240,7 +225,6 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
 
-  // ==================== END CALL ====================
   const endCall = useCallback(() => {
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -275,7 +259,6 @@ export const useWebRTC = (username, socketRef) => {
     setCallError(null);
   }, [stopCallTimer]);
 
-  // ==================== TOGGLE MUTE ====================
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -286,7 +269,6 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, []);
 
-  // ==================== TOGGLE VIDEO ====================
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
@@ -297,7 +279,6 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, []);
 
-  // ==================== TOGGLE SCREEN SHARE ====================
   const toggleScreenShare = useCallback(async () => {
     if (!peerConnectionRef.current) return;
 

@@ -1,4 +1,3 @@
-// frontend/src/hooks/useEnhancedCall.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadSettings, saveSettings, detectDevices } from '../utils/settings';
 
@@ -22,7 +21,6 @@ export const useEnhancedCall = (socket, username) => {
       const deviceList = await detectDevices();
       setDevices(deviceList);
       
-      // Set preferred devices if saved
       setActiveDevices({
         camera: settings.devices.preferredCameraId || 'system',
         microphone: settings.devices.preferredMicrophoneId || 'system',
@@ -32,12 +30,11 @@ export const useEnhancedCall = (socket, username) => {
     
     loadDevices();
     
-    // Listen for device changes
     navigator.mediaDevices?.addEventListener('devicechange', loadDevices);
     return () => {
       navigator.mediaDevices?.removeEventListener('devicechange', loadDevices);
     };
-  }, []);
+  }, [settings.devices]);
 
   // Test microphone
   const testMicrophone = useCallback(async () => {
@@ -58,7 +55,6 @@ export const useEnhancedCall = (socket, username) => {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       mediaStreamRef.current = stream;
       
-      // Create audio context for level metering
       audioContextRef.current = new AudioContext();
       analyserRef.current = audioContextRef.current.createAnalyser();
       const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -70,7 +66,7 @@ export const useEnhancedCall = (socket, username) => {
         if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        setAudioLevel(average / 255); // Normalize to 0-1
+        setAudioLevel(average / 255);
         requestAnimationFrame(updateLevel);
       };
       
@@ -155,7 +151,7 @@ export const useEnhancedCall = (socket, username) => {
           height: { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, max: settings.calls.frameRate },
         };
-      } else { // auto
+      } else {
         videoConstraints = {
           width: { ideal: 1280, min: 320, max: 1920 },
           height: { ideal: 720, min: 240, max: 1080 },

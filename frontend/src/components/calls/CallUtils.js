@@ -1,5 +1,3 @@
-// callUtils.js - Complete WebRTC utilities for calling and streaming
-
 // ==================== ICE SERVERS ====================
 export const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -22,7 +20,7 @@ export const ICE_SERVERS = [
 // ==================== ADAPTIVE MEDIA CONSTRAINTS ====================
 export const getAdaptiveMediaConstraints = ({ callType, userAgent, connectionInfo }) => {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(userAgent);
-  const connectionSpeed = connectionInfo?.downlink || 5; // Mbps
+  const connectionSpeed = connectionInfo?.downlink || 5;
   const isSlowConnection = connectionSpeed < 1.5;
 
   if (callType === 'voice') {
@@ -38,7 +36,6 @@ export const getAdaptiveMediaConstraints = ({ callType, userAgent, connectionInf
     };
   }
 
-  // Video constraints based on connection quality
   const videoConstraints = {
     width: { ideal: isSlowConnection ? 640 : isMobile ? 1280 : 1920 },
     height: { ideal: isSlowConnection ? 480 : isMobile ? 720 : 1080 },
@@ -73,12 +70,11 @@ export const getAdaptiveIceTransportPolicy = ({ userAgent, connectionInfo }) => 
   const isSlowNetwork = connectionInfo?.downlink < 1;
   
   if (isMobile && isSlowNetwork) {
-    return 'relay'; // Force TURN on mobile with slow network
+    return 'relay';
   }
   return 'all';
 };
 
-// ==================== RTP SENDER OPTIMIZATION ====================
 export const optimizeRtpSenders = async (pc, { callType, userAgent, connectionInfo }) => {
   const isMobile = /Android|iPhone|iPad|iPod/i.test(userAgent);
   const isSlowConnection = connectionInfo?.downlink < 2;
@@ -92,15 +88,14 @@ export const optimizeRtpSenders = async (pc, { callType, userAgent, connectionIn
         params.encodings = [{}];
       }
       
-      // Set bitrate based on connection
       if (isSlowConnection) {
-        params.encodings[0].maxBitrate = 300000; // 300 kbps
+        params.encodings[0].maxBitrate = 300000;
         params.encodings[0].scaleResolutionDownBy = 2.0;
       } else if (isMobile) {
-        params.encodings[0].maxBitrate = 800000; // 800 kbps
+        params.encodings[0].maxBitrate = 800000;
         params.encodings[0].scaleResolutionDownBy = 1.5;
       } else {
-        params.encodings[0].maxBitrate = 2000000; // 2 mbps
+        params.encodings[0].maxBitrate = 2000000;
       }
       
       try {
@@ -112,7 +107,6 @@ export const optimizeRtpSenders = async (pc, { callType, userAgent, connectionIn
   }
 };
 
-// ==================== ICE GATHERING ====================
 export const waitForIceGatheringComplete = (pc, timeoutMs = 3000) => {
   return new Promise((resolve) => {
     if (pc.iceGatheringState === 'complete') {
@@ -137,7 +131,6 @@ export const waitForIceGatheringComplete = (pc, timeoutMs = 3000) => {
   });
 };
 
-// ==================== CALL STATISTICS ====================
 export class CallStatistics {
   constructor() {
     this.stats = {
@@ -159,7 +152,6 @@ export class CallStatistics {
     
     try {
       const stats = await pc.getStats();
-      let audioStats = null;
       let videoStats = null;
       let candidateStats = null;
       
@@ -167,8 +159,6 @@ export class CallStatistics {
         if (report.type === 'inbound-rtp') {
           if (report.kind === 'video') {
             videoStats = report;
-          } else if (report.kind === 'audio') {
-            audioStats = report;
           }
         } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
           candidateStats = report;
@@ -216,20 +206,16 @@ export class CallStatistics {
   updateQualityScore() {
     let score = 100;
     
-    // Packet loss penalty
     if (this.stats.packetsLost > 100) score -= 30;
     else if (this.stats.packetsLost > 50) score -= 20;
     else if (this.stats.packetsLost > 10) score -= 10;
     
-    // Jitter penalty
     if (this.stats.jitter > 0.05) score -= 15;
     else if (this.stats.jitter > 0.02) score -= 5;
     
-    // RTT penalty
     if (this.stats.rtt > 0.3) score -= 25;
     else if (this.stats.rtt > 0.1) score -= 10;
     
-    // Bitrate penalty
     if (this.stats.bitrate < 100000) score -= 30;
     else if (this.stats.bitrate < 300000) score -= 15;
     
@@ -255,7 +241,6 @@ export class CallStatistics {
   }
 }
 
-// ==================== CALL RECORDER ====================
 export class CallRecorder {
   constructor() {
     this.mediaRecorder = null;
@@ -271,8 +256,6 @@ export class CallRecorder {
     
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
       ? 'video/webm;codecs=vp9,opus'
-      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
-      ? 'video/webm;codecs=vp8,opus'
       : 'video/webm';
     
     this.mediaRecorder = new MediaRecorder(stream, { mimeType });
@@ -283,7 +266,7 @@ export class CallRecorder {
       }
     };
     
-    this.mediaRecorder.start(1000); // Get data every second
+    this.mediaRecorder.start(1000);
   }
 
   stop() {
@@ -321,7 +304,6 @@ export class CallRecorder {
   }
 }
 
-// ==================== ADAPTIVE QUALITY CONTROLLER ====================
 export class AdaptiveQualityController {
   constructor(pc) {
     this.pc = pc;
@@ -371,17 +353,14 @@ export class AdaptiveQualityController {
         }
       });
       
-      // Update history
       this.bitrateHistory.push(bitrate);
       this.packetLossHistory.push(packetsLost);
       if (this.bitrateHistory.length > 5) this.bitrateHistory.shift();
       if (this.packetLossHistory.length > 5) this.packetLossHistory.shift();
       
-      // Calculate averages
       const avgBitrate = this.bitrateHistory.reduce((a, b) => a + b, 0) / this.bitrateHistory.length;
       const avgPacketLoss = this.packetLossHistory.reduce((a, b) => a + b, 0) / this.packetLossHistory.length;
       
-      // Determine quality level
       let newLevel = this.currentLevel;
       
       if (avgBitrate < 200000 || avgPacketLoss > 50) {
@@ -435,7 +414,6 @@ export class AdaptiveQualityController {
   }
 }
 
-// ==================== CALL HISTORY ====================
 export class CallHistory {
   constructor() {
     this.storageKey = 'devchat_call_history';
@@ -490,7 +468,6 @@ export class CallHistory {
   }
 }
 
-// ==================== SCREEN SHARE ====================
 export const getScreenStream = async () => {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -518,13 +495,11 @@ export const switchToScreenShare = async (pc, screenStream, cameraStream) => {
   
   const senders = pc.getSenders();
   
-  // Replace video track
   const videoSender = senders.find(s => s.track?.kind === 'video');
   if (videoSender && screenVideoTrack) {
     await videoSender.replaceTrack(screenVideoTrack);
   }
   
-  // Replace audio track if available
   if (screenAudioTrack) {
     const audioSender = senders.find(s => s.track?.kind === 'audio');
     if (audioSender) {
@@ -532,7 +507,6 @@ export const switchToScreenShare = async (pc, screenStream, cameraStream) => {
     }
   }
   
-  // Listen for screen share end
   screenVideoTrack.onended = () => {
     console.log('Screen sharing ended by user');
   };
@@ -546,20 +520,17 @@ export const switchBackToCamera = async (pc, cameraStream) => {
   
   const senders = pc.getSenders();
   
-  // Replace video track
   const videoSender = senders.find(s => s.track?.kind === 'video');
   if (videoSender && cameraVideoTrack) {
     await videoSender.replaceTrack(cameraVideoTrack);
   }
   
-  // Replace audio track
   const audioSender = senders.find(s => s.track?.kind === 'audio');
   if (audioSender && cameraAudioTrack) {
     await audioSender.replaceTrack(cameraAudioTrack);
   }
 };
 
-// ==================== QUALITY INDICATOR ====================
 export const getQualityIndicator = (stats) => {
   const qualityScore = stats.getQualityScore?.() || 100;
   
@@ -569,7 +540,6 @@ export const getQualityIndicator = (stats) => {
   return { icon: '🔴', label: 'Poor', color: '#F44336' };
 };
 
-// ==================== VIDEO EFFECTS PROCESSOR ====================
 export class VideoEffectsProcessor {
   constructor(videoElement, canvasElement) {
     this.video = videoElement;
@@ -614,30 +584,22 @@ export class VideoEffectsProcessor {
       this.canvas.width = videoWidth;
       this.canvas.height = videoHeight;
       
-      // Draw video frame
       this.ctx.drawImage(this.video, 0, 0, videoWidth, videoHeight);
       
-      // Apply effects
       const imageData = this.ctx.getImageData(0, 0, videoWidth, videoHeight);
-      const data = imageData.data;
       
-      // Background blur simulation (simplified)
       if (this.effects.backgroundBlur > 0) {
-        // This is a placeholder - real background blur would use TensorFlow.js
-        // For simplicity, we'll just blur the entire image
         this.ctx.filter = `blur(${this.effects.backgroundBlur}px)`;
         this.ctx.drawImage(this.canvas, 0, 0);
         this.ctx.filter = 'none';
       }
       
-      // Brightness, contrast, saturation
       this.ctx.filter = `
         brightness(${this.effects.brightness})
         contrast(${this.effects.contrast})
         saturate(${this.effects.saturation})
       `;
       
-      // Re-draw with filters
       this.ctx.drawImage(this.canvas, 0, 0);
     }
     

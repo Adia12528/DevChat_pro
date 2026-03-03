@@ -1,4 +1,3 @@
-// CallHistoryPanel.js
 import React from 'react';
 import { Phone, Video, Clock, Download, X } from 'lucide-react';
 
@@ -30,7 +29,7 @@ const CallHistoryPanel = ({ history = [], onClose, formatDuration }) => {
                   <Clock size={12} />
                   <span>{new Date(call.timestamp).toLocaleString()}</span>
                   <span>•</span>
-                  <span>{formatDuration(call.duration)}</span>
+                  <span>{formatDuration?.(call.duration) || call.duration}</span>
                 </div>
               </div>
               <button className="call-export">

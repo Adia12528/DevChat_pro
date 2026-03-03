@@ -1,67 +1,67 @@
-import React from 'react';
-import { X, Save, RotateCcw } from 'lucide-react';
+// This is a template for creating new settings components
+// Copy this file and rename it to create new settings panels
 
-const SettingsTemplate = ({ 
-  title, 
-  icon, 
-  children, 
-  onClose, 
-  onSave, 
-  onReset,
-  showReset = true,
-  saveLabel = 'Save Changes',
-  isLoading = false
-}) => {
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+
+const SettingsTemplate = ({ onClose }) => {
+  const [settings, setSettings] = useState({
+    // Add your settings fields here
+    exampleSetting: true,
+    exampleOption: 'option1'
+  });
+
+  const handleChange = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    // Save settings logic here
+    console.log('Saving settings:', settings);
+    onClose();
+  };
+
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal" onClick={e => e.stopPropagation()}>
-        <div className="settings-modal-header">
-          <div className="settings-modal-title">
-            {icon && <span className="settings-modal-icon">{icon}</span>}
-            <h3>{title}</h3>
+    <div className="settings-panel">
+      <div className="settings-header">
+        <h2>Settings Template</h2>
+        <button className="close-btn" onClick={onClose}>
+          <X size={20} />
+        </button>
+      </div>
+
+      <div className="settings-content">
+        <div className="settings-section">
+          <h3>Example Section</h3>
+          
+          <div className="setting-item">
+            <label>Example Toggle</label>
+            <div className="toggle-switch">
+              <input 
+                type="checkbox" 
+                checked={settings.exampleSetting}
+                onChange={(e) => handleChange('exampleSetting', e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+            </div>
           </div>
-          <button className="settings-modal-close" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-        
-        <div className="settings-modal-content">
-          {children}
+
+          <div className="setting-item">
+            <label>Example Select</label>
+            <select 
+              value={settings.exampleOption}
+              onChange={(e) => handleChange('exampleOption', e.target.value)}
+            >
+              <option value="option1">Option 1</option>
+              <option value="option2">Option 2</option>
+              <option value="option3">Option 3</option>
+            </select>
+          </div>
         </div>
 
-        <div className="settings-modal-footer">
-          {showReset && (
-            <button 
-              className="settings-btn-reset" 
-              onClick={onReset}
-              disabled={isLoading}
-            >
-              <RotateCcw size={16} />
-              <span>Reset to Defaults</span>
-            </button>
-          )}
-          <div className="settings-footer-actions">
-            <button className="settings-btn-cancel" onClick={onClose} disabled={isLoading}>
-              Cancel
-            </button>
-            <button 
-              className="settings-btn-save" 
-              onClick={onSave}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <div className="spinner-small" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <>
-                  <Save size={16} />
-                  <span>{saveLabel}</span>
-                </>
-              )}
-            </button>
-          </div>
+        <div className="settings-actions">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={handleSave}>Save Changes</button>
         </div>
       </div>
     </div>
