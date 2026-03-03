@@ -2906,6 +2906,20 @@ input, textarea {
     z-index: 14001 !important;
   }
 
+  .mobile-menu-sheet {
+    position: fixed !important;
+    left: max(8px, env(safe-area-inset-left)) !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    top: auto !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    max-width: 560px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    transform-origin: bottom center;
+    isolation: isolate;
+  }
+
   .menu-dropdown::before,
   .menu-dropdown-dm::before {
     content: '';
@@ -2935,11 +2949,26 @@ input, textarea {
     border-radius: 14px !important;
     padding: 8px !important;
   }
+
+  .mobile-menu-sheet {
+    left: max(6px, env(safe-area-inset-left)) !important;
+    right: max(6px, env(safe-area-inset-right)) !important;
+    bottom: max(6px, env(safe-area-inset-bottom)) !important;
+    max-height: min(82dvh, calc(100dvh - 12px - env(safe-area-inset-top) - env(safe-area-inset-bottom))) !important;
+    border-radius: 14px !important;
+  }
 }
 
 @media (max-width: 360px) {
   .menu-dropdown,
   .menu-dropdown-dm {
+    left: max(4px, env(safe-area-inset-left)) !important;
+    right: max(4px, env(safe-area-inset-right)) !important;
+    border-radius: 12px !important;
+    max-height: 84dvh !important;
+  }
+
+  .mobile-menu-sheet {
     left: max(4px, env(safe-area-inset-left)) !important;
     right: max(4px, env(safe-area-inset-right)) !important;
     border-radius: 12px !important;

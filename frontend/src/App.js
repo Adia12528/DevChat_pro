@@ -4383,7 +4383,7 @@ function AppContent() {
       {liveKitToken && (
         <div className="livestream-fullscreen-container">
           {showMobileMenu && isMobileView && (
-            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 11000 }}>
+            <>
               <AnimatePresence>
                 <motion.div
                   className="menu-backdrop"
@@ -4391,15 +4391,13 @@ function AppContent() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onClick={() => setShowMobileMenu(false)}
-                  style={{ zIndex: 10998 }}
                 />
                 <motion.div 
                   ref={mobileMenuRef}
-                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  style={{ margin: '0 auto', maxWidth: 360, zIndex: 10999 }}
+                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''} mobile-menu-sheet`}
+                  initial={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
+                  animate={isMobileView ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+                  exit={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMobileMenu(false); }}><FileDown size={18}/><span>Export Chat</span></button>
@@ -4434,7 +4432,7 @@ function AppContent() {
                   <div className="menu-footer"><div>Session ends when browser closes</div><div className="menu-version">v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div></div>
                 </motion.div>
               </AnimatePresence>
-            </div>
+            </>
           )}
           <div className="livestream-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4498,10 +4496,10 @@ function AppContent() {
               <>
                 <motion.div className="menu-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMenuDropdown(false)} />
                 <motion.div
-                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''} ${isMobileView ? 'mobile-menu-sheet' : ''}`}
+                  initial={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
+                  animate={isMobileView ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+                  exit={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
