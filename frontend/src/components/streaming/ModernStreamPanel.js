@@ -365,7 +365,7 @@ const ModernStreamPanel = ({
         </div>
       </div>
 
-      <div className={`stream-sidebar ${showChat ? 'open' : 'collapsed'}`}>
+      <div className="stream-sidebar open">
         <div className="sidebar-tabs">
           <button className={`tab ${showChat ? 'active' : ''}`} onClick={() => setShowChat(true)}>
             <MessageSquare size={16} />

@@ -1207,7 +1207,7 @@ function AppContent() {
         data?.host === usernameRef.current &&
         data?.sessionId &&
         livestreamLocalStreamRef.current &&
-        !liveStreamInfoRef.current?.isHost
+        liveStreamInfoRef.current?.isStarting
       ) {
         if (livestreamStartTimeoutRef.current) {
           clearTimeout(livestreamStartTimeoutRef.current);
@@ -3470,7 +3470,7 @@ function AppContent() {
           rollbackLivestreamStart('Start stream timed out. Please try again.');
         }
         livestreamStartTimeoutRef.current = null;
-      }, 8000);
+      }, 15000);
 
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
@@ -4356,32 +4356,225 @@ function AppContent() {
     return () => document.removeEventListener('keydown', handleShortcuts);
   }, [showChat, groupRoomSummaries, activeRoom, room, switchRoom, markCurrentRoomAsRead]);
 
+  const handleBackNavigation = useCallback(() => {
+    if (showEmojiPicker) {
+      setShowEmojiPicker(false);
+      return true;
+    }
+    if (showMobileMenu) {
+      setShowMobileMenu(false);
+      return true;
+    }
+    if (showMenuDropdown) {
+      setShowMenuDropdown(false);
+      return true;
+    }
+    if (showCallSettings) {
+      setShowCallSettings(false);
+      return true;
+    }
+    if (showAudioSettings) {
+      setShowAudioSettings(false);
+      return true;
+    }
+    if (showVideoSettings) {
+      setShowVideoSettings(false);
+      return true;
+    }
+    if (showStreamSettings) {
+      setShowStreamSettings(false);
+      return true;
+    }
+    if (showAppSettings) {
+      setShowAppSettings(false);
+      return true;
+    }
+    if (showCallHistory) {
+      setShowCallHistory(false);
+      return true;
+    }
+    if (showStarredPanel) {
+      setShowStarredPanel(false);
+      return true;
+    }
+    if (showPinnedPanel) {
+      setShowPinnedPanel(false);
+      return true;
+    }
+    if (showClearConfirm) {
+      setShowClearConfirm(false);
+      return true;
+    }
+    if (showLogoutConfirm) {
+      setShowLogoutConfirm(false);
+      return true;
+    }
+    if (editingMsgId) {
+      setEditingMsgId(null);
+      return true;
+    }
+    if (showDeleteConfirm) {
+      setShowDeleteConfirm(false);
+      return true;
+    }
+    if (replyingTo) {
+      setReplyingTo(null);
+      return true;
+    }
+    if (contextMenu) {
+      setContextMenu(null);
+      setContextMenuMessage(null);
+      return true;
+    }
+    if (showAdvancedSearch) {
+      setShowAdvancedSearch(false);
+      return true;
+    }
+    if (showQuickReplies) {
+      setShowQuickReplies(false);
+      return true;
+    }
+    if (showProfileModal) {
+      setShowProfileModal(null);
+      return true;
+    }
+    if (showRoomSidebar) {
+      setShowRoomSidebar(false);
+      return true;
+    }
+    if (imageViewer) {
+      setImageViewer(null);
+      return true;
+    }
+    if (voicePlayer) {
+      setVoicePlayer(null);
+      setPlayingVoiceId(null);
+      if (audioRef.current) audioRef.current.pause();
+      return true;
+    }
+    if (isRecording) {
+      cancelVoiceRecording();
+      return true;
+    }
+    if (incomingCall) {
+      rejectCall();
+      return true;
+    }
+    if (liveStreamInfo || callState === 'active' || callState === 'calling' || callState === 'ringing') {
+      endCall();
+      return true;
+    }
+    if (currentView !== 'chat') {
+      setCurrentView('chat');
+      return true;
+    }
+    return false;
+  }, [
+    showEmojiPicker,
+    showMobileMenu,
+    showMenuDropdown,
+    showCallSettings,
+    showAudioSettings,
+    showVideoSettings,
+    showStreamSettings,
+    showAppSettings,
+    showCallHistory,
+    showStarredPanel,
+    showPinnedPanel,
+    showClearConfirm,
+    showLogoutConfirm,
+    editingMsgId,
+    showDeleteConfirm,
+    replyingTo,
+    contextMenu,
+    showAdvancedSearch,
+    showQuickReplies,
+    showProfileModal,
+    showRoomSidebar,
+    imageViewer,
+    voicePlayer,
+    isRecording,
+    incomingCall,
+    liveStreamInfo,
+    callState,
+    currentView,
+    cancelVoiceRecording,
+    rejectCall,
+    endCall
+  ]);
+
+  const canUseBackNavigation = useMemo(() => (
+    showEmojiPicker ||
+    showMobileMenu ||
+    showMenuDropdown ||
+    showCallSettings ||
+    showAudioSettings ||
+    showVideoSettings ||
+    showStreamSettings ||
+    showAppSettings ||
+    showCallHistory ||
+    showStarredPanel ||
+    showPinnedPanel ||
+    showClearConfirm ||
+    showLogoutConfirm ||
+    !!editingMsgId ||
+    showDeleteConfirm ||
+    !!replyingTo ||
+    !!contextMenu ||
+    showAdvancedSearch ||
+    showQuickReplies ||
+    !!showProfileModal ||
+    showRoomSidebar ||
+    !!imageViewer ||
+    !!voicePlayer ||
+    isRecording ||
+    !!incomingCall ||
+    !!liveStreamInfo ||
+    callState === 'active' ||
+    callState === 'calling' ||
+    callState === 'ringing' ||
+    currentView !== 'chat'
+  ), [
+    showEmojiPicker,
+    showMobileMenu,
+    showMenuDropdown,
+    showCallSettings,
+    showAudioSettings,
+    showVideoSettings,
+    showStreamSettings,
+    showAppSettings,
+    showCallHistory,
+    showStarredPanel,
+    showPinnedPanel,
+    showClearConfirm,
+    showLogoutConfirm,
+    editingMsgId,
+    showDeleteConfirm,
+    replyingTo,
+    contextMenu,
+    showAdvancedSearch,
+    showQuickReplies,
+    showProfileModal,
+    showRoomSidebar,
+    imageViewer,
+    voicePlayer,
+    isRecording,
+    incomingCall,
+    liveStreamInfo,
+    callState,
+    currentView
+  ]);
+
   // ==================== ESC KEY HANDLER ====================
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key !== 'Escape') return;
-      
-      if (showEmojiPicker) setShowEmojiPicker(false);
-      else if (showMobileMenu) setShowMobileMenu(false);
-      else if (showMenuDropdown) setShowMenuDropdown(false);
-      else if (showStarredPanel) setShowStarredPanel(false);
-      else if (showPinnedPanel) setShowPinnedPanel(false);
-      else if (showClearConfirm) setShowClearConfirm(false);
-      else if (showLogoutConfirm) setShowLogoutConfirm(false);
-      else if (editingMsgId) setEditingMsgId(null);
-      else if (showDeleteConfirm) setShowDeleteConfirm(false);
-      else if (replyingTo) setReplyingTo(null);
-      else if (contextMenu) { setContextMenu(null); setContextMenuMessage(null); }
-      else if (imageViewer) setImageViewer(null);
-      else if (voicePlayer) { setVoicePlayer(null); setPlayingVoiceId(null); if (audioRef.current) audioRef.current.pause(); }
-      else if (isRecording) cancelVoiceRecording();
+      handleBackNavigation();
     };
 
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
-  }, [showEmojiPicker, showMenuDropdown, showStarredPanel, showPinnedPanel, showClearConfirm, 
-      showLogoutConfirm, editingMsgId, showDeleteConfirm, replyingTo, contextMenu, imageViewer, 
-      voicePlayer, isRecording]);
+  }, [handleBackNavigation]);
 
   // ==================== RENDER LOGIN SCREEN ====================
   if (!showChat) {
@@ -4401,6 +4594,18 @@ function AppContent() {
   // ==================== RENDER CHAT UI ====================
   return (
     <div className="chat-container">
+      {canUseBackNavigation && (
+        <button
+          className="global-back-btn"
+          onClick={handleBackNavigation}
+          aria-label="Go back"
+          title="Back"
+        >
+          <ChevronLeft size={18} />
+          <span>Back</span>
+        </button>
+      )}
+
       {/* LiveKit Stream */}
       {liveKitToken && (
         <div className="livestream-fullscreen-container">

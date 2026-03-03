@@ -261,6 +261,34 @@ input, textarea {
   background: var(--hover);
 }
 
+.global-back-btn {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 17020;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--txt);
+  box-shadow: 0 8px 20px var(--shadow);
+  transition: var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.global-back-btn:hover {
+  background: var(--hover);
+}
+
+.global-back-btn span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .dm-back-btn {
   display: flex;
   align-items: center;
@@ -2896,6 +2924,9 @@ input, textarea {
     margin-right: auto;
     max-height: min(78dvh, calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom))) !important;
     overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     overscroll-behavior: contain;
     border-radius: 16px !important;
     padding: 10px !important;
@@ -2918,6 +2949,10 @@ input, textarea {
     margin-right: auto !important;
     transform-origin: bottom center;
     isolation: isolate;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .menu-dropdown::before,
@@ -3084,7 +3119,10 @@ input, textarea {
   .mobile-menu-sheet {
     display: flex;
     flex-direction: column;
-    overflow: hidden !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .mobile-menu-sheet .menu-header,
@@ -3125,6 +3163,17 @@ input, textarea {
 
   .msg-bubble {
     max-width: 92% !important;
+  }
+
+  .global-back-btn {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    min-height: 36px;
+    padding: 7px 10px;
+  }
+
+  .global-back-btn span {
+    font-size: 12px;
   }
 }
 

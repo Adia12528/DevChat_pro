@@ -2375,11 +2375,11 @@
   border-radius: 50%;
 }
 
-input:checked + .toggle-slider {
+.toggle input:checked + .toggle-slider {
   background-color: #00a884;
 }
 
-input:checked + .toggle-slider:before {
+.toggle input:checked + .toggle-slider:before {
   transform: translateX(20px);
 }
 
@@ -4612,4 +4612,188 @@ body.keyboard-open .stream-setup-content,
 body.keyboard-open .app-settings-content,
 body.keyboard-open .settings-content {
   max-height: 48svh !important;
+}
+
+/* ==================== STREAM MOBILE FINAL OVERRIDES ==================== */
+@media (max-width: 768px) {
+  .modern-stream-container {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden;
+  }
+
+  .stream-video-area {
+    width: 100% !important;
+    min-height: 42dvh !important;
+    flex: 0 0 auto;
+  }
+
+  .stream-video-wrapper,
+  .stream-video-feed {
+    height: 100%;
+  }
+
+  .stream-sidebar,
+  .stream-sidebar.open,
+  .stream-sidebar.collapsed {
+    position: relative !important;
+    inset: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    opacity: 1 !important;
+    transform: none !important;
+    border-left: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    z-index: 10005 !important;
+    overflow: hidden !important;
+  }
+
+  .sidebar-tabs {
+    flex: 0 0 auto;
+  }
+
+  .chat-container,
+  .viewers-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px !important;
+  }
+
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-input-area {
+    flex: 0 0 auto;
+    position: sticky;
+    bottom: 0;
+    background: rgba(20, 20, 30, 0.96);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 2;
+  }
+
+  .quick-reactions {
+    flex-wrap: wrap;
+  }
+
+  .chat-input-wrapper {
+    gap: 6px;
+  }
+
+  .chat-input-wrapper input {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .chat-input-wrapper button {
+    min-height: 40px;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+
+  .viewer-item {
+    min-height: 44px;
+  }
+
+  .viewer-name {
+    max-width: 100%;
+  }
+
+  .stream-control-bar {
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+  }
+
+  .stream-settings-backdrop {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)) !important;
+    z-index: 16000 !important;
+  }
+
+  .stream-settings-modal {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    width: min(460px, calc(100vw - 16px)) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    border-radius: 14px !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+    margin: 0 !important;
+  }
+
+  .stream-settings-modal .settings-header,
+  .stream-settings-modal .settings-actions {
+    flex: 0 0 auto;
+  }
+
+  .stream-settings-modal .settings-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    max-height: none !important;
+    padding: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .stream-video-area {
+    min-height: 38dvh !important;
+  }
+
+  .tab {
+    font-size: 12px;
+    padding: 10px 8px;
+  }
+
+  .stream-settings-modal {
+    width: calc(100vw - 10px) !important;
+    max-width: calc(100vw - 10px) !important;
+    max-height: calc(100dvh - 10px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    border-radius: 12px !important;
+  }
+
+  .stream-settings-modal .settings-actions {
+    padding: 10px !important;
+    gap: 8px;
+  }
+
+  .stream-settings-modal .settings-actions .settings-btn {
+    flex: 1 1 calc(50% - 8px);
+    min-height: 40px;
+  }
+}
+
+body.keyboard-open .stream-settings-modal {
+  max-height: min(72svh, calc(100svh - 8px)) !important;
 }
