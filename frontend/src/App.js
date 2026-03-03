@@ -139,7 +139,7 @@ function AppContent() {
   const [autoJoinLivestream, setAutoJoinLivestream] = useState(() => localStorage.getItem('autoJoinLivestream') === 'true');
   const [showDoubleTick, setShowDoubleTick] = useState(localStorage.getItem('showDoubleTick') !== 'false');
   const [showBlueTick, setShowBlueTick] = useState(localStorage.getItem('showBlueTick') !== 'false');
-  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 600);
+  const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [isIOS, setIsIOS] = useState(/iPhone|iPad|iPod/i.test(navigator.userAgent));
   const [isWindows, setIsWindows] = useState(/Windows/i.test(navigator.userAgent));
   
@@ -628,7 +628,7 @@ function AppContent() {
 
   // ==================== MOBILE DETECTION ====================
   useEffect(() => {
-    const handleResize = () => setIsMobileView(window.innerWidth < 600);
+    const handleResize = () => setIsMobileView(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -4340,6 +4340,7 @@ function AppContent() {
       if (e.key !== 'Escape') return;
       
       if (showEmojiPicker) setShowEmojiPicker(false);
+      else if (showMobileMenu) setShowMobileMenu(false);
       else if (showMenuDropdown) setShowMenuDropdown(false);
       else if (showStarredPanel) setShowStarredPanel(false);
       else if (showPinnedPanel) setShowPinnedPanel(false);

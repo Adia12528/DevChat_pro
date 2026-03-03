@@ -2392,6 +2392,54 @@ input, textarea {
 }
 
 @media (max-width: 768px) {
+  .chat-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 6px;
+    min-height: 60px;
+    height: auto;
+    padding: 8px 10px;
+    overflow: hidden;
+  }
+
+  .dm-back-btn {
+    display: none;
+  }
+
+  .meta {
+    width: auto;
+    min-width: 0;
+  }
+
+  .meta h3 {
+    font-size: 15px;
+    margin-bottom: 1px;
+  }
+
+  .room-info {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .users-info,
+  .theme-toggle,
+  .sound-toggle,
+  .clear-btn {
+    display: none;
+  }
+
+  .call-buttons {
+    gap: 6px;
+  }
+
+  .call-btn {
+    width: 34px;
+    height: 34px;
+  }
+
   .chat-container {
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -2420,6 +2468,7 @@ input, textarea {
   .menu-backdrop {
     z-index: 12000;
     background: rgba(0, 0, 0, 0.62);
+    touch-action: none;
   }
 
   .menu-dropdown,
@@ -2437,6 +2486,7 @@ input, textarea {
     padding: 8px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    pointer-events: auto;
     box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
   }
 
@@ -2451,6 +2501,7 @@ input, textarea {
     min-height: 44px;
     padding: 11px 12px;
     font-size: 14px;
+    touch-action: manipulation;
   }
 
   .menu-footer {
@@ -2479,6 +2530,16 @@ input, textarea {
   .menu-item {
     min-height: 46px;
     font-size: 13px;
+  }
+
+  .room-info {
+    font-size: 10px;
+  }
+
+  .room-info .meta-divider,
+  .room-info .message-count,
+  .room-info .last-activity {
+    display: none;
   }
 
   .menu-item svg {
