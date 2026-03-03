@@ -1691,11 +1691,11 @@ function AppContent() {
     };
 
     if (showMenuDropdown) {
-      document.addEventListener('click', handleClickOutsideMenu);
+      document.addEventListener('pointerdown', handleClickOutsideMenu);
     }
 
     return () => {
-      document.removeEventListener('click', handleClickOutsideMenu);
+      document.removeEventListener('pointerdown', handleClickOutsideMenu);
     };
   }, [showMenuDropdown]);
 
@@ -1707,13 +1707,25 @@ function AppContent() {
     };
 
     if (showMobileMenu) {
-      document.addEventListener('click', handleClickOutsideMobileMenu);
+      document.addEventListener('pointerdown', handleClickOutsideMobileMenu);
     }
 
     return () => {
-      document.removeEventListener('click', handleClickOutsideMobileMenu);
+      document.removeEventListener('pointerdown', handleClickOutsideMobileMenu);
     };
   }, [showMobileMenu]);
+
+  useEffect(() => {
+    const shouldLockScroll = isMobileView && (showMenuDropdown || showMobileMenu);
+    const previousOverflow = document.body.style.overflow;
+    if (shouldLockScroll) {
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMobileView, showMenuDropdown, showMobileMenu]);
 
   useEffect(() => {
     if (!isMobileView || !liveKitToken) {
@@ -4432,7 +4444,10 @@ function AppContent() {
               {isMobileView && (
                 <button
                   className="menu-toggle"
-                  onClick={() => setShowMobileMenu((prev) => !prev)}
+                  onClick={() => {
+                    setShowMenuDropdown(false);
+                    setShowMobileMenu((prev) => !prev);
+                  }}
                   title="Open stream menu"
                   aria-label="Open stream menu"
                 >
@@ -4470,7 +4485,10 @@ function AppContent() {
         <div className="menu-container" ref={menuContainerRef}>
           <button
             className="menu-toggle"
-            onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+            onClick={() => {
+              setShowMobileMenu(false);
+              setShowMenuDropdown((prev) => !prev);
+            }}
             title="Menu"
           ><Menu size={24}/></button>
           

@@ -2382,6 +2382,136 @@ input, textarea {
   }
 }
 
+/* ==================== MOBILE HARDENING ==================== */
+@supports (height: 100dvh) {
+  .chat-container,
+  .login-screen {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-container {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .chat-header {
+    position: sticky;
+    top: 0;
+    z-index: 300;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  .chat-body {
+    padding: 10px;
+    scroll-padding-bottom: 110px;
+  }
+
+  .chat-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 300;
+    background: var(--bg);
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .menu-backdrop {
+    z-index: 12000;
+    background: rgba(0, 0, 0, 0.62);
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    max-height: min(78dvh, 640px);
+    border-radius: 14px;
+    z-index: 12001;
+    padding: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  }
+
+  .menu-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-secondary);
+  }
+
+  .menu-item {
+    min-height: 44px;
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+
+  .menu-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-secondary);
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    padding: 8px;
+    min-height: 58px;
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    left: 6px;
+    right: 6px;
+    bottom: calc(6px + env(safe-area-inset-bottom));
+    max-height: min(82dvh, 680px);
+    border-radius: 12px;
+  }
+
+  .menu-item {
+    min-height: 46px;
+    font-size: 13px;
+  }
+
+  .menu-item svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .meta h3 {
+    font-size: 14px;
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    left: 4px;
+    right: 4px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  .chat-header {
+    min-height: 52px;
+    padding: 6px 8px;
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm {
+    max-height: 72dvh;
+  }
+}
+
   /* ==================== RESPONSIVE HARDENING ==================== */
   .login-screen,
   .chat-container {
