@@ -253,6 +253,8 @@ input, textarea {
   background: var(--input-bg);
   color: var(--txt);
   transition: var(--transition);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .menu-toggle:hover {
@@ -440,6 +442,8 @@ input, textarea {
   color: var(--txt);
   font-size: 14px;
   transition: var(--transition);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .menu-item:hover {

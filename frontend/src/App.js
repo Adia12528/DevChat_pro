@@ -404,6 +404,7 @@ function AppContent() {
   const cameraInputRef = useRef(null);
   const textareaRef = useRef(null);
   const menuContainerRef = useRef(null);
+  const mobileMenuRef = useRef(null);
   const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -1507,15 +1508,29 @@ function AppContent() {
     };
 
     if (showMenuDropdown) {
-      document.addEventListener('mousedown', handleClickOutsideMenu);
-      document.addEventListener('touchstart', handleClickOutsideMenu);
+      document.addEventListener('pointerdown', handleClickOutsideMenu, true);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutsideMenu);
-      document.removeEventListener('touchstart', handleClickOutsideMenu);
+      document.removeEventListener('pointerdown', handleClickOutsideMenu, true);
     };
   }, [showMenuDropdown]);
+
+  useEffect(() => {
+    const handleClickOutsideMobileMenu = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setShowMobileMenu(false);
+      }
+    };
+
+    if (showMobileMenu) {
+      document.addEventListener('pointerdown', handleClickOutsideMobileMenu, true);
+    }
+
+    return () => {
+      document.removeEventListener('pointerdown', handleClickOutsideMobileMenu, true);
+    };
+  }, [showMobileMenu]);
 
   useEffect(() => {
     if (!showMenuDropdown) {
@@ -4107,12 +4122,23 @@ function AppContent() {
           {showMobileMenu && isMobileView && (
             <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', zIndex: 11000 }}>
               <AnimatePresence>
+                <motion.div
+                  className="menu-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowMobileMenu(false)}
+                  style={{ zIndex: 10998 }}
+                />
                 <motion.div 
+                  ref={mobileMenuRef}
                   className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  style={{ margin: '0 auto', maxWidth: 360 }}
+                  style={{ margin: '0 auto', maxWidth: 360, zIndex: 10999 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMobileMenu(false); }}><FileDown size={18}/><span>Export Chat</span></button>
@@ -4182,13 +4208,28 @@ function AppContent() {
       {/* Chat Header */}
       <div className="chat-header">
         <div className="menu-container" ref={menuContainerRef}>
-          <button className="menu-toggle" onClick={() => setShowMenuDropdown(!showMenuDropdown)} title="Menu"><Menu size={24}/></button>
+          <button
+            className="menu-toggle"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenuDropdown(!showMenuDropdown);
+            }}
+            title="Menu"
+          ><Menu size={24}/></button>
           
           <AnimatePresence>
             {showMenuDropdown && (
               <>
                 <motion.div className="menu-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMenuDropdown(false)} />
-                <motion.div className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`} initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }}>
+                <motion.div
+                  className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''}`}
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
                   <button className="menu-item" onClick={() => { setShowStarredPanel(true); setShowMenuDropdown(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
