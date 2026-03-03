@@ -473,7 +473,6 @@ function AppContent() {
   useEffect(() => { autoJoinLivestreamRef.current = autoJoinLivestream; }, [autoJoinLivestream]);
   useEffect(() => { notificationPrefsRef.current = notificationPrefs; }, [notificationPrefs]);
   useEffect(() => { blockedUsersRef.current = blockedUsers; }, [blockedUsers]);
-  useEffect(() => { endCallRef.current = endCall; }, [endCall]);
 
   // ==================== INITIAL SETUP ====================
   useEffect(() => {
@@ -1975,7 +1974,7 @@ function AppContent() {
         break;
     }
     closeContextMenu();
-  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, toggleStar, closeContextMenu, openImageViewer, playVoiceMessage]);
+  }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, toggleStar, closeContextMenu]);
 
   // ==================== RENDER MESSAGE TEXT ====================
   const renderMessageText = (msg) => {
