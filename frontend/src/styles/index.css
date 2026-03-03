@@ -4528,3 +4528,88 @@ input:checked + .toggle-slider:before {
     flex: 1 1 130px;
   }
 }
+
+/* ==================== CROSS-FEATURE RESPONSIVE MASTER GUARD ==================== */
+@media (max-width: 768px) {
+  .call-container,
+  .voice-call-container,
+  .modern-call-container,
+  .modern-stream-container,
+  .livestream-fullscreen-container,
+  .stream-video-area,
+  .stream-video-wrapper,
+  .stream-video-feed,
+  .stream-video,
+  .remote-video,
+  .local-video {
+    max-width: 100vw;
+  }
+
+  .call-sidebar,
+  .stream-sidebar,
+  .livestream-chat,
+  .call-chat-panel,
+  .call-settings-panel,
+  .call-participants-panel,
+  .stream-settings-modal,
+  .stream-setup-modal,
+  .app-settings-panel,
+  .settings-panel,
+  .incoming-call-modal,
+  .calling-modal,
+  .call-stats-panel {
+    max-width: calc(100vw - 10px) !important;
+  }
+
+  .stream-control-bar,
+  .modern-call-controls,
+  .call-bottom-controls {
+    max-width: calc(100vw - 12px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .stream-title,
+  .call-peer,
+  .call-peer-name,
+  .viewer-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 480px) {
+  .stream-settings-modal,
+  .stream-setup-modal,
+  .app-settings-panel,
+  .settings-panel,
+  .incoming-call-modal,
+  .calling-modal {
+    width: calc(100vw - 8px) !important;
+    max-width: calc(100vw - 8px) !important;
+  }
+
+  .call-control-btn,
+  .stream-control-btn,
+  .control-icon {
+    min-width: 34px;
+    min-height: 34px;
+  }
+}
+
+body.keyboard-open .settings-panel,
+body.keyboard-open .stream-settings-modal,
+body.keyboard-open .stream-setup-modal,
+body.keyboard-open .app-settings-panel,
+body.keyboard-open .incoming-call-modal,
+body.keyboard-open .calling-modal {
+  max-height: 60svh !important;
+}
+
+body.keyboard-open .settings-panel .settings-content,
+body.keyboard-open .stream-setup-content,
+body.keyboard-open .app-settings-content,
+body.keyboard-open .settings-content {
+  max-height: 48svh !important;
+}

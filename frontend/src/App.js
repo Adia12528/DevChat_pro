@@ -633,6 +633,28 @@ function AppContent() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return undefined;
+
+    const handleViewportChange = () => {
+      const keyboardOpen =
+        window.innerWidth < 768 &&
+        window.innerHeight - viewport.height > 120;
+      document.body.classList.toggle('keyboard-open', keyboardOpen);
+    };
+
+    handleViewportChange();
+    viewport.addEventListener('resize', handleViewportChange);
+    viewport.addEventListener('scroll', handleViewportChange);
+
+    return () => {
+      document.body.classList.remove('keyboard-open');
+      viewport.removeEventListener('resize', handleViewportChange);
+      viewport.removeEventListener('scroll', handleViewportChange);
+    };
+  }, []);
+
   // ==================== TAB TITLE ====================
   useEffect(() => {
     document.title = unreadCount > 0 ? `(${unreadCount}) DevChat Pro` : 'DevChat Pro';

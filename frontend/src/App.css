@@ -3017,3 +3017,168 @@ input, textarea {
     min-height: 48px;
   }
 }
+
+/* ==================== RESPONSIVE MASTER GUARD ==================== */
+@media (max-width: 768px) {
+  .chat-container,
+  .chat-header,
+  .search-bar,
+  .chat-body,
+  .chat-footer {
+    max-width: 100vw;
+  }
+
+  .chat-header > * {
+    min-width: 0;
+  }
+
+  .menu-container {
+    flex-shrink: 0;
+    z-index: 14002;
+  }
+
+  .meta,
+  .meta h3,
+  .room-info {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .search-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .search-input {
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .search-result-count {
+    order: 3;
+    width: 100%;
+    text-align: left;
+  }
+
+  .markdown-toggle {
+    flex-shrink: 0;
+  }
+
+  .msg-bubble,
+  .image-message-wrapper,
+  .file-card,
+  .voice-message-wrapper,
+  .context-menu,
+  .emoji-picker-container,
+  .modal,
+  .voice-player-modal,
+  .room-sidebar,
+  .starred-panel {
+    max-width: calc(100vw - 12px) !important;
+  }
+
+  .mobile-menu-sheet {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+  }
+
+  .mobile-menu-sheet .menu-header,
+  .mobile-menu-sheet .menu-footer {
+    background: var(--bg-secondary);
+  }
+
+  .mobile-menu-sheet .menu-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .mobile-menu-sheet .menu-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .call-buttons {
+    gap: 4px;
+  }
+
+  .call-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .menu-item {
+    min-height: 48px;
+  }
+
+  .msg-bubble {
+    max-width: 92% !important;
+  }
+}
+
+body.keyboard-open .mobile-menu-sheet,
+body.keyboard-open .menu-dropdown,
+body.keyboard-open .menu-dropdown-dm {
+  top: auto !important;
+  bottom: 4px !important;
+  max-height: min(58svh, calc(100svh - 8px)) !important;
+}
+
+body.keyboard-open .chat-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 320;
+}
+
+body.keyboard-open .emoji-picker-container,
+body.keyboard-open .context-menu,
+body.keyboard-open .modal,
+body.keyboard-open .voice-player-modal {
+  max-height: 56svh !important;
+}
+
+/* ==================== MOBILE MENU ANCHOR FINAL OVERRIDE ==================== */
+@media (max-width: 768px) {
+  .chat-header {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm,
+  .mobile-menu-sheet {
+    position: fixed !important;
+    top: max(62px, calc(env(safe-area-inset-top) + 54px)) !important;
+    bottom: auto !important;
+    left: max(8px, env(safe-area-inset-left)) !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 70px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    margin: 0 !important;
+    z-index: 15001 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .menu-dropdown,
+  .menu-dropdown-dm,
+  .mobile-menu-sheet {
+    top: max(58px, calc(env(safe-area-inset-top) + 50px)) !important;
+    left: max(6px, env(safe-area-inset-left)) !important;
+    right: max(6px, env(safe-area-inset-right)) !important;
+    max-height: calc(100dvh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+  }
+}
