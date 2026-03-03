@@ -455,11 +455,19 @@ io.on('connection', (socket) => {
         }
 
         const previousRoom = socket.room;
-        if (setActiveRoom && previousRoom && previousRoom !== room) {
+        const isSwitchingBetweenGroupRooms =
+            setActiveRoom &&
+            previousRoom &&
+            previousRoom !== room &&
+            !previousRoom.includes('_dm_') &&
+            !room.includes('_dm_');
+
+        if (isSwitchingBetweenGroupRooms) {
             socket.leave(previousRoom);
             removeSocketFromRoom({ room: previousRoom, username, emitOffline: false })
                 .catch((err) => console.error('Cleanup error while switching rooms:', err));
         }
+
         socket.join(room);
         socket.username = username;
         if (setActiveRoom) {
