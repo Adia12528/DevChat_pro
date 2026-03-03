@@ -1544,6 +1544,10 @@ function AppContent() {
     }
   }, [showMenuDropdown]);
 
+  useEffect(() => {
+    setShowStreamingTab(!!liveStreamInfo);
+  }, [liveStreamInfo]);
+
   // ==================== IDLE DETECTION ====================
   useEffect(() => {
     if (!showChat || !connected || !socketRef.current || !usernameRef.current) return;
@@ -4922,7 +4926,7 @@ function AppContent() {
       </AnimatePresence>
 
       {/* Active Call Panel */}
-      {callState === 'active' && callPeer && (
+      {callState === 'active' && callPeer && !liveStreamInfo && (
         <Suspense fallback={<div style={{ color: 'var(--txt)', padding: '12px' }}>Loading call panel...</div>}>
           <CallPanel
             callType={callType}
