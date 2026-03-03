@@ -820,7 +820,7 @@ input, textarea {
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  transition: var(--transition);
+  touch-action: pan-y;
 }
 
 .reaction-item:hover {
@@ -2378,6 +2378,65 @@ input, textarea {
     right: 5px;
   }
 
+/* ==================== MOBILE GLOBAL STABILITY OVERRIDES ==================== */
+@media (max-width: 768px), (pointer: coarse) {
+  .menu-dropdown,
+  .menu-dropdown-dm,
+  .mobile-menu-sheet,
+  .settings-panel,
+  .stream-settings-modal,
+  .stream-setup-modal,
+  .app-settings-panel,
+  .call-settings-panel,
+  .call-participants-panel,
+  .call-chat-panel,
+  .room-sidebar,
+  .starred-panel,
+  .pinned-panel,
+  .modal,
+  .voice-player-modal,
+  .profile-modal,
+  .incoming-call-modal,
+  .calling-modal {
+    width: min(calc(100vw - 10px), 520px) !important;
+    max-width: calc(100vw - 10px) !important;
+    max-height: calc(100dvh - 10px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+
+  .menu-backdrop,
+  .settings-panel-overlay,
+  .stream-settings-backdrop,
+  .stream-setup-overlay,
+  .app-settings-overlay,
+  .room-sidebar-overlay,
+  .profile-modal-overlay,
+  .call-overlay {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(8, 12, 20, 0.76) !important;
+  }
+
+  .menu-dropdown,
+  .menu-dropdown-dm,
+  .mobile-menu-sheet {
+    z-index: 17001 !important;
+  }
+
+  .menu-item,
+  .settings-btn,
+  .app-settings-btn-primary,
+  .app-settings-btn-secondary,
+  .btn-primary,
+  .btn-secondary,
+  .test-btn {
+    min-height: 44px;
+  }
+}
+
   .msg-bubble {
     max-width: 90%;
   }
@@ -2496,7 +2555,7 @@ input, textarea {
   .menu-backdrop {
     z-index: 12000;
     background: rgba(0, 0, 0, 0.62);
-    touch-action: none;
+    touch-action: auto;
   }
 
   .menu-dropdown,
@@ -3125,6 +3184,16 @@ input, textarea {
     touch-action: pan-y;
   }
 
+  .mobile-menu-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
   .mobile-menu-sheet .menu-header,
   .mobile-menu-sheet .menu-footer {
     background: var(--bg-secondary);
@@ -3218,6 +3287,10 @@ body.keyboard-open .voice-player-modal {
     max-height: calc(100dvh - 70px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
     margin: 0 !important;
     z-index: 15001 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
 }
 

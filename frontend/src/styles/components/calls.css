@@ -955,11 +955,11 @@
   border-radius: 50%;
 }
 
-input:checked + .toggle-slider {
+.toggle-switch input:checked + .toggle-slider {
   background-color: var(--primary);
 }
 
-input:checked + .toggle-slider:before {
+.toggle-switch input:checked + .toggle-slider:before {
   transform: translateX(20px);
 }
 

@@ -4627,34 +4627,36 @@ function AppContent() {
                   exit={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
                 >
                   <div className="menu-header">Main Menu</div>
-                  <button className="menu-item" onClick={() => { exportChat(); setShowMobileMenu(false); }}><FileDown size={18}/><span>Export Chat</span></button>
-                  <button className="menu-item" onClick={() => { setShowStarredPanel(true); setShowMobileMenu(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
-                  <div className="menu-section">
-                    <div className="menu-header">📞 Call Settings</div>
-                    <button className="menu-item" onClick={() => { setShowCallSettings(true); setShowMobileMenu(false); }}><Phone size={18}/><span>Call Preferences</span></button>
-                    <button className="menu-item" onClick={() => { setShowAudioSettings(true); setShowMobileMenu(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
-                    <button className="menu-item" onClick={() => { setShowVideoSettings(true); setShowMobileMenu(false); }}><Camera size={18}/><span>Video & Camera</span></button>
-                    <button className="menu-item" onClick={() => { setShowCallHistory(true); setShowMobileMenu(false); }}><Activity size={18}/><span>Call History</span></button>
-                  </div>
-                  <div className="menu-section">
-                    <div className="menu-header">🎥 Streaming</div>
-                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMobileMenu(false); }}><Radio size={18}/><span>Start Stream</span></button>
-                    <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMobileMenu(false); }}><PlayCircle size={18}/><span>Join Stream</span></button>
-                    <button className="menu-item" onClick={() => { setShowStreamSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>Stream Settings</span></button>
-                  </div>
-                  <div className="menu-section">
-                    <div className="menu-header">⚙️ General</div>
-                    <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
-                    <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
-                    <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
-                    <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
-                  </div>
-                  <div className="menu-section">
-                    <div className="menu-header">📊 Info</div>
-                    <div className="menu-item menu-info"><Activity size={18}/><div className="menu-info-content"><span>Stats: {conversationStats.totalMessages} msgs</span><small>{conversationStats.totalUsers} users • {conversationStats.avgMessageLength} chars</small></div></div>
-                  </div>
-                  <div className="menu-section">
-                    <button className="menu-item menu-item-danger" onClick={() => { setShowLogoutConfirm(true); setShowMobileMenu(false); }}><LogOut size={18}/><span>Logout</span></button>
+                  <div className="mobile-menu-scroll">
+                    <button className="menu-item" onClick={() => { exportChat(); setShowMobileMenu(false); }}><FileDown size={18}/><span>Export Chat</span></button>
+                    <button className="menu-item" onClick={() => { setShowStarredPanel(true); setShowMobileMenu(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
+                    <div className="menu-section">
+                      <div className="menu-header">📞 Call Settings</div>
+                      <button className="menu-item" onClick={() => { setShowCallSettings(true); setShowMobileMenu(false); }}><Phone size={18}/><span>Call Preferences</span></button>
+                      <button className="menu-item" onClick={() => { setShowAudioSettings(true); setShowMobileMenu(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
+                      <button className="menu-item" onClick={() => { setShowVideoSettings(true); setShowMobileMenu(false); }}><Camera size={18}/><span>Video & Camera</span></button>
+                      <button className="menu-item" onClick={() => { setShowCallHistory(true); setShowMobileMenu(false); }}><Activity size={18}/><span>Call History</span></button>
+                    </div>
+                    <div className="menu-section">
+                      <div className="menu-header">🎥 Streaming</div>
+                      <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, true); setShowMobileMenu(false); }}><Radio size={18}/><span>Start Stream</span></button>
+                      <button className="menu-item" onClick={() => { handleJoinStream(`${room}-stream`, false); setShowMobileMenu(false); }}><PlayCircle size={18}/><span>Join Stream</span></button>
+                      <button className="menu-item" onClick={() => { setShowStreamSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>Stream Settings</span></button>
+                    </div>
+                    <div className="menu-section">
+                      <div className="menu-header">⚙️ General</div>
+                      <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
+                      <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
+                      <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
+                      <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
+                    </div>
+                    <div className="menu-section">
+                      <div className="menu-header">📊 Info</div>
+                      <div className="menu-item menu-info"><Activity size={18}/><div className="menu-info-content"><span>Stats: {conversationStats.totalMessages} msgs</span><small>{conversationStats.totalUsers} users • {conversationStats.avgMessageLength} chars</small></div></div>
+                    </div>
+                    <div className="menu-section">
+                      <button className="menu-item menu-item-danger" onClick={() => { setShowLogoutConfirm(true); setShowMobileMenu(false); }}><LogOut size={18}/><span>Logout</span></button>
+                    </div>
                   </div>
                   <div className="menu-footer"><div>Session ends when browser closes</div><div className="menu-version">v{APP_VERSION} • {new Date(BUILD_DATE).toLocaleDateString()}</div></div>
                 </motion.div>
