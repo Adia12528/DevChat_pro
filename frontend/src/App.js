@@ -437,6 +437,7 @@ function AppContent() {
   const livestreamHostPeersRef = useRef(new Map());
   const livestreamViewerPeerRef = useRef(null);
   const livestreamLocalStreamRef = useRef(null);
+  const livestreamStartTimeoutRef = useRef(null);
   const callTimeoutRef = useRef(null);
   const reconnectCountdownRef = useRef(null);
   const reconnectRetryTimeoutRef = useRef(null);
@@ -1033,6 +1034,39 @@ function AppContent() {
     // Livestream events
     socket.on(LIVESTREAM_EVENTS.STARTED, (data) => {
       setSuccessMessage(`🔴 ${data.host} started a livestream`);
+
+      if (
+        data?.host === usernameRef.current &&
+        data?.sessionId &&
+        livestreamLocalStreamRef.current &&
+        !liveStreamInfoRef.current?.isHost
+      ) {
+        if (livestreamStartTimeoutRef.current) {
+          clearTimeout(livestreamStartTimeoutRef.current);
+          livestreamStartTimeoutRef.current = null;
+        }
+
+        const hostStream = livestreamLocalStreamRef.current;
+        setLiveStreamInfo({
+          sessionId: data.sessionId,
+          host: usernameRef.current,
+          room: data.room || roomRef.current || room,
+          visibility: data.visibility || 'room',
+          source: data.source || streamSource,
+          hasAudio: hostStream.getAudioTracks().length > 0,
+          isHost: true,
+          isStarting: false,
+          autoJoined: false,
+          viewers: [],
+          viewerCount: 0
+        });
+
+        setCallType('video');
+        setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
+        setCallState('active');
+        startCallTimer();
+      }
+
       setNotificationItems(prev => [...prev.filter(item => item.id !== `live-${data.sessionId}`), {
         id: `live-${data.sessionId}`,
         type: 'livestream',
@@ -3055,6 +3089,11 @@ function AppContent() {
     livestreamHostPeersRef.current.forEach(pc => pc.close());
     livestreamHostPeersRef.current.clear();
 
+    if (livestreamStartTimeoutRef.current) {
+      clearTimeout(livestreamStartTimeoutRef.current);
+      livestreamStartTimeoutRef.current = null;
+    }
+
     if (livestreamLocalStreamRef.current) {
       livestreamLocalStreamRef.current.getTracks().forEach(t => t.stop());
       livestreamLocalStreamRef.current = null;
@@ -3142,6 +3181,37 @@ function AppContent() {
   }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
+    const rollbackLivestreamStart = (message) => {
+      if (livestreamStartTimeoutRef.current) {
+        clearTimeout(livestreamStartTimeoutRef.current);
+        livestreamStartTimeoutRef.current = null;
+      }
+
+      if (livestreamLocalStreamRef.current) {
+        livestreamLocalStreamRef.current.getTracks().forEach(t => t.stop());
+        livestreamLocalStreamRef.current = null;
+      }
+
+      if (remoteStreamRef.current) {
+        remoteStreamRef.current.getTracks().forEach(t => t.stop());
+        remoteStreamRef.current = null;
+      }
+
+      setLocalStream(null);
+      setRemoteStream(null);
+      inboundRemoteStreamRef.current = null;
+      setLiveStreamInfo(null);
+      setCallState('idle');
+      setCallType(null);
+      setCallPeer(null);
+      stopCallTimer();
+
+      if (message) {
+        setCallError(message);
+        setErrorMessage(message);
+      }
+    };
+
     if (livestreamLocalStreamRef.current) {
       livestreamLocalStreamRef.current.getTracks().forEach(t => t.stop());
       livestreamLocalStreamRef.current = null;
@@ -3158,21 +3228,25 @@ function AppContent() {
 
     if (!socketRef.current || !connected) {
       setCallError('Connecting to chat...');
+      setErrorMessage('Connecting to chat...');
       return;
     }
 
     if (!activeRoomId || activeRoomId.includes('_dm_')) {
       setCallError('Livestream is available only in group rooms');
+      setErrorMessage('Livestream is available only in group rooms');
       return;
     }
 
     if (callStateRef.current === 'active' || callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+      setErrorMessage('End current call first');
       setCallError('End current call first');
       return;
     }
 
     if (liveStreamInfoRef.current?.isHost) {
       setCallError('You already have an active livestream');
+      setErrorMessage('You already have an active livestream');
       return;
     }
 
@@ -3192,6 +3266,39 @@ function AppContent() {
       setLocalStream(stream);
       setRemoteStream(stream);
       inboundRemoteStreamRef.current = stream;
+      setSuccessMessage('Starting livestream...');
+      setErrorMessage('');
+
+      const pendingSessionId = `pending-${Date.now()}`;
+      setLiveStreamInfo({
+        sessionId: pendingSessionId,
+        host: usernameRef.current,
+        room: activeRoomId,
+        visibility,
+        source,
+        hasAudio: stream.getAudioTracks().length > 0,
+        isHost: true,
+        isStarting: true,
+        autoJoined: false,
+        viewers: [],
+        viewerCount: 0
+      });
+
+      setCallType('video');
+      setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
+      setCallState('active');
+      startCallTimer();
+
+      if (livestreamStartTimeoutRef.current) {
+        clearTimeout(livestreamStartTimeoutRef.current);
+      }
+
+      livestreamStartTimeoutRef.current = setTimeout(() => {
+        if (liveStreamInfoRef.current?.isStarting) {
+          rollbackLivestreamStart('Start stream timed out. Please try again.');
+        }
+        livestreamStartTimeoutRef.current = null;
+      }, 8000);
 
       socketRef.current.emit(LIVESTREAM_EVENTS.START, {
         host: usernameRef.current,
@@ -3200,10 +3307,13 @@ function AppContent() {
         source
       }, async (ack) => {
         if (!ack?.success || !ack.sessionId) {
-          stream.getTracks().forEach(t => t.stop());
-          livestreamLocalStreamRef.current = null;
-          setCallError(ack?.error || 'Failed to start livestream');
+          rollbackLivestreamStart(ack?.error || 'Failed to start livestream');
           return;
+        }
+
+        if (livestreamStartTimeoutRef.current) {
+          clearTimeout(livestreamStartTimeoutRef.current);
+          livestreamStartTimeoutRef.current = null;
         }
 
         setLiveStreamInfo({
@@ -3214,15 +3324,11 @@ function AppContent() {
           source,
           hasAudio: stream.getAudioTracks().length > 0,
           isHost: true,
+          isStarting: false,
           autoJoined: false,
           viewers: [],
           viewerCount: 0
         });
-
-        setCallType('video');
-        setCallPeer({ username: `${usernameRef.current} • LIVE`, userId: usernameRef.current });
-        setCallState('active');
-        startCallTimer();
 
         const targets = Array.isArray(ack.targets) ? ack.targets : [];
         await Promise.allSettled(targets.map(v => createLivestreamHostPeer(v, ack.sessionId, stream)));
@@ -3230,9 +3336,9 @@ function AppContent() {
         setSuccessMessage(`🔴 Livestream started (${visibility})`);
       });
     } catch (err) {
-      setCallError(err?.message || 'Unable to access camera/microphone');
+      rollbackLivestreamStart(err?.message || 'Unable to access camera/microphone');
     }
-  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer]);
+  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer, stopCallTimer]);
 
   const sendLivestreamComment = useCallback((textOverride = '') => {
     const activeSession = liveStreamInfoRef.current;
