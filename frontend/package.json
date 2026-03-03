@@ -3,37 +3,43 @@
   "version": "2.2.0",
   "private": true,
   "dependencies": {
-    "@livekit/components-react": "^1.0.0",
-    "@livekit/components-styles": "^1.0.0",
-    "emoji-picker-react": "^4.4.0",
-    "framer-motion": "^10.12.0",
-    "livekit-client": "^1.10.0",
+    "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.2.0",
+    "@types/recordrtc": "^5.6.15",
+    "cloudinary": "^1.41.0",
+    "emoji-picker-react": "^4.5.16",
+    "framer-motion": "^10.0.0",
+    "livekit-client": "^2.17.2",
+    "livekit-server-sdk": "^2.15.0",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-markdown": "^8.0.7",
+    "react-markdown": "^9.0.0",
     "react-scripts": "5.0.1",
     "react-syntax-highlighter": "^15.5.0",
-    "remark-gfm": "^3.0.1",
-    "socket.io-client": "^4.6.1"
+    "recordrtc": "^5.6.2",
+    "remark-gfm": "^4.0.0",
+    "socket.io-client": "^4.6.1",
+    "zustand": "^4.4.1"
   },
   "scripts": {
+    "prestart": "node update-version.js",
     "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
     "prebuild": "node update-version.js",
-    "version": "node update-version.js"
-  },
-  "eslintConfig": {
-    "extends": ["react-app"]
+    "build": "react-scripts build",
+    "lint:css": "npx stylelint 'src/styles/**/*.css'",
+    "version:bump": "npm version patch --no-git-tag-version && node update-version.js"
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
-  },
-  "devDependencies": {
-    "stylelint": "^15.6.0",
-    "stylelint-config-standard": "^33.0.0"
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }
