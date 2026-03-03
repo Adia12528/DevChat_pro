@@ -1269,6 +1269,13 @@ function AppContent() {
       const nextRooms = Array.isArray(data?.rooms)
         ? data.rooms.filter(r => r?.id && !r.id.includes('_dm_') && Number(r.count || 0) > 0)
         : [];
+      nextRooms.sort((a, b) => {
+        const countDiff = Number(b?.count || 0) - Number(a?.count || 0);
+        if (countDiff !== 0) return countDiff;
+        const nameA = String(a?.name || a?.id || '');
+        const nameB = String(b?.name || b?.id || '');
+        return nameA.localeCompare(nameB);
+      });
       setActiveRoomRegistry(nextRooms);
     });
 
@@ -4492,6 +4499,25 @@ function AppContent() {
     return [...new Set(users)];
   }, [activeRoom, room, roomUserMap]);
 
+  const conversationOnlineUsers = useMemo(() => {
+    const activeRoomId = activeRoom || room;
+    const groupContextRoomId = activeRoomId && !activeRoomId.includes('_dm_')
+      ? activeRoomId
+      : (groupRoomId || activeRoomRegistry[0]?.id || '');
+
+    if (!groupContextRoomId) return [];
+
+    const mapUsers = (roomUserMap[groupContextRoomId] || [])
+      .map((entry) => typeof entry === 'string' ? entry : entry?.username)
+      .filter((entry) => typeof entry === 'string' && entry.trim());
+
+    const registryUsers = (activeRoomRegistry.find((entry) => entry.id === groupContextRoomId)?.users || [])
+      .map((entry) => typeof entry === 'string' ? entry : entry?.username)
+      .filter((entry) => typeof entry === 'string' && entry.trim());
+
+    return [...new Set([...mapUsers, ...registryUsers])];
+  }, [activeRoom, room, groupRoomId, roomUserMap, activeRoomRegistry]);
+
   const roomSummaries = useMemo(() => {
     const uniqueRooms = new Map();
     if (groupRoomId) uniqueRooms.set(groupRoomId, { id: groupRoomId, name: groupRoomId, type: 'group' });
@@ -5403,10 +5429,10 @@ function AppContent() {
                     </div>
                     <div className="sidebar-section">
                       <div className="sidebar-section-title">Online Members</div>
-                      {onlineUsers.filter(u => u !== username).length === 0 ? (
+                      {conversationOnlineUsers.filter(u => u !== username).length === 0 ? (
                         <div className="sidebar-empty">No other members online</div>
                       ) : (
-                        onlineUsers.filter(u => u !== username).map(user => (
+                        conversationOnlineUsers.filter(u => u !== username).map(user => (
                           <div className="sidebar-user-row" key={user}>
                             <div className="sidebar-user-meta"><span className="sidebar-user-dot"></span><span>{user}</span></div>
                             <button className="sidebar-dm-btn" onClick={() => { createDM(user); setShowRoomSidebar(false); }}>DM</button>
@@ -5437,11 +5463,20 @@ function AppContent() {
                       {activeRoomRegistry.filter(entry => Number(entry?.count || 0) > 0).length === 0 ? (
                         <div className="sidebar-empty">No active rooms available</div>
                       ) : (
-                        activeRoomRegistry.filter(entry => Number(entry?.count || 0) > 0).map((entry) => (
+                        activeRoomRegistry
+                          .filter(entry => Number(entry?.count || 0) > 0)
+                          .sort((a, b) => {
+                            const countDiff = Number(b?.count || 0) - Number(a?.count || 0);
+                            if (countDiff !== 0) return countDiff;
+                            const nameA = String(a?.name || a?.id || '');
+                            const nameB = String(b?.name || b?.id || '');
+                            return nameA.localeCompare(nameB);
+                          })
+                          .map((entry, index) => (
                           <button key={entry.id} className={`room-item ${(activeRoom || room) === entry.id ? 'active' : ''}`} onClick={() => { switchRoom(entry.id); setShowRoomSidebar(false); }}>
                             <div className="room-icon">#</div>
                             <span>{entry.name || entry.id}</span>
-                            <span className="sidebar-room-meta">{entry.count || 0}</span>
+                            <span className="sidebar-room-meta">{entry.count || 0}{index === 0 ? ' · Most active' : ''}</span>
                           </button>
                         ))
                       )}
