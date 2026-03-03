@@ -508,6 +508,19 @@ io.on('connection', (socket) => {
             const history = await Message.find({ room }).sort({ time: 1 }).limit(100);
             socket.emit('load_history', history.map(serializeMessage));
         }
+
+        for (const session of livestreamSessions.values()) {
+            if (session.room !== room) continue;
+            if (session.host === username) continue;
+            socket.emit(LIVESTREAM_EVENTS.AVAILABLE, {
+                sessionId: session.sessionId,
+                host: session.host,
+                room: session.room,
+                visibility: session.visibility,
+                source: session.source,
+                time: new Date().toISOString()
+            });
+        }
     });
 
     socket.on('leave_room', async (data) => {

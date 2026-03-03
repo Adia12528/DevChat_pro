@@ -1343,6 +1343,7 @@ input, textarea {
   right: 0;
   bottom: 0;
   background: rgba(0, 168, 132, 0.2);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -1378,6 +1379,7 @@ input, textarea {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -1819,6 +1821,7 @@ input, textarea {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 9000;
 }
@@ -1857,6 +1860,29 @@ input, textarea {
 
 .sidebar-header button:hover {
   color: var(--txt);
+}
+
+.sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-tab {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--txt-muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.sidebar-tab.active {
+  background: var(--primary);
+  color: #fff;
 }
 
 .sidebar-rooms {
@@ -1903,6 +1929,12 @@ input, textarea {
   color: white;
 }
 
+.sidebar-room-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--txt-muted);
+}
+
 .room-icon {
   width: 32px;
   height: 32px;
@@ -1913,6 +1945,65 @@ input, textarea {
   justify-content: center;
   color: var(--txt-muted);
   flex-shrink: 0;
+}
+
+.sidebar-inline-form {
+  display: flex;
+  gap: 8px;
+}
+
+.sidebar-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--txt);
+}
+
+.sidebar-action-btn {
+  background: var(--primary);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar-notification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-notification-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.sidebar-notification-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-notification-meta strong,
+.sidebar-notification-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-notification-meta span {
+  color: var(--txt-muted);
+  font-size: 12px;
 }
 
 .room-details {
@@ -1988,6 +2079,7 @@ input, textarea {
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   z-index: 9500;
 }
@@ -2155,10 +2247,37 @@ input, textarea {
 @media (max-width: 768px) {
   .chat-header {
     padding: 8px 12px;
+    min-height: 64px;
+    height: auto;
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .meta h3 {
     font-size: 16px;
+  }
+
+  .meta {
+    order: 2;
+    width: calc(100% - 54px);
+  }
+
+  .room-info .last-activity,
+  .users-info,
+  .clear-btn {
+    display: none;
+  }
+
+  .search-bar {
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    min-width: 0;
+    width: 100%;
+    order: 2;
   }
 
   .menu-dropdown {
@@ -2197,6 +2316,25 @@ input, textarea {
     gap: 8px;
   }
 
+  .meta {
+    width: calc(100% - 48px);
+  }
+
+  .meta h3 {
+    font-size: 15px;
+  }
+
+  .room-info {
+    font-size: 11px;
+  }
+
+  .theme-toggle,
+  .sound-toggle,
+  .call-btn {
+    width: 34px;
+    height: 34px;
+  }
+
   .users-info span {
     display: none;
   }
@@ -2227,7 +2365,7 @@ input, textarea {
   }
 
   .room-sidebar {
-    width: 260px;
+    width: min(92vw, 320px);
   }
 
   .starred-panel {

@@ -171,6 +171,7 @@ function AppContent() {
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [showStreamingTab, setShowStreamingTab] = useState(false);
+  const [roomSidebarView, setRoomSidebarView] = useState('conversations');
   
   // ==================== NAVIGATION ====================
   const [currentView, setCurrentView] = useState('chat');
@@ -949,12 +950,66 @@ function AppContent() {
       playRingtone();
     });
 
-    socket.on(CALL_EVENTS.ANSWER, (data) => {
-      // Handled by useWebRTC
+    socket.on(CALL_EVENTS.ANSWER, async (data) => {
+      if (!data?.answer) return;
+
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
+
+      try {
+        if (!pc.currentRemoteDescription && !pc.remoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        }
+
+        if (pendingIceCandidatesRef.current.length > 0) {
+          const remaining = [];
+          for (const candidate of pendingIceCandidatesRef.current) {
+            if (!candidate?.candidate) continue;
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch {
+              remaining.push(candidate);
+            }
+          }
+          pendingIceCandidatesRef.current = remaining;
+        }
+
+        if (callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+          setCallState('active');
+          startCallTimer();
+          stopRingtone();
+          clearCallTimeout();
+        }
+      } catch (err) {
+        console.error('Failed to apply call answer:', err);
+        setCallError('Failed to establish call connection');
+      }
     });
 
-    socket.on(CALL_EVENTS.ICE_CANDIDATE, (data) => {
-      // Handled by useWebRTC
+    socket.on(CALL_EVENTS.ICE_CANDIDATE, async (data) => {
+      const candidate = data?.candidate;
+      if (!candidate) return;
+
+      const candidateKey = `${candidate.candidate || ''}|${candidate.sdpMid || ''}|${candidate.sdpMLineIndex ?? ''}`;
+      if (seenIceCandidateKeysRef.current.has(candidateKey)) return;
+      seenIceCandidateKeysRef.current.add(candidateKey);
+
+      const pc = peerConnectionRef.current;
+      if (!pc) {
+        pendingIceCandidatesRef.current.push(candidate);
+        return;
+      }
+
+      if (!pc.remoteDescription && !pc.currentRemoteDescription) {
+        pendingIceCandidatesRef.current.push(candidate);
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.warn('Failed to add ICE candidate:', err);
+      }
     });
 
     socket.on(CALL_EVENTS.REJECTED, () => {
@@ -977,22 +1032,24 @@ function AppContent() {
     // Livestream events
     socket.on(LIVESTREAM_EVENTS.STARTED, (data) => {
       setSuccessMessage(`🔴 ${data.host} started a livestream`);
-      setNotificationItems(prev => [...prev, {
+      setNotificationItems(prev => [...prev.filter(item => item.id !== `live-${data.sessionId}`), {
         id: `live-${data.sessionId}`,
         type: 'livestream',
         sessionId: data.sessionId,
         sender: data.host,
+        room: data.room,
         preview: `${data.host} is live`,
         time: new Date().toISOString()
       }]);
     });
 
     socket.on(LIVESTREAM_EVENTS.AVAILABLE, (data) => {
-      setNotificationItems(prev => [...prev, {
+      setNotificationItems(prev => [...prev.filter(item => item.id !== `live-${data.sessionId}`), {
         id: `live-${data.sessionId}`,
         type: 'livestream',
         sessionId: data.sessionId,
         sender: data.host,
+        room: data.room,
         preview: `${data.host} is live`,
         time: new Date().toISOString()
       }]);
@@ -2336,6 +2393,11 @@ function AppContent() {
     switchRoom(nextRoomId);
   }, [newRoomIdInput, switchRoom]);
 
+  const openSidebarView = useCallback((view = 'conversations') => {
+    setRoomSidebarView(view);
+    setShowRoomSidebar(true);
+  }, []);
+
   // ==================== BLOCK/REPORT ====================
   const blockUserAction = useCallback((targetUser) => {
     if (!targetUser || targetUser === usernameRef.current) return;
@@ -3181,6 +3243,30 @@ function AppContent() {
     });
   }, []);
 
+  const handleJoinStream = useCallback((roomId, startAsHost = false) => {
+    if (startAsHost) {
+      startLivestream(streamVisibility, streamSource);
+      return;
+    }
+
+    const activeRoomId = roomId || roomRef.current || room;
+    const livestreamNotifications = notificationItems
+      .filter(item => item?.type === 'livestream' && item?.sessionId)
+      .sort((a, b) => new Date(b.time || 0).getTime() - new Date(a.time || 0).getTime());
+
+    const sameRoomNotification = livestreamNotifications.find(item => !activeRoomId || item.room === activeRoomId);
+    const fallbackNotification = livestreamNotifications[0];
+    const targetNotification = sameRoomNotification || fallbackNotification;
+
+    if (!targetNotification) {
+      setErrorMessage('No active livestream found. Ask someone to start streaming first.');
+      return;
+    }
+
+    requestJoinLivestreamFromNotification(targetNotification);
+    setSuccessMessage(`Joining ${targetNotification.sender}'s livestream...`);
+  }, [notificationItems, requestJoinLivestreamFromNotification, room, startLivestream, streamSource, streamVisibility]);
+
   const startCall = useCallback(async (type, targetUser) => {
     if (!targetUser || !socketRef.current) {
       setCallError('Unable to initiate call');
@@ -3834,7 +3920,8 @@ function AppContent() {
 
   const isSelectedUserOnline = useMemo(() => {
     if (!selectedUser) return false;
-    return globalOnlineUsers.some(u => u === selectedUser);
+    const selected = selectedUser.trim().toLowerCase();
+    return globalOnlineUsers.some(u => typeof u === 'string' && u.trim().toLowerCase() === selected);
   }, [globalOnlineUsers, selectedUser]);
 
   const roomScopedOnlineUsers = useMemo(() => {
@@ -4045,9 +4132,9 @@ function AppContent() {
                   </div>
                   <div className="menu-section">
                     <div className="menu-header">⚙️ General</div>
-                    <button className="menu-item" onClick={() => { setShowRoomSidebar(true); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
-                    <button className="menu-item" onClick={() => { setCurrentView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
-                    <button className="menu-item" onClick={() => { setCurrentView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
                     <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
                   </div>
                   <div className="menu-section">
@@ -4123,9 +4210,9 @@ function AppContent() {
 
                   <div className="menu-section">
                     <div className="menu-header">⚙️ General</div>
-                    <button className="menu-item" onClick={() => { setShowRoomSidebar(true); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations</span></button>
-                    <button className="menu-item" onClick={() => { setCurrentView('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms</span></button>
-                    <button className="menu-item" onClick={() => { setCurrentView('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications</span></button>
                     <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMenuDropdown(false); }}><Settings size={18}/><span>App Settings</span></button>
                   </div>
 
@@ -4489,36 +4576,102 @@ function AppContent() {
           <motion.div className="room-sidebar-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowRoomSidebar(false)}>
             <motion.div className="room-sidebar" initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }} onClick={(e) => e.stopPropagation()}>
               <div className="sidebar-header"><h3>Conversations</h3><button onClick={() => setShowRoomSidebar(false)}><X size={20} /></button></div>
+              <div className="sidebar-tabs">
+                <button className={`sidebar-tab ${roomSidebarView === 'conversations' ? 'active' : ''}`} onClick={() => setRoomSidebarView('conversations')}>Conversations</button>
+                <button className={`sidebar-tab ${roomSidebarView === 'rooms' ? 'active' : ''}`} onClick={() => setRoomSidebarView('rooms')}>Rooms</button>
+                <button className={`sidebar-tab ${roomSidebarView === 'notifications' ? 'active' : ''}`} onClick={() => setRoomSidebarView('notifications')}>Notifications</button>
+              </div>
               <div className="sidebar-rooms">
-                {groupRoomId && (
+                {roomSidebarView === 'conversations' && (
+                  <>
+                    {groupRoomId && (
+                      <div className="sidebar-section">
+                        <div className="sidebar-section-title">Group Chat</div>
+                        <button className={`room-item ${(activeRoom || room) === groupRoomId ? 'active' : ''}`} onClick={() => { switchRoom(groupRoomId); setShowRoomSidebar(false); }}><div className="room-icon">#</div><span>{groupRoomId}</span></button>
+                      </div>
+                    )}
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">Direct Messages</div>
+                      {rooms.filter(r => r.type === 'dm').length === 0 ? (
+                        <div className="sidebar-empty">No DM conversations yet</div>
+                      ) : (
+                        rooms.filter(r => r.type === 'dm').map(r => (
+                          <button key={r.id} className={`room-item ${activeRoom === r.id ? 'active' : ''}`} onClick={() => { switchRoom(r.id); setShowRoomSidebar(false); }}><div className="room-icon"><MessageSquare size={16}/></div><span>{r.name}</span></button>
+                        ))
+                      )}
+                    </div>
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">Online Members</div>
+                      {onlineUsers.filter(u => u !== username).length === 0 ? (
+                        <div className="sidebar-empty">No other members online</div>
+                      ) : (
+                        onlineUsers.filter(u => u !== username).map(user => (
+                          <div className="sidebar-user-row" key={user}>
+                            <div className="sidebar-user-meta"><span className="sidebar-user-dot"></span><span>{user}</span></div>
+                            <button className="sidebar-dm-btn" onClick={() => { createDM(user); setShowRoomSidebar(false); }}>DM</button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {roomSidebarView === 'rooms' && (
+                  <>
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">Join or Create Room</div>
+                      <div className="sidebar-inline-form">
+                        <input
+                          className="sidebar-input"
+                          value={newRoomIdInput}
+                          onChange={(e) => setNewRoomIdInput(e.target.value)}
+                          placeholder="Room ID"
+                          onKeyDown={(e) => e.key === 'Enter' && joinGroupRoomFromPanel()}
+                        />
+                        <button className="sidebar-action-btn" onClick={joinGroupRoomFromPanel}>Join</button>
+                      </div>
+                    </div>
+                    <div className="sidebar-section">
+                      <div className="sidebar-section-title">Active Rooms</div>
+                      {activeRoomRegistry.length === 0 ? (
+                        <div className="sidebar-empty">No active rooms available</div>
+                      ) : (
+                        activeRoomRegistry.map((entry) => (
+                          <button key={entry.id} className={`room-item ${(activeRoom || room) === entry.id ? 'active' : ''}`} onClick={() => { switchRoom(entry.id); setShowRoomSidebar(false); }}>
+                            <div className="room-icon">#</div>
+                            <span>{entry.name || entry.id}</span>
+                            <span className="sidebar-room-meta">{entry.count || 0}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {roomSidebarView === 'notifications' && (
                   <div className="sidebar-section">
-                    <div className="sidebar-section-title">Group Chat</div>
-                    <button className={`room-item ${(activeRoom || room) === groupRoomId ? 'active' : ''}`} onClick={() => { switchRoom(groupRoomId); setShowRoomSidebar(false); }}><div className="room-icon">#</div><span>{groupRoomId}</span></button>
+                    <div className="sidebar-section-title">Recent Notifications</div>
+                    {notificationItems.length === 0 ? (
+                      <div className="sidebar-empty">No notifications yet</div>
+                    ) : (
+                      <div className="sidebar-notification-list">
+                        {notificationItems.slice().reverse().map((item) => (
+                          <div className="sidebar-notification-item" key={item.id || `${item.type}-${item.time}`}>
+                            <div className="sidebar-notification-meta">
+                              <strong>{item.sender || item.type || 'Update'}</strong>
+                              <span>{item.preview || item.room || item.type}</span>
+                            </div>
+                            {item.type === 'livestream' ? (
+                              <button className="sidebar-action-btn" onClick={() => { requestJoinLivestreamFromNotification(item); setShowRoomSidebar(false); }}>Join</button>
+                            ) : item.room ? (
+                              <button className="sidebar-action-btn" onClick={() => { switchRoom(item.room); setShowRoomSidebar(false); }}>Open</button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="sidebar-section">
-                  <div className="sidebar-section-title">Direct Messages</div>
-                  {rooms.filter(r => r.type === 'dm').length === 0 ? (
-                    <div className="sidebar-empty">No DM conversations yet</div>
-                  ) : (
-                    rooms.filter(r => r.type === 'dm').map(r => (
-                      <button key={r.id} className={`room-item ${activeRoom === r.id ? 'active' : ''}`} onClick={() => { switchRoom(r.id); setShowRoomSidebar(false); }}><div className="room-icon"><MessageSquare size={16}/></div><span>{r.name}</span></button>
-                    ))
-                  )}
-                </div>
-                <div className="sidebar-section">
-                  <div className="sidebar-section-title">Online Members</div>
-                  {onlineUsers.filter(u => u !== username).length === 0 ? (
-                    <div className="sidebar-empty">No other members online</div>
-                  ) : (
-                    onlineUsers.filter(u => u !== username).map(user => (
-                      <div className="sidebar-user-row" key={user}>
-                        <div className="sidebar-user-meta"><span className="sidebar-user-dot"></span><span>{user}</span></div>
-                        <button className="sidebar-dm-btn" onClick={() => { createDM(user); setShowRoomSidebar(false); }}>DM</button>
-                      </div>
-                    ))
-                  )}
-                </div>
               </div>
             </motion.div>
           </motion.div>
