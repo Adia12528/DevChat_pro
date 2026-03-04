@@ -2546,6 +2546,16 @@ function AppContent() {
     });
   }, [chat, debouncedSearchQuery, dmSearchQuery, activeRoom, room, searchFilters, username]);
 
+  const chatMessageById = useMemo(() => {
+    const idMap = new Map();
+    chat.forEach((item) => {
+      if (item?._id) {
+        idMap.set(item._id, item);
+      }
+    });
+    return idMap;
+  }, [chat]);
+
   const searchResultCount = useMemo(() => filteredChat.length, [filteredChat]);
   const chatLoadStep = isMobileView ? 100 : 200;
   const hasActiveSearchFilters = useMemo(() => {
@@ -5411,16 +5421,6 @@ function AppContent() {
     if (!(activeRoom || room).includes('_dm_')) return [];
     return mediaMessages;
   }, [mediaMessages, activeRoom, room]);
-
-  const chatMessageById = useMemo(() => {
-    const idMap = new Map();
-    chat.forEach((item) => {
-      if (item?._id) {
-        idMap.set(item._id, item);
-      }
-    });
-    return idMap;
-  }, [chat]);
 
   const threadMessages = useMemo(() => {
     if (!threadRootId) return [];
