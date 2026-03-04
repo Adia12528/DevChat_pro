@@ -314,6 +314,11 @@ function AppContent() {
   const [audioOutputDevice, setAudioOutputDevice] = useState(() =>
     localStorage.getItem('devchatPreferredAudioOutput') || 'default'
   );
+
+  const normalizeDevicePreferenceId = useCallback((value) => {
+    if (!value || value === 'default' || value === 'system') return '';
+    return value;
+  }, []);
   
   // ==================== NOTIFICATION PREFERENCES ====================
   const [notificationPrefs, setNotificationPrefs] = useState(() => {
@@ -586,6 +591,10 @@ function AppContent() {
 
   // ==================== CUSTOM HOOKS ====================
   const enhancedCall = useEnhancedCall(socketRef.current, username);
+  const enhancedCallActiveDevices = enhancedCall?.activeDevices;
+  const enhancedCallSettings = enhancedCall?.settings;
+  const setEnhancedCallActiveDevices = enhancedCall?.setActiveDevices;
+  const updateEnhancedCallSettings = enhancedCall?.updateCallSettings;
   const webrtc = useWebRTC(username, socketRef);
 
   // ==================== REF UPDATES ====================
@@ -884,9 +893,7 @@ function AppContent() {
   }, [inCallCameraToast]);
 
   useEffect(() => {
-    if (selectedVideoInputId) {
-      localStorage.setItem('devchatPreferredCameraId', selectedVideoInputId);
-    }
+    localStorage.setItem('devchatPreferredCameraId', selectedVideoInputId || '');
   }, [selectedVideoInputId]);
 
   useEffect(() => {
@@ -896,6 +903,58 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem('devchatPreferredAudioOutput', audioOutputDevice || 'default');
   }, [audioOutputDevice]);
+
+  useEffect(() => {
+    const nextCameraId = normalizeDevicePreferenceId(enhancedCallActiveDevices?.camera);
+    const nextMicrophoneId = normalizeDevicePreferenceId(enhancedCallActiveDevices?.microphone);
+    const nextSpeakerId = enhancedCallActiveDevices?.speaker && enhancedCallActiveDevices.speaker !== 'system'
+      ? enhancedCallActiveDevices.speaker
+      : 'default';
+
+    if (typeof nextCameraId === 'string' && nextCameraId !== selectedVideoInputId) {
+      setSelectedVideoInputId(nextCameraId);
+    }
+
+    if (typeof nextMicrophoneId === 'string' && nextMicrophoneId !== selectedAudioInputId) {
+      setSelectedAudioInputId(nextMicrophoneId);
+      setStreamPanelSettings((prev) => {
+        const nextMicSetting = nextMicrophoneId || 'default';
+        return prev.microphoneId === nextMicSetting ? prev : { ...prev, microphoneId: nextMicSetting };
+      });
+    }
+
+    if (typeof nextSpeakerId === 'string' && nextSpeakerId !== audioOutputDevice) {
+      setAudioOutputDevice(nextSpeakerId);
+    }
+
+    if (typeof enhancedCallSettings?.noiseSuppression === 'boolean') {
+      setStreamPanelSettings((prev) => (
+        prev.noiseSuppression === enhancedCallSettings.noiseSuppression
+          ? prev
+          : { ...prev, noiseSuppression: enhancedCallSettings.noiseSuppression }
+      ));
+    }
+
+    if (typeof enhancedCallSettings?.videoQuality === 'string') {
+      const nextStreamQuality = mapCallVideoQualityToStreamQuality(enhancedCallSettings.videoQuality);
+      if (nextStreamQuality) {
+        setStreamPanelSettings((prev) => (
+          prev.quality === nextStreamQuality ? prev : { ...prev, quality: nextStreamQuality }
+        ));
+      }
+    }
+  }, [
+    enhancedCallActiveDevices?.camera,
+    enhancedCallActiveDevices?.microphone,
+    enhancedCallActiveDevices?.speaker,
+    enhancedCallSettings?.noiseSuppression,
+    enhancedCallSettings?.videoQuality,
+    mapCallVideoQualityToStreamQuality,
+    normalizeDevicePreferenceId,
+    selectedVideoInputId,
+    selectedAudioInputId,
+    audioOutputDevice
+  ]);
 
   // ==================== MOBILE DETECTION ====================
   useEffect(() => {
@@ -1144,38 +1203,132 @@ function AppContent() {
     return qualityProfiles[quality] || null;
   }, []);
 
+  const mapCallVideoQualityToStreamQuality = useCallback((quality) => {
+    switch (quality) {
+      case 'low':
+        return '480p';
+      case 'medium':
+        return '720p';
+      case 'high':
+        return '1080p';
+      case 'ultra':
+        return '4K';
+      case 'auto':
+      default:
+        return 'Auto';
+    }
+  }, []);
+
+  const mapStreamQualityToCallVideoQuality = useCallback((quality) => {
+    switch (quality) {
+      case '480p':
+        return 'low';
+      case '720p':
+        return 'medium';
+      case '1080p':
+        return 'high';
+      case '4K':
+        return 'ultra';
+      case 'Auto':
+      default:
+        return 'auto';
+    }
+  }, []);
+
   const applyStreamQualityToActiveTrack = useCallback(async (quality) => {
     const profile = getStreamQualityVideoConstraints(quality);
-    if (!profile) return;
 
     const currentLocalStream = localStreamRef.current;
     const activeVideoTrack = currentLocalStream?.getVideoTracks?.()[0];
     if (!activeVideoTrack || typeof activeVideoTrack.applyConstraints !== 'function') return;
 
     try {
-      await activeVideoTrack.applyConstraints(profile);
-      setSuccessMessage('Stream quality updated');
+      if (!profile) {
+        await activeVideoTrack.applyConstraints({});
+        setSuccessMessage('Auto video quality enabled');
+      } else {
+        await activeVideoTrack.applyConstraints(profile);
+        setSuccessMessage('Stream quality updated');
+      }
     } catch (error) {
       console.warn('Failed to apply stream quality immediately:', error);
       setErrorMessage('Could not apply selected quality right now. It will apply next start.');
     }
   }, [getStreamQualityVideoConstraints]);
 
-  const applyAudioProcessingToActiveTrack = useCallback(async (noiseSuppressionEnabled) => {
+  const handleInCallVideoQualityChange = useCallback((quality) => {
+    if (!quality || typeof quality !== 'string') return;
+
+    setStreamPanelSettings((prev) => (prev.quality === quality ? prev : { ...prev, quality }));
+    applyStreamQualityToActiveTrack(quality);
+
+    const mappedCallQuality = mapStreamQualityToCallVideoQuality(quality);
+    if (mappedCallQuality && enhancedCallSettings?.videoQuality !== mappedCallQuality) {
+      updateEnhancedCallSettings?.({ videoQuality: mappedCallQuality });
+    }
+  }, [
+    applyStreamQualityToActiveTrack,
+    mapStreamQualityToCallVideoQuality,
+    enhancedCallSettings?.videoQuality,
+    updateEnhancedCallSettings
+  ]);
+
+  const applyAudioProcessingToActiveTrack = useCallback(async (overrides = {}) => {
     const currentLocalStream = localStreamRef.current;
     const activeAudioTrack = currentLocalStream?.getAudioTracks?.()[0];
     if (!activeAudioTrack || typeof activeAudioTrack.applyConstraints !== 'function') return;
 
+    const echoCancellation = typeof overrides.echoCancellation === 'boolean'
+      ? overrides.echoCancellation
+      : (enhancedCallSettings?.echoCancellation ?? true);
+    const noiseSuppression = typeof overrides.noiseSuppression === 'boolean'
+      ? overrides.noiseSuppression
+      : (enhancedCallSettings?.noiseSuppression ?? true);
+    const autoGainControl = typeof overrides.autoGainControl === 'boolean'
+      ? overrides.autoGainControl
+      : (enhancedCallSettings?.autoGainControl ?? true);
+
     try {
       await activeAudioTrack.applyConstraints({
-        echoCancellation: true,
-        noiseSuppression: !!noiseSuppressionEnabled,
-        autoGainControl: true
+        echoCancellation: !!echoCancellation,
+        noiseSuppression: !!noiseSuppression,
+        autoGainControl: !!autoGainControl
       });
     } catch (error) {
-      console.warn('Failed to apply noise suppression immediately:', error);
+      console.warn('Failed to apply audio processing immediately:', error);
     }
-  }, []);
+  }, [
+    enhancedCallSettings?.echoCancellation,
+    enhancedCallSettings?.noiseSuppression,
+    enhancedCallSettings?.autoGainControl
+  ]);
+
+  const handleInCallAudioSettingChange = useCallback((settingKey, enabled) => {
+    if (!settingKey || typeof enabled !== 'boolean') return;
+    if (!['noiseSuppression', 'echoCancellation', 'autoGainControl'].includes(settingKey)) return;
+
+    if (settingKey === 'noiseSuppression') {
+      setStreamPanelSettings((prev) => (
+        prev.noiseSuppression === enabled ? prev : { ...prev, noiseSuppression: enabled }
+      ));
+    }
+
+    if (enhancedCallSettings?.[settingKey] !== enabled) {
+      updateEnhancedCallSettings?.({ [settingKey]: enabled });
+    }
+
+    applyAudioProcessingToActiveTrack({ [settingKey]: enabled });
+    const settingLabel = settingKey === 'noiseSuppression'
+      ? 'Noise suppression'
+      : settingKey === 'echoCancellation'
+        ? 'Echo cancellation'
+        : 'Auto gain control';
+    setSuccessMessage(`${settingLabel} ${enabled ? 'enabled' : 'disabled'}`);
+  }, [
+    enhancedCallSettings,
+    updateEnhancedCallSettings,
+    applyAudioProcessingToActiveTrack
+  ]);
 
   const applyCameraSelectionToActiveStream = useCallback(async (cameraId) => {
     const hasActiveVideoSession =
@@ -1348,6 +1501,10 @@ function AppContent() {
   const handleInCallCameraChange = useCallback(async (cameraId) => {
     const normalizedCameraId = cameraId === 'default' ? '' : cameraId;
     setSelectedVideoInputId(normalizedCameraId);
+    setEnhancedCallActiveDevices?.((prev) => ({
+      ...(prev || {}),
+      camera: normalizedCameraId || 'system'
+    }));
     const result = await applyCameraSelectionToActiveStream(cameraId);
     if (!result || result.skipped) return;
 
@@ -1355,7 +1512,7 @@ function AppContent() {
       type: result.ok ? 'success' : 'error',
       message: result.ok ? 'Camera switched' : 'Camera switch failed'
     });
-  }, [applyCameraSelectionToActiveStream]);
+  }, [applyCameraSelectionToActiveStream, setEnhancedCallActiveDevices]);
 
   const handleInCallCameraRefresh = useCallback(async () => {
     if (isRefreshingInCallCameras) return;
@@ -1498,12 +1655,16 @@ function AppContent() {
     }
 
     if (typeof settings.noiseSuppression === 'boolean') {
-      applyAudioProcessingToActiveTrack(settings.noiseSuppression);
+      applyAudioProcessingToActiveTrack({ noiseSuppression: settings.noiseSuppression });
     }
 
     if (typeof settings.cameraId === 'string') {
       const normalizedCameraId = settings.cameraId === 'default' ? '' : settings.cameraId;
       setSelectedVideoInputId(normalizedCameraId);
+      setEnhancedCallActiveDevices?.((prev) => ({
+        ...(prev || {}),
+        camera: normalizedCameraId || 'system'
+      }));
       applyCameraSelectionToActiveStream(settings.cameraId);
     }
 
@@ -1514,11 +1675,19 @@ function AppContent() {
     if (nextMicrophoneId) {
       const normalizedMicId = nextMicrophoneId === 'default' ? '' : nextMicrophoneId;
       setSelectedAudioInputId(normalizedMicId);
+      setEnhancedCallActiveDevices?.((prev) => ({
+        ...(prev || {}),
+        microphone: normalizedMicId || 'system'
+      }));
       applyMicrophoneSelectionToActiveStream(nextMicrophoneId, settings.noiseSuppression ?? streamPanelSettings.noiseSuppression);
     }
 
     if (typeof settings.audioOutput === 'string' && settings.audioOutput.trim()) {
       setAudioOutputDevice(settings.audioOutput);
+      setEnhancedCallActiveDevices?.((prev) => ({
+        ...(prev || {}),
+        speaker: settings.audioOutput === 'default' ? 'system' : settings.audioOutput
+      }));
     }
 
     const activeSession = liveStreamInfoRef.current;
@@ -1545,7 +1714,8 @@ function AppContent() {
     applyMicrophoneSelectionToActiveStream,
     applyStreamQualityToActiveTrack,
     streamPanelSettings,
-    streamPanelSettings.noiseSuppression
+    streamPanelSettings.noiseSuppression,
+    setEnhancedCallActiveDevices
   ]);
 
   useEffect(() => {
@@ -5021,6 +5191,42 @@ function AppContent() {
     }
   }, [incomingCall, username, acquireCallMediaStream, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, refreshVideoInputs, joinLivestreamAsViewer, logCallTiming, nowMs]);
 
+  const releaseAllMediaAccess = useCallback(() => {
+    const streamsToStop = [
+      localStreamRef.current,
+      remoteStreamRef.current,
+      livestreamLocalStreamRef.current,
+      inboundRemoteStreamRef.current,
+      screenStreamRef.current,
+      screenShareStreamRef.current,
+      localStream,
+      remoteStream
+    ].filter(Boolean);
+
+    const visitedTracks = new Set();
+    streamsToStop.forEach((stream) => {
+      stream.getTracks?.().forEach((track) => {
+        if (!track || visitedTracks.has(track)) return;
+        visitedTracks.add(track);
+        try {
+          track.enabled = false;
+          track.stop();
+        } catch {}
+      });
+    });
+
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+
+    localStreamRef.current = null;
+    remoteStreamRef.current = null;
+    livestreamLocalStreamRef.current = null;
+    inboundRemoteStreamRef.current = null;
+    screenStreamRef.current = null;
+    screenShareStreamRef.current = null;
+  }, [localStream, remoteStream]);
+
   const endCall = useCallback((notifyPeer = true) => {
     console.log('Ending call');
     clearCallTimeout();
@@ -5043,8 +5249,7 @@ function AppContent() {
       });
     }
 
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
-    if (remoteStream) remoteStream.getTracks().forEach(t => t.stop());
+    releaseAllMediaAccess();
 
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
@@ -5133,7 +5338,7 @@ function AppContent() {
     callTimingRef.current = null;
     stopCallTimer();
     stopRingtone();
-  }, [localStream, remoteStream, callPeer, username, callType, callDuration, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream, clearLivestreamViewerReconnectTimeout]);
+  }, [callPeer, username, callType, callDuration, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream, clearLivestreamViewerReconnectTimeout, releaseAllMediaAccess]);
 
   useEffect(() => {
     endCallRef.current = endCall;
@@ -6810,6 +7015,14 @@ function AppContent() {
             onRefreshCameraDevices={handleInCallCameraRefresh}
             isRefreshingCameras={isRefreshingInCallCameras}
             cameraStatusToast={inCallCameraToast}
+            selectedVideoQuality={streamPanelSettings.quality}
+            onVideoQualityChange={handleInCallVideoQualityChange}
+            audioSettings={{
+              noiseSuppression: enhancedCallSettings?.noiseSuppression !== false,
+              echoCancellation: enhancedCallSettings?.echoCancellation !== false,
+              autoGainControl: enhancedCallSettings?.autoGainControl !== false,
+            }}
+            onAudioSettingChange={handleInCallAudioSettingChange}
           />
         </Suspense>
       )}

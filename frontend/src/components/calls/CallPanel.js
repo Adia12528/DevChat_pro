@@ -38,13 +38,17 @@ const CallPanel = ({
   onRefreshCameraDevices,
   isRefreshingCameras = false,
   cameraStatusToast = null,
+  selectedVideoQuality = 'Auto',
+  onVideoQualityChange,
+  audioSettings,
+  onAudioSettingChange,
 }) => {
   const [showControls, setShowControls] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [layout, setLayout] = useState('grid');
-  const [videoQuality, setVideoQuality] = useState('HD');
+  const [videoQuality, setVideoQuality] = useState(selectedVideoQuality || 'Auto');
   const [audioLevel, setAudioLevel] = useState(0);
   const audioAnalyserRef = useRef(null);
   const audioLevelIntervalRef = useRef(null);
@@ -72,6 +76,29 @@ const CallPanel = ({
         return { bitrate: 450, packetLoss: 2.5, latency: 130 };
     }
   }, [connectionQuality]);
+
+  const qualityOptions = useMemo(() => ([
+    { label: 'Auto', value: 'Auto' },
+    { label: 'HD', value: '720p' },
+    { label: 'Full HD', value: '1080p' },
+    { label: '4K', value: '4K' }
+  ]), []);
+
+  useEffect(() => {
+    if (selectedVideoQuality && selectedVideoQuality !== videoQuality) {
+      setVideoQuality(selectedVideoQuality);
+    }
+  }, [selectedVideoQuality, videoQuality]);
+
+  const videoQualityLabel = useMemo(() => {
+    const active = qualityOptions.find((option) => option.value === videoQuality);
+    return active?.label || 'Auto';
+  }, [qualityOptions, videoQuality]);
+
+  const handleVideoQualitySelect = (qualityValue) => {
+    setVideoQuality(qualityValue);
+    onVideoQualityChange?.(qualityValue);
+  };
 
   useEffect(() => {
     if (localStream && !isMuted) {
@@ -387,7 +414,7 @@ const CallPanel = ({
               <div className="bottom-right">
                 <div className="connection-badge">
                   <Wifi size={14} color={getQualityColor()} />
-                  <span>{videoQuality}</span>
+                  <span>{videoQualityLabel}</span>
                 </div>
               </div>
             </div>
@@ -478,13 +505,13 @@ const CallPanel = ({
               <div className="settings-section">
                 <h4>Video Quality</h4>
                 <div className="quality-options">
-                  {['Auto', 'HD', 'Full HD', '4K'].map(q => (
+                  {qualityOptions.map(({ label, value }) => (
                     <button 
-                      key={q} 
-                      className={`quality-option ${videoQuality === q ? 'active' : ''}`}
-                      onClick={() => setVideoQuality(q)}
+                      key={value}
+                      className={`quality-option ${videoQuality === value ? 'active' : ''}`}
+                      onClick={() => handleVideoQualitySelect(value)}
                     >
-                      {q}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -526,14 +553,33 @@ const CallPanel = ({
                 <div className="setting-item">
                   <span>Noise Cancellation</span>
                   <label className="toggle-switch">
-                    <input type="checkbox" defaultChecked />
+                    <input
+                      type="checkbox"
+                      checked={audioSettings?.noiseSuppression !== false}
+                      onChange={(event) => onAudioSettingChange?.('noiseSuppression', event.target.checked)}
+                    />
                     <span className="toggle-slider" />
                   </label>
                 </div>
                 <div className="setting-item">
                   <span>Echo Cancellation</span>
                   <label className="toggle-switch">
-                    <input type="checkbox" defaultChecked />
+                    <input
+                      type="checkbox"
+                      checked={audioSettings?.echoCancellation !== false}
+                      onChange={(event) => onAudioSettingChange?.('echoCancellation', event.target.checked)}
+                    />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+                <div className="setting-item">
+                  <span>Auto Gain Control</span>
+                  <label className="toggle-switch">
+                    <input
+                      type="checkbox"
+                      checked={audioSettings?.autoGainControl !== false}
+                      onChange={(event) => onAudioSettingChange?.('autoGainControl', event.target.checked)}
+                    />
                     <span className="toggle-slider" />
                   </label>
                 </div>
