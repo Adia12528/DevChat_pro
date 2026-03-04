@@ -2958,15 +2958,18 @@
 .settings-panel-overlay {
   position: fixed;
   inset: 0;
-  z-index: 11000;
+  z-index: 20000;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
   background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
 }
 
 .settings-panel {
+  position: relative;
+  z-index: 20001;
   width: min(680px, 100%);
   max-height: calc(100dvh - 24px);
   overflow: hidden;

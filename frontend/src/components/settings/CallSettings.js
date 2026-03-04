@@ -8,7 +8,7 @@ const CallSettings = ({ onClose, callHook }) => {
   const [localSettings, setLocalSettings] = useState(settings || {});
 
   useEffect(() => {
-    setLocalSettings(settings);
+    setLocalSettings(settings || {});
   }, [settings]);
 
   const handleChange = (key, value) => {
@@ -56,7 +56,7 @@ const CallSettings = ({ onClose, callHook }) => {
             <div className="toggle-switch">
               <input 
                 type="checkbox" 
-                checked={localSettings.echoCancellation}
+                checked={localSettings.echoCancellation !== false}
                 onChange={(e) => handleChange('echoCancellation', e.target.checked)}
               />
               <span className="toggle-slider"></span>
@@ -68,7 +68,7 @@ const CallSettings = ({ onClose, callHook }) => {
             <div className="toggle-switch">
               <input 
                 type="checkbox" 
-                checked={localSettings.noiseSuppression}
+                checked={localSettings.noiseSuppression !== false}
                 onChange={(e) => handleChange('noiseSuppression', e.target.checked)}
               />
               <span className="toggle-slider"></span>
@@ -80,7 +80,7 @@ const CallSettings = ({ onClose, callHook }) => {
             <div className="toggle-switch">
               <input 
                 type="checkbox" 
-                checked={localSettings.autoGainControl}
+                checked={localSettings.autoGainControl !== false}
                 onChange={(e) => handleChange('autoGainControl', e.target.checked)}
               />
               <span className="toggle-slider"></span>
@@ -92,7 +92,7 @@ const CallSettings = ({ onClose, callHook }) => {
             <div className="toggle-switch">
               <input 
                 type="checkbox" 
-                checked={localSettings.stereoAudio}
+                checked={!!localSettings.stereoAudio}
                 onChange={(e) => handleChange('stereoAudio', e.target.checked)}
               />
               <span className="toggle-slider"></span>
@@ -109,7 +109,7 @@ const CallSettings = ({ onClose, callHook }) => {
           <div className="setting-item">
             <label>Video Quality</label>
             <select 
-              value={localSettings.videoQuality}
+              value={localSettings.videoQuality || 'auto'}
               onChange={(e) => handleChange('videoQuality', e.target.value)}
             >
               <option value="auto">Auto</option>
@@ -123,7 +123,7 @@ const CallSettings = ({ onClose, callHook }) => {
           <div className="setting-item">
             <label>Max Frame Rate</label>
             <select 
-              value={localSettings.frameRate}
+              value={String(localSettings.frameRate || 30)}
               onChange={(e) => handleChange('frameRate', parseInt(e.target.value))}
             >
               <option value="15">15 fps</option>
@@ -144,7 +144,7 @@ const CallSettings = ({ onClose, callHook }) => {
           <div className="setting-item">
             <label>Bandwidth Limit</label>
             <select 
-              value={localSettings.bandwidthLimit}
+              value={String(localSettings.bandwidthLimit ?? 0)}
               onChange={(e) => handleChange('bandwidthLimit', parseInt(e.target.value))}
             >
               <option value="0">Unlimited</option>

@@ -565,7 +565,7 @@ function AppContent() {
     if (theme !== nextTheme) {
       setTheme(nextTheme);
     }
-  }, [appSettings?.ui?.theme, theme]);
+  }, [appSettings?.ui?.theme]);
 
   useEffect(() => {
     const contextSoundEnabled = appSettings?.notifications?.soundEnabled;
@@ -5574,8 +5574,8 @@ function AppContent() {
                     <button className="menu-item" onClick={() => { setShowStarredPanel(true); setShowMobileMenu(false); }}><Star size={18}/><span>Starred Messages {starredMsgIds.size > 0 && <span className="menu-badge">{starredMsgIds.size}</span>}</span></button>
                     <div className="menu-section">
                       <div className="menu-header">📞 Call Settings</div>
-                      <button className="menu-item" onClick={() => { setShowCallSettings(true); setShowMobileMenu(false); }}><Phone size={18}/><span>Call Preferences</span></button>
-                      <button className="menu-item" onClick={() => { setShowAudioSettings(true); setShowMobileMenu(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
+                      <button className="menu-item" type="button" onClick={() => { setShowCallSettings(true); setShowMobileMenu(false); }}><Phone size={18}/><span>Call Preferences</span></button>
+                      <button className="menu-item" type="button" onClick={() => { setShowAudioSettings(true); setShowMobileMenu(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
                       <button className="menu-item" onClick={() => { setShowVideoSettings(true); setShowMobileMenu(false); }}><Camera size={18}/><span>Video & Camera</span></button>
                       <button className="menu-item" onClick={() => { setShowCallHistory(true); setShowMobileMenu(false); }}><Activity size={18}/><span>Call History</span></button>
                     </div>
@@ -5590,7 +5590,7 @@ function AppContent() {
                       <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
                       <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
                       <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
-                      <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
+                      <button className="menu-item" type="button" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
                     </div>
                     <div className="menu-section">
                       <div className="menu-header">📊 Info</div>
@@ -5678,8 +5678,8 @@ function AppContent() {
                   
                   <div className="menu-section">
                     <div className="menu-header">📞 Call Settings</div>
-                    <button className="menu-item" onClick={() => { setShowCallSettings(true); setShowMenuDropdown(false); }}><Phone size={18}/><span>Call Preferences</span></button>
-                    <button className="menu-item" onClick={() => { setShowAudioSettings(true); setShowMenuDropdown(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
+                    <button className="menu-item" type="button" onClick={() => { setShowCallSettings(true); setShowMenuDropdown(false); }}><Phone size={18}/><span>Call Preferences</span></button>
+                    <button className="menu-item" type="button" onClick={() => { setShowAudioSettings(true); setShowMenuDropdown(false); }}><Volume2 size={18}/><span>Audio Devices</span></button>
                     <button className="menu-item" onClick={() => { setShowVideoSettings(true); setShowMenuDropdown(false); }}><Camera size={18}/><span>Video & Camera</span></button>
                     <button className="menu-item" onClick={() => { setShowCallHistory(true); setShowMenuDropdown(false); }}><Activity size={18}/><span>Call History</span></button>
                   </div>
@@ -5696,7 +5696,7 @@ function AppContent() {
                     <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations</span></button>
                     <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms</span></button>
                     <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications</span></button>
-                    <button className="menu-item" onClick={() => { setShowAppSettings(true); setShowMenuDropdown(false); }}><Settings size={18}/><span>App Settings</span></button>
+                    <button className="menu-item" type="button" onClick={() => { setShowAppSettings(true); setShowMenuDropdown(false); }}><Settings size={18}/><span>App Settings</span></button>
                   </div>
 
                   <div className="menu-section">
@@ -5737,7 +5737,7 @@ function AppContent() {
         )}
         
         <div className="users-info" title={`${onlineUsers.length} online`}><Users size={16}/><span className="users-count">{onlineUsers.length}</span></div>
-        <button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">{theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
+        <button className="theme-toggle" type="button" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">{theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
         <button className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`} onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? "Mute" : "Unmute"}>{soundEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button>
         <button className="clear-btn" onClick={() => setShowClearConfirm(true)} title="Clear all"><Trash2 size={18}/></button>
       </div>

@@ -2400,6 +2400,7 @@ input, textarea {
     left: 5px;
     right: 5px;
   }
+}
 
 /* ==================== MOBILE GLOBAL STABILITY OVERRIDES ==================== */
 @media (max-width: 768px), (pointer: coarse) {
@@ -2508,7 +2509,6 @@ input, textarea {
     width: 36px;
     height: 36px;
   }
-}
 
 /* ==================== MOBILE HARDENING ==================== */
 @supports (height: 100dvh) {
