@@ -4061,6 +4061,156 @@
     gap: 10px;
   }
 
+  .stream-settings-modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 12px;
+  }
+
+
+/* ==================== STREAM SETTINGS - WINDOWS SAFE FIT ==================== */
+
+.stream-settings-backdrop {
+  padding: clamp(8px, 2vw, 16px);
+}
+
+.stream-settings-modal {
+  width: min(560px, calc(100vw - 2 * clamp(8px, 2vw, 16px)));
+  max-height: calc(100dvh - 2 * clamp(8px, 2vw, 16px));
+  height: auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.stream-settings-modal .settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.stream-settings-modal .settings-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.stream-settings-modal .settings-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+}
+
+.stream-settings-modal .setting-item {
+  gap: 10px;
+}
+
+.stream-settings-modal .setting-item span {
+  line-height: 1.35;
+}
+
+.stream-settings-modal .setting-item select {
+  width: min(260px, 100%);
+  max-width: 100%;
+}
+
+@media (max-height: 820px) {
+  .stream-settings-modal .settings-header {
+    padding: 14px 16px;
+  }
+
+  .stream-settings-modal .settings-content {
+    padding: 12px 16px;
+  }
+
+  .stream-settings-modal .settings-actions {
+    padding: 10px 16px 12px;
+  }
+
+  .stream-settings-modal .settings-btn {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .stream-settings-modal .settings-group {
+    margin-bottom: 14px;
+  }
+
+  .stream-settings-modal .settings-group h4 {
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+}
+
+@media (max-height: 720px) {
+  .stream-settings-backdrop {
+    padding: 6px;
+  }
+
+  .stream-settings-modal {
+    width: min(520px, calc(100vw - 12px));
+    max-height: calc(100dvh - 12px);
+    border-radius: 10px;
+  }
+
+  .stream-settings-modal .settings-header {
+    padding: 10px 12px;
+  }
+
+  .stream-settings-modal .settings-header h3 {
+    font-size: 16px;
+  }
+
+  .stream-settings-modal .settings-content {
+    padding: 10px 12px;
+  }
+
+  .stream-settings-modal .settings-actions {
+    padding: 8px 12px 10px;
+    gap: 8px;
+  }
+
+  .stream-settings-modal .settings-group {
+    margin-bottom: 10px;
+  }
+
+  .stream-settings-modal .settings-group h4 {
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+
+  .stream-settings-modal .setting-item {
+    padding: 6px 0;
+  }
+
+  .stream-settings-modal .setting-item span {
+    font-size: 12px;
+  }
+
+  .stream-settings-modal .setting-item select {
+    min-height: 32px;
+    font-size: 12px;
+    padding: 4px 10px;
+  }
+
+  .stream-settings-modal .quality-presets {
+    grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+    gap: 6px;
+  }
+
+  .stream-settings-modal .preset {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .stream-settings-modal .settings-btn {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}
   .stream-title {
     max-width: 100%;
     font-size: 16px;

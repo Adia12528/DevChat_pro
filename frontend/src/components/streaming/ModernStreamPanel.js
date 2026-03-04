@@ -58,15 +58,6 @@ const ModernStreamPanel = ({
   const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
   const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
   const streamVideoRef = useRef(null);
-  const streamSettingsModalRef = useRef(null);
-  const [modalDragOffset, setModalDragOffset] = useState({ x: 0, y: 0 });
-  const [isDraggingSettingsModal, setIsDraggingSettingsModal] = useState(false);
-  const modalDragStartRef = useRef({
-    pointerX: 0,
-    pointerY: 0,
-    offsetX: 0,
-    offsetY: 0
-  });
   const activePolicyBadges = [
     ...(slowMode ? ['Slow Mode'] : []),
     ...(subOnlyMode ? ['Sub-only'] : [])
@@ -200,57 +191,7 @@ const ModernStreamPanel = ({
 
   const closeSettings = () => {
     setShowSettings(false);
-    setModalDragOffset({ x: 0, y: 0 });
   };
-
-  const beginSettingsModalDrag = (event) => {
-    const canDrag = window.innerWidth > 768;
-    if (!canDrag || event.button !== 0) return;
-
-    modalDragStartRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
-      offsetX: modalDragOffset.x,
-      offsetY: modalDragOffset.y
-    };
-    setIsDraggingSettingsModal(true);
-    event.preventDefault();
-  };
-
-  useEffect(() => {
-    if (!isDraggingSettingsModal) return;
-
-    const handleMove = (event) => {
-      const modal = streamSettingsModalRef.current;
-      if (!modal) return;
-
-      const deltaX = event.clientX - modalDragStartRef.current.pointerX;
-      const deltaY = event.clientY - modalDragStartRef.current.pointerY;
-      const nextX = modalDragStartRef.current.offsetX + deltaX;
-      const nextY = modalDragStartRef.current.offsetY + deltaY;
-
-      const modalRect = modal.getBoundingClientRect();
-      const maxX = Math.max(0, (window.innerWidth - modalRect.width) / 2 - 8);
-      const maxY = Math.max(0, (window.innerHeight - modalRect.height) / 2 - 8);
-
-      const clampedX = Math.min(maxX, Math.max(-maxX, nextX));
-      const clampedY = Math.min(maxY, Math.max(-maxY, nextY));
-
-      setModalDragOffset({ x: clampedX, y: clampedY });
-    };
-
-    const handleUp = () => {
-      setIsDraggingSettingsModal(false);
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-  }, [isDraggingSettingsModal]);
 
   const applySettings = () => {
     onSettingsChange?.({
@@ -547,22 +488,13 @@ const ModernStreamPanel = ({
             onClick={closeSettings}
           >
             <motion.div 
-              ref={streamSettingsModalRef}
               className="stream-settings-modal"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              style={{
-                transform: `translate(${modalDragOffset.x}px, ${modalDragOffset.y}px)`
-              }}
               onClick={(event) => event.stopPropagation()}
             >
-              <div
-                className="settings-header"
-                onMouseDown={beginSettingsModalDrag}
-                onDoubleClick={() => setModalDragOffset({ x: 0, y: 0 })}
-                style={{ cursor: window.innerWidth > 768 ? (isDraggingSettingsModal ? 'grabbing' : 'grab') : 'default' }}
-              >
+              <div className="settings-header">
                 <h3>Stream Settings</h3>
                 <button onClick={closeSettings} aria-label="Close stream settings">
                   <X size={20} />
