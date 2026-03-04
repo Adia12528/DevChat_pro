@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, Moon, Sun, Palette, Type, Bell, Shield, 
   Download, Upload, RefreshCw, LogOut, Trash2 
@@ -13,6 +14,14 @@ const AppSettings = ({ onClose }) => {
   const [compactMode, setCompactMode] = useState(settings.ui?.compactMode || false);
   const [notifications, setNotifications] = useState(settings.notifications || {});
   const [privacy, setPrivacy] = useState(settings.privacy || {});
+
+  useEffect(() => {
+    setTheme(settings.ui?.theme || 'dark');
+    setFontSize(settings.ui?.fontSize || 'medium');
+    setCompactMode(!!settings.ui?.compactMode);
+    setNotifications(settings.notifications || {});
+    setPrivacy(settings.privacy || {});
+  }, [settings]);
 
   const themes = [
     { id: 'dark', name: 'Dark', icon: <Moon size={16} /> },
@@ -83,7 +92,7 @@ const AppSettings = ({ onClose }) => {
     };
   }, [onClose]);
 
-  return (
+  const content = (
     <div className="app-settings-overlay" onClick={onClose}>
       <div className="app-settings-panel" onClick={(event) => event.stopPropagation()}>
         <div className="app-settings-header">
@@ -158,7 +167,7 @@ const AppSettings = ({ onClose }) => {
                 <input
                   type="checkbox"
                   checked={notifications.soundEnabled !== false}
-                  onChange={(e) => setNotifications({ ...notifications, soundEnabled: e.target.checked })}
+                  onChange={(e) => setNotifications(prev => ({ ...prev, soundEnabled: e.target.checked }))}
                 />
                 <span className="app-settings-toggle-slider"></span>
               </div>
@@ -170,7 +179,7 @@ const AppSettings = ({ onClose }) => {
                 <input
                   type="checkbox"
                   checked={notifications.desktopNotifications !== false}
-                  onChange={(e) => setNotifications({ ...notifications, desktopNotifications: e.target.checked })}
+                  onChange={(e) => setNotifications(prev => ({ ...prev, desktopNotifications: e.target.checked }))}
                 />
                 <span className="app-settings-toggle-slider"></span>
               </div>
@@ -182,7 +191,7 @@ const AppSettings = ({ onClose }) => {
                 <input
                   type="checkbox"
                   checked={notifications.mentionOnly || false}
-                  onChange={(e) => setNotifications({ ...notifications, mentionOnly: e.target.checked })}
+                  onChange={(e) => setNotifications(prev => ({ ...prev, mentionOnly: e.target.checked }))}
                 />
                 <span className="app-settings-toggle-slider"></span>
               </div>
@@ -201,7 +210,7 @@ const AppSettings = ({ onClose }) => {
                 <input
                   type="checkbox"
                   checked={privacy.showLastSeen !== false}
-                  onChange={(e) => setPrivacy({ ...privacy, showLastSeen: e.target.checked })}
+                  onChange={(e) => setPrivacy(prev => ({ ...prev, showLastSeen: e.target.checked }))}
                 />
                 <span className="app-settings-toggle-slider"></span>
               </div>
@@ -213,7 +222,7 @@ const AppSettings = ({ onClose }) => {
                 <input
                   type="checkbox"
                   checked={privacy.showReadReceipts !== false}
-                  onChange={(e) => setPrivacy({ ...privacy, showReadReceipts: e.target.checked })}
+                  onChange={(e) => setPrivacy(prev => ({ ...prev, showReadReceipts: e.target.checked }))}
                 />
                 <span className="app-settings-toggle-slider"></span>
               </div>
@@ -258,6 +267,12 @@ const AppSettings = ({ onClose }) => {
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(content, document.body);
 };
 
 export default AppSettings;
