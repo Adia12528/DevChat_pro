@@ -58,6 +58,10 @@ const ModernStreamPanel = ({
   const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
   const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
   const streamVideoRef = useRef(null);
+  const activePolicyBadges = [
+    ...(slowMode ? ['Slow Mode'] : []),
+    ...(subOnlyMode ? ['Sub-only'] : [])
+  ];
 
   useEffect(() => {
     if (!streamVideoRef.current) return;
@@ -271,6 +275,15 @@ const ModernStreamPanel = ({
                       {isVideoOff ? <CameraOff size={12} /> : <Camera size={12} />}
                       {isVideoOff ? 'Camera Off' : 'Camera On'}
                     </span>
+                  </div>
+                )}
+                {activePolicyBadges.length > 0 && (
+                  <div className="stream-privacy-status">
+                    {activePolicyBadges.map((label) => (
+                      <span key={label} className="privacy-pill on policy">
+                        {label}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
