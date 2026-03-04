@@ -187,8 +187,24 @@ function AppContent() {
   
   // ==================== NOTIFICATIONS ====================
   const [unreadCount, setUnreadCount] = useState(0);
-  const [notificationItems, setNotificationItems] = useState([]);
+  const [notificationItems, setNotificationItems] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('devchatNotificationItems') || '[]');
+      return Array.isArray(parsed) ? parsed.slice(-100) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [lastNotificationsReadAt, setLastNotificationsReadAt] = useState(() => {
+    const raw = Number(localStorage.getItem('devchatNotificationsReadAt') || '0');
+    return Number.isFinite(raw) ? raw : 0;
+  });
+  const [notificationUnreadOnly, setNotificationUnreadOnly] = useState(() => localStorage.getItem('devchatNotificationUnreadOnly') === '1');
+  const [hasNewNotificationPulse, setHasNewNotificationPulse] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [chatRenderLimit, setChatRenderLimit] = useState(() => (window.innerWidth < 768 ? 100 : 200));
+  const [autoLoadOlderTriggered, setAutoLoadOlderTriggered] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [recentMentions, setRecentMentions] = useState(0);
   const [mentionedMessages, setMentionedMessages] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
@@ -205,6 +221,69 @@ function AppContent() {
   const [roomPolicies, setRoomPolicies] = useState({});
   const [roomInviteTarget, setRoomInviteTarget] = useState('');
   const [showRoomAdminTools, setShowRoomAdminTools] = useState(false);
+
+  const unreadNotificationCount = useMemo(() => {
+    return notificationItems.reduce((count, item) => {
+      const itemTime = Date.parse(item?.time || '');
+      if (!Number.isFinite(itemTime)) return count;
+      return itemTime > lastNotificationsReadAt ? count + 1 : count;
+    }, 0);
+  }, [notificationItems, lastNotificationsReadAt]);
+
+  const markNotificationsAsRead = useCallback(() => {
+    setLastNotificationsReadAt(Date.now());
+    setHasNewNotificationPulse(false);
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setNotificationItems([]);
+    setLastNotificationsReadAt(Date.now());
+    setHasNewNotificationPulse(false);
+  }, []);
+
+  const markNotificationItemAsRead = useCallback((notification) => {
+    const itemTime = Date.parse(notification?.time || '');
+    if (!Number.isFinite(itemTime)) {
+      setLastNotificationsReadAt(Date.now());
+      return;
+    }
+    setLastNotificationsReadAt(prev => Math.max(prev, itemTime));
+  }, []);
+
+  const previousUnreadNotificationCountRef = useRef(0);
+
+  useEffect(() => {
+    const previousUnread = previousUnreadNotificationCountRef.current;
+    if (unreadNotificationCount > previousUnread) {
+      setHasNewNotificationPulse(true);
+    }
+    if (unreadNotificationCount === 0) {
+      setHasNewNotificationPulse(false);
+    }
+    previousUnreadNotificationCountRef.current = unreadNotificationCount;
+  }, [unreadNotificationCount]);
+
+  const acknowledgeNotificationPulse = useCallback(() => {
+    setHasNewNotificationPulse(false);
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('devchatNotificationItems', JSON.stringify(notificationItems.slice(-100)));
+    } catch {}
+  }, [notificationItems]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('devchatNotificationsReadAt', String(lastNotificationsReadAt || 0));
+    } catch {}
+  }, [lastNotificationsReadAt]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('devchatNotificationUnreadOnly', notificationUnreadOnly ? '1' : '0');
+    } catch {}
+  }, [notificationUnreadOnly]);
   
   // ==================== USER MANAGEMENT ====================
   const [blockedUsers, setBlockedUsers] = useState(() => {
@@ -430,6 +509,9 @@ function AppContent() {
   const socketRef = useRef(null);
   const chatEndRef = useRef(null);
   const chatBodyRef = useRef(null);
+  const loadOlderScrollStateRef = useRef(null);
+  const lastAutoLoadOlderAtRef = useRef(0);
+  const loadOlderFeedbackTimeoutRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const typingTimersRef = useRef(new Map());
   const searchTimeoutRef = useRef(null);
@@ -2465,8 +2547,78 @@ function AppContent() {
   }, [chat, debouncedSearchQuery, dmSearchQuery, activeRoom, room, searchFilters, username]);
 
   const searchResultCount = useMemo(() => filteredChat.length, [filteredChat]);
+  const chatLoadStep = isMobileView ? 100 : 200;
+  const hasActiveSearchFilters = useMemo(() => {
+    return (
+      debouncedSearchQuery.trim().length > 0 ||
+      dmSearchQuery.trim().length > 0 ||
+      searchFilters.sender !== '' ||
+      searchFilters.mediaType !== 'all' ||
+      searchFilters.mentionsOnly ||
+      searchFilters.fromDate !== '' ||
+      searchFilters.toDate !== ''
+    );
+  }, [debouncedSearchQuery, dmSearchQuery, searchFilters]);
+  const renderedChat = useMemo(() => {
+    if (hasActiveSearchFilters) return filteredChat;
+    return filteredChat.slice(Math.max(0, filteredChat.length - chatRenderLimit));
+  }, [filteredChat, chatRenderLimit, hasActiveSearchFilters]);
+  const hasOlderHiddenMessages = useMemo(() => {
+    if (hasActiveSearchFilters) return false;
+    return filteredChat.length > renderedChat.length;
+  }, [filteredChat.length, renderedChat.length, hasActiveSearchFilters]);
+  const handleLoadOlderMessages = useCallback(() => {
+    setIsLoadingOlder(true);
+    const chatBody = chatBodyRef.current;
+    if (chatBody) {
+      loadOlderScrollStateRef.current = {
+        previousHeight: chatBody.scrollHeight,
+        previousTop: chatBody.scrollTop
+      };
+    } else {
+      if (loadOlderFeedbackTimeoutRef.current) {
+        clearTimeout(loadOlderFeedbackTimeoutRef.current);
+      }
+      loadOlderFeedbackTimeoutRef.current = setTimeout(() => {
+        setIsLoadingOlder(false);
+      }, 220);
+    }
+    setChatRenderLimit((prev) => prev + chatLoadStep);
+  }, [chatLoadStep]);
+
+  useEffect(() => {
+    const chatBody = chatBodyRef.current;
+    if (!chatBody || !hasOlderHiddenMessages) return;
+
+    const onAutoLoadNearTop = () => {
+      if (chatBody.scrollTop > 100) return;
+      const now = Date.now();
+      if (now - lastAutoLoadOlderAtRef.current < 700) return;
+      lastAutoLoadOlderAtRef.current = now;
+      setAutoLoadOlderTriggered(true);
+      handleLoadOlderMessages();
+    };
+
+    chatBody.addEventListener('scroll', onAutoLoadNearTop);
+    return () => chatBody.removeEventListener('scroll', onAutoLoadNearTop);
+  }, [hasOlderHiddenMessages, handleLoadOlderMessages]);
+
   const failedQueueItems = useMemo(() => outgoingQueue.filter(e => e.status === 'failed'), [outgoingQueue]);
+  const filteredNotificationItems = useMemo(() => {
+    const sorted = notificationItems.slice().sort((a, b) => Date.parse(b?.time || 0) - Date.parse(a?.time || 0));
+    if (!notificationUnreadOnly) return sorted;
+    return sorted.filter((item) => {
+      const itemTime = Date.parse(item?.time || '');
+      return Number.isFinite(itemTime) && itemTime > lastNotificationsReadAt;
+    });
+  }, [notificationItems, notificationUnreadOnly, lastNotificationsReadAt]);
   const availableSenders = useMemo(() => [...new Set(chat.map(m => m.sender).filter(Boolean))].sort(), [chat]);
+
+  const retryAllFailedQueueItems = useCallback(() => {
+    failedQueueItems.forEach((item, index) => {
+      setTimeout(() => retryQueueItem(item.id), index * 150);
+    });
+  }, [failedQueueItems, retryQueueItem]);
 
   // ==================== CLICK OUTSIDE HANDLERS ====================
   useEffect(() => {
@@ -2922,7 +3074,7 @@ function AppContent() {
   // ==================== REACTIONS ====================
   const handleReaction = useCallback((messageId, emoji) => {
     if (!socketRef.current) return;
-    const msg = chat.find(m => m._id === messageId);
+    const msg = chatMessageById.get(messageId);
     const reactions = msg?.reactions || {};
     const userReacted = reactions[emoji]?.includes(username);
     
@@ -2931,7 +3083,7 @@ function AppContent() {
     } else {
       socketRef.current.emit('add_reaction', { messageId, emoji, username: usernameRef.current, room: roomRef.current });
     }
-  }, [chat, username]);
+  }, [chatMessageById, username]);
 
   // ==================== PIN ====================
   const togglePin = useCallback((messageId, isPinned) => {
@@ -3086,6 +3238,7 @@ function AppContent() {
         break;
       case 'reply':
         setReplyingTo(contextMenuMessage);
+        setThreadRootId(contextMenuMessage.replyTo || contextMenuMessage._id);
         break;
       case 'pin':
         togglePin(contextMenuMessage._id, contextMenuMessage.isPinned);
@@ -3118,7 +3271,7 @@ function AppContent() {
   }, [contextMenuMessage, handleCopyMessage, startEditMessage, deleteMessage, togglePin, toggleStar, closeContextMenu]);
 
   // ==================== RENDER MESSAGE TEXT ====================
-  const renderMessageText = (msg) => {
+  const renderMessageText = useCallback((msg) => {
     if (!showMarkdown) return <p>{msg.text}</p>;
     
     let content = msg.text;
@@ -3134,7 +3287,7 @@ function AppContent() {
         <MarkdownMessageRenderer content={content} />
       </Suspense>
     );
-  };
+  }, [showMarkdown]);
 
   // ==================== VOICE MESSAGES ====================
   const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
@@ -3434,7 +3587,10 @@ function AppContent() {
   const openSidebarView = useCallback((view = 'conversations') => {
     setRoomSidebarView(view);
     setShowRoomSidebar(true);
-  }, []);
+    if (view === 'notifications') {
+      markNotificationsAsRead();
+    }
+  }, [markNotificationsAsRead]);
 
   // ==================== BLOCK/REPORT ====================
   const blockUserAction = useCallback((targetUser) => {
@@ -3596,6 +3752,8 @@ function AppContent() {
     setOnlineUsers([]);
     setRoomUserMap({});
     setNotificationItems([]);
+    setLastNotificationsReadAt(0);
+    setNotificationUnreadOnly(false);
     setConnected(false);
     setShowLogoutConfirm(false);
   }, []);
@@ -5254,10 +5412,25 @@ function AppContent() {
     return mediaMessages;
   }, [mediaMessages, activeRoom, room]);
 
+  const chatMessageById = useMemo(() => {
+    const idMap = new Map();
+    chat.forEach((item) => {
+      if (item?._id) {
+        idMap.set(item._id, item);
+      }
+    });
+    return idMap;
+  }, [chat]);
+
   const threadMessages = useMemo(() => {
     if (!threadRootId) return [];
     return chat.filter(m => m._id === threadRootId || m.replyTo === threadRootId);
   }, [chat, threadRootId]);
+
+  const threadRootMessage = useMemo(() => {
+    if (!threadRootId) return null;
+    return chatMessageById.get(threadRootId) || null;
+  }, [chatMessageById, threadRootId]);
 
   const threadRootCount = useMemo(() => {
     const repliedIds = new Set(chat.map(m => m.replyTo).filter(Boolean));
@@ -5302,10 +5475,61 @@ function AppContent() {
   }, [connected, currentRoomId]);
 
   useEffect(() => {
+    if (!connected || failedQueueItems.length === 0) return;
+    const retryTimer = setTimeout(() => {
+      retryAllFailedQueueItems();
+    }, 600);
+    return () => clearTimeout(retryTimer);
+  }, [connected, failedQueueItems.length, retryAllFailedQueueItems]);
+
+  useEffect(() => {
+    setThreadRootId(null);
+  }, [currentRoomId]);
+
+  useEffect(() => {
+    setChatRenderLimit(chatLoadStep);
+    setAutoLoadOlderTriggered(false);
+    setIsLoadingOlder(false);
+    if (loadOlderFeedbackTimeoutRef.current) {
+      clearTimeout(loadOlderFeedbackTimeoutRef.current);
+      loadOlderFeedbackTimeoutRef.current = null;
+    }
+  }, [currentRoomId, hasActiveSearchFilters, chatLoadStep]);
+
+  useEffect(() => {
+    const chatBody = chatBodyRef.current;
+    const scrollState = loadOlderScrollStateRef.current;
+    if (!chatBody || !scrollState) return;
+
+    const restoreTimer = requestAnimationFrame(() => {
+      const heightDelta = chatBody.scrollHeight - scrollState.previousHeight;
+      chatBody.scrollTop = scrollState.previousTop + Math.max(0, heightDelta);
+      loadOlderScrollStateRef.current = null;
+      if (loadOlderFeedbackTimeoutRef.current) {
+        clearTimeout(loadOlderFeedbackTimeoutRef.current);
+      }
+      loadOlderFeedbackTimeoutRef.current = setTimeout(() => {
+        setIsLoadingOlder(false);
+      }, 220);
+    });
+
+    return () => cancelAnimationFrame(restoreTimer);
+  }, [renderedChat.length]);
+
+  useEffect(() => {
+    return () => {
+      if (loadOlderFeedbackTimeoutRef.current) {
+        clearTimeout(loadOlderFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const handleShortcuts = (event) => {
       if (!showChat) return;
       const tag = (event.target?.tagName || '').toLowerCase();
       const editing = tag === 'input' || tag === 'textarea' || event.target?.isContentEditable;
+      if (editing) return;
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -5323,7 +5547,6 @@ function AppContent() {
         event.preventDefault();
         markCurrentRoomAsRead();
       }
-      if (editing) return;
 
       if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
         event.preventDefault();
@@ -5403,6 +5626,10 @@ function AppContent() {
       setShowDeleteConfirm(false);
       return true;
     }
+    if (threadRootId) {
+      setThreadRootId(null);
+      return true;
+    }
     if (replyingTo) {
       setReplyingTo(null);
       return true;
@@ -5471,6 +5698,7 @@ function AppContent() {
     showLogoutConfirm,
     editingMsgId,
     showDeleteConfirm,
+    threadRootId,
     replyingTo,
     contextMenu,
     showAdvancedSearch,
@@ -5505,6 +5733,7 @@ function AppContent() {
     showLogoutConfirm ||
     !!editingMsgId ||
     showDeleteConfirm ||
+    !!threadRootId ||
     !!replyingTo ||
     !!contextMenu ||
     showAdvancedSearch ||
@@ -5536,6 +5765,7 @@ function AppContent() {
     showLogoutConfirm,
     editingMsgId,
     showDeleteConfirm,
+    threadRootId,
     replyingTo,
     contextMenu,
     showAdvancedSearch,
@@ -5549,6 +5779,116 @@ function AppContent() {
     liveStreamInfo,
     callState,
     currentView
+  ]);
+
+  const memoizedChatNodes = useMemo(() => {
+    return renderedChat.flatMap((msg, index) => {
+      const isOwn = msg.sender === username;
+      const reactions = msg.reactions || {};
+      const grouped = index > 0 && isGroupedMessage(msg, renderedChat[index - 1]);
+      const showDateSep = index === 0 || needsDateSeparator(msg.time, renderedChat[index - 1]?.time);
+      const isGroupedBelow = index < renderedChat.length - 1 && isGroupedMessage(renderedChat[index + 1], msg);
+      const clusterPos = !grouped && isGroupedBelow ? 'cluster-top' : grouped && isGroupedBelow ? 'cluster-mid' : grouped && !isGroupedBelow ? 'cluster-bottom' : '';
+
+      return (
+        <React.Fragment key={msg._id || index}>
+          {showDateSep && <div className="date-separator"><span className="date-separator-text">{formatDateSeparator(msg.time)}</span></div>}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            id={`msg-${msg._id}`} ref={el => { if (el && msg._id) msgRefsMap.current[msg._id] = el; }}
+            className={`msg-bubble ${isOwn ? "me" : "other"} ${msg.isPinned ? "pinned" : ""} ${grouped ? "grouped" : ""} ${clusterPos}`}
+            onContextMenu={(e) => handleContextMenu(e, msg)} onTouchStart={(e) => handleLongPressStart(e, msg)} onTouchEnd={handleLongPressEnd} onTouchMove={handleLongPressEnd} onTouchCancel={handleLongPressEnd}
+          >
+            {msg.isPinned && <Pin size={12} className="pin-icon" />}
+            {starredMsgIds.has(msg._id) && <span className="msg-star-badge"><Star size={10} fill="#FFD700" color="#FFD700"/></span>}
+            {!isOwn && <span className="sender-tag">{msg.sender}</span>}
+
+            {msg.replyTo && (() => {
+              const repliedMsg = chatMessageById.get(msg.replyTo);
+              return repliedMsg ? (
+                <div className="reply-preview" onClick={() => setThreadRootId(msg.replyTo)}>
+                  <Reply size={12} />
+                  <div className="reply-preview-content">
+                    <span className="reply-preview-sender">{repliedMsg.sender}</span>
+                    <span className="reply-preview-text">{repliedMsg.type === 'image' ? '📷 Photo' : repliedMsg.type === 'voice' ? '🎤 Voice' : repliedMsg.type === 'file' ? `📎 ${repliedMsg.fileName}` : (repliedMsg.text || '').substring(0, 60)}</span>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {msg.type === 'image' ? (
+              <div className="image-message-wrapper">
+                {msg.fileUrl ? (
+                  <>
+                    <div className="image-container" onClick={() => openImageViewer({ url: msg.fileUrl, fileName: `image-${new Date(msg.time).getTime()}.jpg`, sender: msg.sender, time: msg.time })}>
+                      <img src={msg.fileUrl} className="chat-img" alt="shared" />
+                      <div className="image-overlay"><Eye size={20} /><span>Click to View</span></div>
+                    </div>
+                    <button className="media-download-btn" onClick={(e) => { e.stopPropagation(); downloadMedia(msg.fileUrl, `image-${new Date(msg.time).getTime()}.jpg`); }}><Download size={16} /><span>Download</span></button>
+                  </>
+                ) : <div className="media-error"><ImageIcon size={24} /><span>📷 Image not available</span></div>}
+              </div>
+            ) : msg.type === 'file' ? (
+              <a href={msg.fileUrl} download={msg.fileName} className="file-card" onClick={e => e.stopPropagation()}>
+                <div className="file-card-icon"><FileText size={20}/></div>
+                <div className="file-card-info"><span className="file-card-name">{msg.fileName || 'File'}</span><span className="file-card-size">{msg.fileSize ? formatFileSize(msg.fileSize) : 'Download'}</span></div>
+                <Download size={16} />
+              </a>
+            ) : msg.type === 'voice' ? (
+              <div className="voice-message-wrapper">
+                {msg.fileUrl ? (
+                  <>
+                    <div className="voice-message" onClick={() => openVoicePlayer({ url: msg.fileUrl, fileName: `voice-${new Date(msg.time).getTime()}.webm`, sender: msg.sender, time: msg.time, duration: msg.duration || 0 })}>
+                      <button className="voice-play-btn" onClick={(e) => { e.stopPropagation(); playVoiceMessage(msg.fileUrl, msg._id); }}>{playingVoiceId === msg._id ? <Pause size={16}/> : <Play size={16}/>}</button>
+                      <div className="voice-waveform"><span className="voice-duration">{msg.duration || 0}s</span></div>
+                      <Eye size={16} className="voice-view-icon" />
+                    </div>
+                    <button className="media-download-btn" onClick={(e) => { e.stopPropagation(); downloadMedia(msg.fileUrl, `voice-${new Date(msg.time).getTime()}.webm`); }}><Download size={16} /><span>Download</span></button>
+                  </>
+                ) : <div className="media-error">🎤 Voice message not available</div>}
+              </div>
+            ) : renderMessageText(msg)}
+
+            {msg.edited && <span className="msg-edited">(edited)</span>}
+
+            {Object.keys(reactions).length > 0 && (
+              <div className="message-reactions">
+                {Object.entries(reactions).map(([emoji, users]) => (
+                  <button key={emoji} className={`reaction-item ${users.includes(username) ? 'reacted' : ''}`} onClick={() => handleReaction(msg._id, emoji)}>{emoji} {users.length}</button>
+                ))}
+              </div>
+            )}
+
+            <div className="msg-footer">
+              <span className="timestamp" title={new Date(msg.time).toLocaleString()}>{formatRelativeTime(msg.time)}</span>
+              {isOwn && showReadReceiptsEnabled && showDoubleTick && (() => {
+                const readers = Array.isArray(msg.readBy) ? msg.readBy : [];
+                const seenByOthers = readers.some(r => r !== username);
+                return <span className={`message-ticks ${(seenByOthers && showBlueTick) ? 'blue' : ''}`}>✓✓</span>;
+              })()}
+            </div>
+          </motion.div>
+        </React.Fragment>
+      );
+    });
+  }, [
+    renderedChat,
+    username,
+    starredMsgIds,
+    chatMessageById,
+    handleContextMenu,
+    handleLongPressStart,
+    handleLongPressEnd,
+    setThreadRootId,
+    openImageViewer,
+    downloadMedia,
+    openVoicePlayer,
+    playVoiceMessage,
+    playingVoiceId,
+    renderMessageText,
+    handleReaction,
+    showReadReceiptsEnabled,
+    showDoubleTick,
+    showBlueTick
   ]);
 
   // ==================== ESC KEY HANDLER ====================
@@ -5569,8 +5909,8 @@ function AppContent() {
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
           <Zap color="#00a884" size={48} fill="#00a884" />
           <h2 className="brand">DevChat <span>Pro+</span></h2>
-          <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} autoFocus /></div>
-          <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyPress={e => e.key === 'Enter' && joinRoom()} /></div>
+          <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} autoFocus /></div>
+          <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} /></div>
           <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
         </motion.div>
       </div>
@@ -5633,7 +5973,7 @@ function AppContent() {
                       <div className="menu-header">⚙️ General</div>
                       <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMobileMenu(false); }}><Users size={18}/><span>Conversations</span></button>
                       <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMobileMenu(false); }}><Hash size={18}/><span>Rooms</span></button>
-                      <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications</span></button>
+                      <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMobileMenu(false); }}><Bell size={18}/><span>Notifications {unreadNotificationCount > 0 && <span className="menu-badge new">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}</span></button>
                       <button className="menu-item" type="button" onClick={() => { setShowAppSettings(true); setShowMobileMenu(false); }}><Settings size={18}/><span>App Settings</span></button>
                     </div>
                     <div className="menu-section">
@@ -5657,15 +5997,17 @@ function AppContent() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               {isMobileView && (
                 <button
-                  className="menu-toggle"
+                  className={`menu-toggle ${unreadNotificationCount > 0 ? 'has-notification' : ''}`}
                   onClick={() => {
                     setShowMenuDropdown(false);
                     setShowMobileMenu((prev) => !prev);
+                    acknowledgeNotificationPulse();
                   }}
                   title="Open stream menu"
                   aria-label="Open stream menu"
                 >
                   <Menu size={20} />
+                  {unreadNotificationCount > 0 && <span className={`menu-toggle-dot ${hasNewNotificationPulse ? 'pulse' : ''}`} aria-hidden="true" />}
                 </button>
               )}
               <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Leave Stream</button>
@@ -5698,13 +6040,14 @@ function AppContent() {
       <div className="chat-header">
         <div className="menu-container" ref={menuContainerRef}>
           <button
-            className="menu-toggle"
+            className={`menu-toggle ${unreadNotificationCount > 0 ? 'has-notification' : ''}`}
             onClick={() => {
               setShowMobileMenu(false);
               setShowMenuDropdown((prev) => !prev);
+              acknowledgeNotificationPulse();
             }}
             title="Menu"
-          ><Menu size={24}/></button>
+          ><Menu size={24}/>{unreadNotificationCount > 0 && <span className={`menu-toggle-dot ${hasNewNotificationPulse ? 'pulse' : ''}`} aria-hidden="true" />}</button>
           
           <AnimatePresence>
             {showMenuDropdown && (
@@ -5739,7 +6082,7 @@ function AppContent() {
                     <div className="menu-header">⚙️ General</div>
                     <button className="menu-item" onClick={() => { openSidebarView('conversations'); setShowMenuDropdown(false); }}><Users size={18}/><span>Conversations</span></button>
                     <button className="menu-item" onClick={() => { openSidebarView('rooms'); setShowMenuDropdown(false); }}><Hash size={18}/><span>Rooms</span></button>
-                    <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications</span></button>
+                    <button className="menu-item" onClick={() => { openSidebarView('notifications'); setShowMenuDropdown(false); }}><Bell size={18}/><span>Notifications {unreadNotificationCount > 0 && <span className="menu-badge new">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}</span></button>
                     <button className="menu-item" type="button" onClick={() => { setShowAppSettings(true); setShowMenuDropdown(false); }}><Settings size={18}/><span>App Settings</span></button>
                   </div>
 
@@ -5823,6 +6166,19 @@ function AppContent() {
         </div>
       )}
 
+      {reconnectInfo && !connected && (
+        <div className="reconnect-banner">
+          Reconnecting {reconnectInfo.attempt}/{reconnectInfo.max} · retry in {Math.max(0, reconnectInfo.secondsLeft)}s
+        </div>
+      )}
+
+      {failedQueueItems.length > 0 && (
+        <div className="queue-banner">
+          <span>{failedQueueItems.length} message{failedQueueItems.length > 1 ? 's' : ''} failed to send.</span>
+          <button className="sidebar-mini-btn" onClick={retryAllFailedQueueItems} disabled={!connected}>Retry all</button>
+        </div>
+      )}
+
       {/* Chat Body */}
       <div className="chat-body" ref={chatBodyRef} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}>
         {isDragging && (
@@ -5830,96 +6186,50 @@ function AppContent() {
             <div className="drag-drop-content"><ImageIcon size={48} /><h3>Drop images here</h3></div>
           </div>
         )}
-        
-        <AnimatePresence>
-          {filteredChat.flatMap((msg, index) => {
-            const isOwn = msg.sender === username;
-            const reactions = msg.reactions || {};
-            const grouped = index > 0 && isGroupedMessage(msg, filteredChat[index - 1]);
-            const showDateSep = index === 0 || needsDateSeparator(msg.time, filteredChat[index - 1]?.time);
-            const isGroupedBelow = index < filteredChat.length - 1 && isGroupedMessage(filteredChat[index + 1], msg);
-            const clusterPos = !grouped && isGroupedBelow ? 'cluster-top' : grouped && isGroupedBelow ? 'cluster-mid' : grouped && !isGroupedBelow ? 'cluster-bottom' : '';
 
-            return (
-              <React.Fragment key={msg._id || index}>
-                {showDateSep && <div className="date-separator"><span className="date-separator-text">{formatDateSeparator(msg.time)}</span></div>}
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  id={`msg-${msg._id}`} ref={el => { if (el && msg._id) msgRefsMap.current[msg._id] = el; }}
-                  className={`msg-bubble ${isOwn ? "me" : "other"} ${msg.isPinned ? "pinned" : ""} ${grouped ? "grouped" : ""} ${clusterPos}`}
-                  onContextMenu={(e) => handleContextMenu(e, msg)} onTouchStart={(e) => handleLongPressStart(e, msg)} onTouchEnd={handleLongPressEnd} onTouchMove={handleLongPressEnd} onTouchCancel={handleLongPressEnd}
-                >
-                  {msg.isPinned && <Pin size={12} className="pin-icon" />}
-                  {starredMsgIds.has(msg._id) && <span className="msg-star-badge"><Star size={10} fill="#FFD700" color="#FFD700"/></span>}
-                  {!isOwn && <span className="sender-tag">{msg.sender}</span>}
-                  
-                  {msg.replyTo && (() => {
-                    const repliedMsg = chat.find(c => c._id === msg.replyTo);
-                    return repliedMsg ? (
-                      <div className="reply-preview" onClick={() => scrollToMessage(msg.replyTo)}>
-                        <Reply size={12} />
-                        <div className="reply-preview-content">
-                          <span className="reply-preview-sender">{repliedMsg.sender}</span>
-                          <span className="reply-preview-text">{repliedMsg.type === 'image' ? '📷 Photo' : repliedMsg.type === 'voice' ? '🎤 Voice' : repliedMsg.type === 'file' ? `📎 ${repliedMsg.fileName}` : (repliedMsg.text || '').substring(0, 60)}</span>
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
-                  
-                  {msg.type === 'image' ? (
-                    <div className="image-message-wrapper">
-                      {msg.fileUrl ? (
-                        <>
-                          <div className="image-container" onClick={() => openImageViewer({ url: msg.fileUrl, fileName: `image-${new Date(msg.time).getTime()}.jpg`, sender: msg.sender, time: msg.time })}>
-                            <img src={msg.fileUrl} className="chat-img" alt="shared" />
-                            <div className="image-overlay"><Eye size={20} /><span>Click to View</span></div>
-                          </div>
-                          <button className="media-download-btn" onClick={(e) => { e.stopPropagation(); downloadMedia(msg.fileUrl, `image-${new Date(msg.time).getTime()}.jpg`); }}><Download size={16} /><span>Download</span></button>
-                        </>
-                      ) : <div className="media-error"><ImageIcon size={24} /><span>📷 Image not available</span></div>}
-                    </div>
-                  ) : msg.type === 'file' ? (
-                    <a href={msg.fileUrl} download={msg.fileName} className="file-card" onClick={e => e.stopPropagation()}>
-                      <div className="file-card-icon"><FileText size={20}/></div>
-                      <div className="file-card-info"><span className="file-card-name">{msg.fileName || 'File'}</span><span className="file-card-size">{msg.fileSize ? formatFileSize(msg.fileSize) : 'Download'}</span></div>
-                      <Download size={16} />
-                    </a>
-                  ) : msg.type === 'voice' ? (
-                    <div className="voice-message-wrapper">
-                      {msg.fileUrl ? (
-                        <>
-                          <div className="voice-message" onClick={() => openVoicePlayer({ url: msg.fileUrl, fileName: `voice-${new Date(msg.time).getTime()}.webm`, sender: msg.sender, time: msg.time, duration: msg.duration || 0 })}>
-                            <button className="voice-play-btn" onClick={(e) => { e.stopPropagation(); playVoiceMessage(msg.fileUrl, msg._id); }}>{playingVoiceId === msg._id ? <Pause size={16}/> : <Play size={16}/>}</button>
-                            <div className="voice-waveform"><span className="voice-duration">{msg.duration || 0}s</span></div>
-                            <Eye size={16} className="voice-view-icon" />
-                          </div>
-                          <button className="media-download-btn" onClick={(e) => { e.stopPropagation(); downloadMedia(msg.fileUrl, `voice-${new Date(msg.time).getTime()}.webm`); }}><Download size={16} /><span>Download</span></button>
-                        </>
-                      ) : <div className="media-error">🎤 Voice message not available</div>}
-                    </div>
-                  ) : renderMessageText(msg)}
-                  
-                  {msg.edited && <span className="msg-edited">(edited)</span>}
-                  
-                  {Object.keys(reactions).length > 0 && (
-                    <div className="message-reactions">
-                      {Object.entries(reactions).map(([emoji, users]) => (
-                        <button key={emoji} className={`reaction-item ${users.includes(username) ? 'reacted' : ''}`} onClick={() => handleReaction(msg._id, emoji)}>{emoji} {users.length}</button>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="msg-footer">
-                    <span className="timestamp" title={new Date(msg.time).toLocaleString()}>{formatRelativeTime(msg.time)}</span>
-                    {isOwn && showReadReceiptsEnabled && showDoubleTick && (() => {
-                      const readers = Array.isArray(msg.readBy) ? msg.readBy : [];
-                      const seenByOthers = readers.some(r => r !== username);
-                      return <span className={`message-ticks ${(seenByOthers && showBlueTick) ? 'blue' : ''}`}>✓✓</span>;
-                    })()}
-                  </div>
-                </motion.div>
-              </React.Fragment>
-            );
-          })}
+        {threadRootId && threadMessages.length > 0 && (
+          <div className="thread-panel">
+            <div className="thread-panel-header">
+              <div>
+                <strong>Thread</strong>
+                <span>{threadMessages.length} message{threadMessages.length > 1 ? 's' : ''}</span>
+              </div>
+              <button type="button" className="thread-panel-close" onClick={() => setThreadRootId(null)} aria-label="Close thread">
+                <X size={16} />
+              </button>
+            </div>
+            {threadRootMessage && (
+              <div className="thread-panel-root">
+                <span className="thread-panel-sender">{threadRootMessage.sender}</span>
+                <p>{threadRootMessage.text || (threadRootMessage.type === 'image' ? '📷 Photo' : threadRootMessage.type === 'voice' ? '🎤 Voice message' : threadRootMessage.type === 'file' ? `📎 ${threadRootMessage.fileName || 'File'}` : 'Message')}</p>
+              </div>
+            )}
+            <div className="thread-panel-list">
+              {threadMessages.map((item, itemIndex) => (
+                <button key={item._id || itemIndex} type="button" className={`thread-panel-item ${item._id === threadRootId ? 'root' : ''}`} onClick={() => scrollToMessage(item._id)}>
+                  <span className="thread-panel-sender">{item.sender}</span>
+                  <span className="thread-panel-text">{item.text || (item.type === 'image' ? '📷 Photo' : item.type === 'voice' ? '🎤 Voice message' : item.type === 'file' ? `📎 ${item.fileName || 'File'}` : 'Message')}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {isLoadingOlder && <div className="load-older-hint">Loading older…</div>}
+
+        {hasOlderHiddenMessages && (isMobileView || !autoLoadOlderTriggered) && (
+          <button
+            type="button"
+            className="load-older-btn"
+            onClick={handleLoadOlderMessages}
+            disabled={isLoadingOlder}
+          >
+            {isLoadingOlder ? 'Loading older…' : `Load older messages (${filteredChat.length - renderedChat.length} hidden)`}
+          </button>
+        )}
+
+        <AnimatePresence>
+          {memoizedChatNodes}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -5946,7 +6256,7 @@ function AppContent() {
         <div className="replying-bar">
           <Reply size={16} />
           <div><strong>Replying to {replyingTo.sender}</strong><p>{replyingTo.text?.substring(0, 50)}...</p></div>
-          <button onClick={() => setReplyingTo(null)}><X size={16} /></button>
+          <button onClick={() => { setReplyingTo(null); setThreadRootId(null); }}><X size={16} /></button>
         </div>
       )}
 
@@ -5965,7 +6275,7 @@ function AppContent() {
         
         <div className="whatsapp-input-wrapper">
           <button className="emoji-btn-inline" onClick={() => setShowEmojiPicker(!showEmojiPicker)} disabled={!connected} title="Emoji"><Smile size={22} /></button>
-          <textarea ref={textareaRef} className="whatsapp-input" disabled={!connected} value={message} placeholder={connected ? "Type a message..." : "Connecting..."} onChange={handleMessageChange} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} rows={1} />
+          <textarea ref={textareaRef} className="whatsapp-input" disabled={!connected} value={message} placeholder={connected ? "Type a message..." : "Connecting..."} onChange={handleMessageChange} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) { e.preventDefault(); sendMessage(); } }} rows={1} />
           {message.length > 100 && <span className={`char-counter ${message.length > 450 ? 'warn' : ''}`}>{message.length}</span>}
         </div>
         
@@ -6106,7 +6416,7 @@ function AppContent() {
               <div className="sidebar-tabs">
                 <button className={`sidebar-tab ${roomSidebarView === 'conversations' ? 'active' : ''}`} onClick={() => setRoomSidebarView('conversations')}>Conversations</button>
                 <button className={`sidebar-tab ${roomSidebarView === 'rooms' ? 'active' : ''}`} onClick={() => setRoomSidebarView('rooms')}>Rooms</button>
-                <button className={`sidebar-tab ${roomSidebarView === 'notifications' ? 'active' : ''}`} onClick={() => setRoomSidebarView('notifications')}>Notifications</button>
+                <button className={`sidebar-tab ${roomSidebarView === 'notifications' ? 'active' : ''}`} onClick={() => { setRoomSidebarView('notifications'); markNotificationsAsRead(); }}>Notifications{unreadNotificationCount > 0 && <span className="sidebar-tab-badge">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}</button>
               </div>
               <div className="sidebar-rooms">
                 {roomSidebarView === 'conversations' && (
@@ -6186,24 +6496,37 @@ function AppContent() {
 
                 {roomSidebarView === 'notifications' && (
                   <div className="sidebar-section">
-                    <div className="sidebar-section-title">Recent Notifications</div>
-                    {notificationItems.length === 0 ? (
+                    <div className="sidebar-section-title sidebar-notifications-header">
+                      <span>Recent Notifications</span>
+                      <div className="sidebar-notification-actions">
+                        <button className="sidebar-mini-btn" onClick={markNotificationsAsRead} disabled={unreadNotificationCount === 0}>Mark all read</button>
+                        <button className="sidebar-mini-btn danger" onClick={clearNotifications} disabled={notificationItems.length === 0}>Clear all</button>
+                      </div>
+                    </div>
+                    <label className="sidebar-unread-only">
+                      <input type="checkbox" checked={notificationUnreadOnly} onChange={(e) => setNotificationUnreadOnly(e.target.checked)} />
+                      Unread only
+                    </label>
+                    {filteredNotificationItems.length === 0 ? (
                       <div className="sidebar-empty">No notifications yet</div>
                     ) : (
                       <div className="sidebar-notification-list">
-                        {notificationItems.slice().reverse().map((item) => (
-                          <div className="sidebar-notification-item" key={item.id || `${item.type}-${item.time}`}>
+                        {filteredNotificationItems.map((item) => {
+                          const itemTime = Date.parse(item?.time || '');
+                          const isUnread = Number.isFinite(itemTime) ? itemTime > lastNotificationsReadAt : false;
+                          return (
+                          <div className={`sidebar-notification-item ${isUnread ? 'unread' : ''}`} key={item.id || `${item.type}-${item.time}`}>
                             <div className="sidebar-notification-meta">
                               <strong>{item.sender || item.type || 'Update'}</strong>
                               <span>{item.preview || item.room || item.type}</span>
                             </div>
                             {item.type === 'livestream' ? (
-                              <button className="sidebar-action-btn" onClick={() => { requestJoinLivestreamFromNotification(item); setShowRoomSidebar(false); }}>Join</button>
+                              <button className="sidebar-action-btn" onClick={() => { markNotificationItemAsRead(item); requestJoinLivestreamFromNotification(item); setShowRoomSidebar(false); }}>Join</button>
                             ) : item.room ? (
-                              <button className="sidebar-action-btn" onClick={() => { switchRoom(item.room); setShowRoomSidebar(false); }}>Open</button>
+                              <button className="sidebar-action-btn" onClick={() => { markNotificationItemAsRead(item); switchRoom(item.room); setShowRoomSidebar(false); }}>Open</button>
                             ) : null}
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>
