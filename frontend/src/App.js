@@ -490,6 +490,7 @@ function AppContent() {
   const ringtoneRef = useRef(null);
   const ringtoneIntervalRef = useRef(null);
   const ringtoneAudioContextRef = useRef(null);
+  const soundToggleLockRef = useRef(0);
   const callTimingRef = useRef(null);
   const endCallRef = useRef(() => {});
   const idleStateRef = useRef(false);
@@ -587,10 +588,10 @@ function AppContent() {
 
   useEffect(() => {
     const contextSoundEnabled = appSettings?.notifications?.soundEnabled;
-    if (typeof contextSoundEnabled === 'boolean' && soundEnabled !== contextSoundEnabled) {
-      setSoundEnabled(contextSoundEnabled);
+    if (typeof contextSoundEnabled === 'boolean') {
+      setSoundEnabled((prev) => (prev === contextSoundEnabled ? prev : contextSoundEnabled));
     }
-  }, [appSettings?.notifications?.soundEnabled, soundEnabled]);
+  }, [appSettings?.notifications?.soundEnabled]);
 
   useEffect(() => {
     const mentionOnlySetting = !!appSettings?.notifications?.mentionOnly;
@@ -4924,6 +4925,13 @@ function AppContent() {
     setIsMuted(shouldMute);
   }, [localStream]);
 
+  const toggleDashboardSound = useCallback(() => {
+    const now = Date.now();
+    if (now - soundToggleLockRef.current < 120) return;
+    soundToggleLockRef.current = now;
+    setSoundEnabled(prev => !prev);
+  }, []);
+
   const toggleVideo = useCallback(() => {
     if (localStream && callType === 'video') {
       const videoTrack = localStream.getVideoTracks()[0];
@@ -5774,7 +5782,7 @@ function AppContent() {
         
         <div className="users-info" title={`${onlineUsers.length} online`}><Users size={16}/><span className="users-count">{onlineUsers.length}</span></div>
         <button className="theme-toggle" type="button" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">{theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
-        <button className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`} onClick={() => setSoundEnabled(!soundEnabled)} title={soundEnabled ? "Mute" : "Unmute"}>{soundEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button>
+        <button className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`} type="button" onClick={toggleDashboardSound} title={soundEnabled ? "Mute" : "Unmute"}>{soundEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button>
         <button className="clear-btn" onClick={() => setShowClearConfirm(true)} title="Clear all"><Trash2 size={18}/></button>
       </div>
 
