@@ -104,15 +104,32 @@ export const useEnhancedCall = (socket, username) => {
 
   // Save preferred devices
   const savePreferredDevices = useCallback(() => {
+    const preferredCameraId = activeDevices.camera && activeDevices.camera !== 'system'
+      ? activeDevices.camera
+      : '';
+    const preferredMicrophoneId = activeDevices.microphone && activeDevices.microphone !== 'system'
+      ? activeDevices.microphone
+      : '';
+    const preferredSpeakerId = activeDevices.speaker && activeDevices.speaker !== 'system'
+      ? activeDevices.speaker
+      : 'default';
+
     const updated = {
       ...settings,
       devices: {
         ...settings.devices,
-        preferredCameraId: activeDevices.camera,
-        preferredMicrophoneId: activeDevices.microphone,
-        preferredSpeakerId: activeDevices.speaker,
+        preferredCameraId,
+        preferredMicrophoneId,
+        preferredSpeakerId,
       }
     };
+
+    try {
+      localStorage.setItem('devchatPreferredCameraId', preferredCameraId);
+      localStorage.setItem('devchatPreferredMicrophoneId', preferredMicrophoneId);
+      localStorage.setItem('devchatPreferredAudioOutput', preferredSpeakerId || 'default');
+    } catch {}
+
     setSettings(updated);
     saveSettings(updated);
   }, [settings, activeDevices]);
@@ -125,7 +142,7 @@ export const useEnhancedCall = (socket, username) => {
         noiseSuppression: settings.calls.noiseSuppression,
         autoGainControl: settings.calls.autoGainControl,
         deviceId: activeDevices.microphone !== 'system' 
-          ? { exact: activeDevices.microphone } 
+          ? { ideal: activeDevices.microphone } 
           : undefined,
       }
     };
@@ -164,7 +181,7 @@ export const useEnhancedCall = (socket, username) => {
         video: {
           ...videoConstraints,
           deviceId: activeDevices.camera !== 'system'
-            ? { exact: activeDevices.camera }
+            ? { ideal: activeDevices.camera }
             : undefined,
         }
       };

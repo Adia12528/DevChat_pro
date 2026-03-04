@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { X, Mic, Volume2, Wifi, Shield, Bell } from 'lucide-react';
+import { X, Mic, Volume2, Wifi } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 
 const CallSettings = ({ onClose, callHook }) => {
   const callApi = callHook || useEnhancedCall();
   const { settings, updateCallSettings } = callApi;
-  const [localSettings, setLocalSettings] = useState(settings);
+  const [localSettings, setLocalSettings] = useState(settings || {});
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -39,7 +39,7 @@ const CallSettings = ({ onClose, callHook }) => {
       <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
         <div className="settings-header">
           <h2>Call Settings</h2>
-          <button className="close-btn" onClick={onClose}>
+          <button className="close-btn" onClick={onClose} type="button">
             <X size={20} />
           </button>
         </div>
@@ -156,28 +156,9 @@ const CallSettings = ({ onClose, callHook }) => {
           </div>
         </div>
 
-        <div className="settings-section">
-          <h3>
-            <Shield size={18} />
-            Privacy
-          </h3>
-
-          <div className="setting-item">
-            <label>Show Last Seen</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={localSettings.showLastSeen !== false}
-                onChange={(e) => handleChange('showLastSeen', e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-        </div>
-
           <div className="settings-actions">
-            <button className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+            <button className="btn-secondary" onClick={onClose} type="button">Cancel</button>
+            <button className="btn-primary" onClick={handleSave} type="button">Save Changes</button>
           </div>
         </div>
       </div>

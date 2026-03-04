@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Camera, Monitor, Settings, RefreshCw } from 'lucide-react';
+import { X, Camera, Monitor, RefreshCw } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 import { detectDevices } from '../../utils/settings';
 
@@ -85,12 +85,17 @@ const VideoSettings = ({ onClose, callHook }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          deviceId: deviceId !== 'system' ? { exact: deviceId } : undefined
+          deviceId: deviceId !== 'system' ? { ideal: deviceId } : undefined
         }
       });
       setPreviewStream(stream);
     } catch (error) {
-      console.error('Failed to start camera preview:', error);
+      try {
+        const fallback = await navigator.mediaDevices.getUserMedia({ video: true });
+        setPreviewStream(fallback);
+      } catch (fallbackError) {
+        console.error('Failed to start camera preview:', fallbackError);
+      }
     }
   };
 
@@ -111,7 +116,7 @@ const VideoSettings = ({ onClose, callHook }) => {
       <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
         <div className="settings-header">
           <h2>Video Settings</h2>
-          <button className="close-btn" onClick={onClose}>
+          <button className="close-btn" onClick={onClose} type="button">
             <X size={20} />
           </button>
         </div>
@@ -140,6 +145,7 @@ const VideoSettings = ({ onClose, callHook }) => {
             <button 
               className="btn-refresh" 
               onClick={loadDevices}
+              type="button"
               disabled={isLoading}
             >
               <RefreshCw size={16} className={isLoading ? 'spin' : ''} />
@@ -193,24 +199,9 @@ const VideoSettings = ({ onClose, callHook }) => {
           </div>
         </div>
 
-        <div className="settings-section">
-          <h3>
-            <Settings size={18} />
-            Advanced
-          </h3>
-
-          <div className="setting-item">
-            <label>Hardware Acceleration</label>
-            <div className="toggle-switch">
-              <input type="checkbox" defaultChecked />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-        </div>
-
           <div className="settings-actions">
-            <button className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn-primary" onClick={handleSave}>Save Changes</button>
+            <button className="btn-secondary" onClick={onClose} type="button">Cancel</button>
+            <button className="btn-primary" onClick={handleSave} type="button">Save Changes</button>
           </div>
         </div>
       </div>
