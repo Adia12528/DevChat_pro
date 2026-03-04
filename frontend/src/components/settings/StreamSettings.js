@@ -1,23 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { X, Radio, Monitor, Camera, Globe, Lock, Settings } from 'lucide-react';
+import { X, Radio, Monitor, Camera, Globe, Lock } from 'lucide-react';
 
 const StreamSettings = ({ 
   visibility, 
   source, 
   onVisibilityChange, 
   onSourceChange, 
+  onSettingsChange,
   onStartStream, 
   onClose,
   isMobile = false,
   isWindows = false
 }) => {
-  const [streamTitle, setStreamTitle] = useState('');
   const [streamQuality, setStreamQuality] = useState('1080p');
-  const [enableChat, setEnableChat] = useState(true);
-  const [enableReactions, setEnableReactions] = useState(true);
 
   const handleStartStream = () => {
-    onStartStream(streamTitle.trim() || 'Live Stream');
+    onSettingsChange?.({ quality: streamQuality });
+    onStartStream();
   };
 
   useEffect(() => {
@@ -48,18 +47,6 @@ const StreamSettings = ({
         </div>
 
         <div className="stream-setup-content">
-          <div className="stream-setup-group">
-            <label>Stream Title</label>
-            <input
-              type="text"
-              className="stream-title-input"
-              placeholder="Enter stream title..."
-              value={streamTitle}
-              onChange={(e) => setStreamTitle(e.target.value)}
-              maxLength={100}
-            />
-          </div>
-
           <div className="stream-setup-group">
             <label>Visibility</label>
             <div className="stream-settings-options">
@@ -136,37 +123,12 @@ const StreamSettings = ({
               value={streamQuality}
               onChange={(e) => setStreamQuality(e.target.value)}
             >
+              <option value="Auto">Auto</option>
               <option value="480p">480p (SD)</option>
               <option value="720p">720p (HD)</option>
               <option value="1080p">1080p (Full HD)</option>
-              <option value="4k">4K (Ultra HD)</option>
+              <option value="4K">4K (Ultra HD)</option>
             </select>
-          </div>
-
-          <div className="stream-setup-group">
-            <label>Chat Settings</label>
-            <div className="setting-item">
-              <span>Enable Live Chat</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={enableChat}
-                  onChange={(e) => setEnableChat(e.target.checked)}
-                />
-                <span className="toggle-slider" />
-              </label>
-            </div>
-            <div className="setting-item">
-              <span>Enable Reactions</span>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={enableReactions}
-                  onChange={(e) => setEnableReactions(e.target.checked)}
-                />
-                <span className="toggle-slider" />
-              </label>
-            </div>
           </div>
 
           <button

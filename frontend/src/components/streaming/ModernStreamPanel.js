@@ -53,6 +53,7 @@ const ModernStreamPanel = ({
   const [noiseSuppression, setNoiseSuppression] = useState(streamSettings?.noiseSuppression ?? true);
   const [slowMode, setSlowMode] = useState(streamSettings?.slowMode ?? false);
   const [subOnlyMode, setSubOnlyMode] = useState(streamSettings?.subOnlyMode ?? false);
+  const [lastChatSentAt, setLastChatSentAt] = useState(0);
   const [fallbackCameraDevices, setFallbackCameraDevices] = useState([]);
   const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
   const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
@@ -162,13 +163,20 @@ const ModernStreamPanel = ({
   };
 
   const handleSendMessage = () => {
-    if (chatMessage.trim()) {
-      onSendChat?.(chatMessage);
-      setChatMessage('');
-    }
+    const now = Date.now();
+    const slowModeWindowMs = slowMode ? 5000 : 0;
+    const blockedBySubOnly = subOnlyMode && !isHost;
+    const blockedBySlowMode = slowModeWindowMs > 0 && now - lastChatSentAt < slowModeWindowMs;
+
+    if (blockedBySubOnly || blockedBySlowMode || !chatMessage.trim()) return;
+
+    onSendChat?.(chatMessage);
+    setChatMessage('');
+    setLastChatSentAt(now);
   };
 
   const handleReaction = (emoji) => {
+    if (subOnlyMode && !isHost) return;
     const reactionId = Date.now() + Math.random();
     setReactions(prev => [...prev, { emoji, id: reactionId }]);
     setTimeout(() => {
@@ -424,9 +432,10 @@ const ModernStreamPanel = ({
                     value={chatMessage}
                     onChange={(e) => setChatMessage(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                    placeholder="Send a message..."
+                    placeholder={subOnlyMode && !isHost ? 'Chat is in sub-only mode' : (slowMode ? 'Slow mode enabled (5s)' : 'Send a message...')}
+                    disabled={subOnlyMode && !isHost}
                   />
-                  <button onClick={handleSendMessage}>Send</button>
+                  <button onClick={handleSendMessage} disabled={subOnlyMode && !isHost}>Send</button>
                 </div>
               </div>
             </motion.div>

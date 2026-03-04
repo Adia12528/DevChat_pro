@@ -100,10 +100,13 @@ const LIVESTREAM_EVENTS = {
   DECLINE: 'livestream:decline',
   LEAVE: 'livestream:leave',
   VIEWERS_UPDATE: 'livestream:viewers-update',
+  SETTINGS_UPDATE: 'livestream:settings-update',
+  SETTINGS_UPDATED: 'livestream:settings-updated',
   COMMENT: 'livestream:comment',
   COMMENTED: 'livestream:commented',
   REACTION: 'livestream:reaction',
-  REACTED: 'livestream:reacted'
+  REACTED: 'livestream:reacted',
+  POLICY_BLOCKED: 'livestream:policy-blocked'
 };
 
 const ROOM_EVENTS = {
@@ -937,7 +940,7 @@ function AppContent() {
     };
   }, [enhancedCall, runtimeConnectionInfo, withPreferredAudioDevice, withPreferredVideoDevice]);
 
-  const applyStreamQualityToActiveTrack = useCallback(async (quality) => {
+  const getStreamQualityVideoConstraints = useCallback((quality) => {
     const qualityProfiles = {
       'Auto': null,
       '480p': { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } },
@@ -946,7 +949,11 @@ function AppContent() {
       '4K': { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30, max: 60 } }
     };
 
-    const profile = qualityProfiles[quality];
+    return qualityProfiles[quality] || null;
+  }, []);
+
+  const applyStreamQualityToActiveTrack = useCallback(async (quality) => {
+    const profile = getStreamQualityVideoConstraints(quality);
     if (!profile) return;
 
     const currentLocalStream = localStreamRef.current;
@@ -960,7 +967,7 @@ function AppContent() {
       console.warn('Failed to apply stream quality immediately:', error);
       setErrorMessage('Could not apply selected quality right now. It will apply next start.');
     }
-  }, []);
+  }, [getStreamQualityVideoConstraints]);
 
   const applyAudioProcessingToActiveTrack = useCallback(async (noiseSuppressionEnabled) => {
     const currentLocalStream = localStreamRef.current;
@@ -990,12 +997,40 @@ function AppContent() {
 
     try {
       const preferredId = cameraId && cameraId !== 'default' ? cameraId : '';
-      const constraints = {
-        video: preferredId ? { deviceId: { exact: preferredId } } : true,
-        audio: false
-      };
+      const qualityConstraints = getStreamQualityVideoConstraints(streamPanelSettings?.quality);
 
-      const replacementStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const candidateVideoConstraints = preferredId
+        ? [
+            { ...(qualityConstraints || {}), deviceId: { exact: preferredId } },
+            { ...(qualityConstraints || {}), deviceId: { ideal: preferredId } },
+            qualityConstraints || true,
+            { deviceId: { exact: preferredId } },
+            { deviceId: { ideal: preferredId } },
+            true
+          ]
+        : [qualityConstraints || true, true];
+
+      let replacementStream = null;
+      let captureError = null;
+
+      for (const videoConstraints of candidateVideoConstraints) {
+        try {
+          replacementStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
+          });
+          if (replacementStream?.getVideoTracks?.().length) {
+            break;
+          }
+        } catch (err) {
+          captureError = err;
+        }
+      }
+
+      if (!replacementStream) {
+        throw captureError || new Error('Unable to access selected camera');
+      }
+
       const replacementVideoTrack = replacementStream.getVideoTracks()[0];
       if (!replacementVideoTrack) {
         replacementStream.getTracks().forEach(track => track.stop());
@@ -1020,8 +1055,8 @@ function AppContent() {
 
       const replaceOnPeerConnection = async (peerConnection) => {
         if (!peerConnection) return;
-        const videoSender = peerConnection.getSenders().find(sender => sender.track?.kind === 'video');
-        if (videoSender) {
+        const videoSenders = peerConnection.getSenders().filter(sender => sender.track?.kind === 'video');
+        for (const videoSender of videoSenders) {
           await videoSender.replaceTrack(replacementVideoTrack);
         }
       };
@@ -1041,7 +1076,7 @@ function AppContent() {
       console.warn('Failed to switch camera immediately:', error);
       setErrorMessage('Could not switch camera right now. It will apply next start.');
     }
-  }, []);
+  }, [getStreamQualityVideoConstraints, streamPanelSettings?.quality]);
 
   const applyMicrophoneSelectionToActiveStream = useCallback(async (microphoneId, noiseSuppressionEnabled = true) => {
     const hasActiveAudioSession =
@@ -1109,7 +1144,8 @@ function AppContent() {
   }, []);
 
   const handleStreamSettingsChange = useCallback((settings = {}) => {
-    setStreamPanelSettings(prev => ({ ...prev, ...settings }));
+    const mergedSettings = { ...streamPanelSettings, ...settings };
+    setStreamPanelSettings(mergedSettings);
 
     if (typeof settings.quality === 'string' && settings.quality.trim()) {
       applyStreamQualityToActiveTrack(settings.quality);
@@ -1138,11 +1174,31 @@ function AppContent() {
     if (typeof settings.audioOutput === 'string' && settings.audioOutput.trim()) {
       setAudioOutputDevice(settings.audioOutput);
     }
+
+    const activeSession = liveStreamInfoRef.current;
+    if (
+      activeSession?.isHost &&
+      activeSession?.sessionId &&
+      !String(activeSession.sessionId).startsWith('pending-') &&
+      socketRef.current
+    ) {
+      socketRef.current.emit(LIVESTREAM_EVENTS.SETTINGS_UPDATE, {
+        sessionId: activeSession.sessionId,
+        from: usernameRef.current,
+        settings: {
+          quality: mergedSettings.quality,
+          noiseSuppression: !!mergedSettings.noiseSuppression,
+          slowMode: !!mergedSettings.slowMode,
+          subOnlyMode: !!mergedSettings.subOnlyMode
+        }
+      });
+    }
   }, [
     applyAudioProcessingToActiveTrack,
     applyCameraSelectionToActiveStream,
     applyMicrophoneSelectionToActiveStream,
     applyStreamQualityToActiveTrack,
+    streamPanelSettings,
     streamPanelSettings.noiseSuppression
   ]);
 
@@ -1767,6 +1823,24 @@ function AppContent() {
           emoji: data.emoji,
           time: data.time
         }]);
+      }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.SETTINGS_UPDATED, (data) => {
+      if (!data?.sessionId || liveStreamInfoRef.current?.sessionId !== data.sessionId) return;
+      if (data?.settings && typeof data.settings === 'object') {
+        setStreamPanelSettings(prev => ({ ...prev, ...data.settings }));
+      }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.POLICY_BLOCKED, (data) => {
+      if (!data?.sessionId || liveStreamInfoRef.current?.sessionId !== data.sessionId) return;
+      if (data.reason === 'slow-mode') {
+        setErrorMessage('Slow mode is enabled. Please wait before sending another message.');
+        return;
+      }
+      if (data.reason === 'sub-only-mode') {
+        setErrorMessage('This stream is in sub-only mode.');
       }
     });
 
@@ -4090,7 +4164,13 @@ function AppContent() {
         host: usernameRef.current,
         room: activeRoomId,
         visibility,
-        source
+        source,
+        settings: {
+          quality: streamPanelSettings.quality,
+          noiseSuppression: !!streamPanelSettings.noiseSuppression,
+          slowMode: !!streamPanelSettings.slowMode,
+          subOnlyMode: !!streamPanelSettings.subOnlyMode
+        }
       }, async (ack) => {
         if (!ack?.success || !ack.sessionId) {
           rollbackLivestreamStart(ack?.error || 'Failed to start livestream');
@@ -4124,7 +4204,19 @@ function AppContent() {
     } catch (err) {
       rollbackLivestreamStart(err?.message || 'Unable to access camera/microphone');
     }
-  }, [room, connected, createLivestreamHostPeer, buildLivestreamSourceStream, stopHostedLivestream, startCallTimer, stopCallTimer]);
+  }, [
+    room,
+    connected,
+    createLivestreamHostPeer,
+    buildLivestreamSourceStream,
+    stopHostedLivestream,
+    startCallTimer,
+    stopCallTimer,
+    streamPanelSettings.noiseSuppression,
+    streamPanelSettings.quality,
+    streamPanelSettings.slowMode,
+    streamPanelSettings.subOnlyMode
+  ]);
 
   const sendLivestreamComment = useCallback((textOverride = '') => {
     const activeSession = liveStreamInfoRef.current;
@@ -6156,6 +6248,7 @@ function AppContent() {
               source={streamSource}
               onVisibilityChange={setStreamVisibility}
               onSourceChange={setStreamSource}
+              onSettingsChange={handleStreamSettingsChange}
               onStartStream={() => { startLivestream(streamVisibility, streamSource); setShowStreamSettings(false); }}
               onClose={() => setShowStreamSettings(false)}
               isMobile={isMobileView}

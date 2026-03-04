@@ -42,10 +42,13 @@ const LIVESTREAM_EVENTS = Object.freeze({
     DECLINE: 'livestream:decline',
     LEAVE: 'livestream:leave',
     VIEWERS_UPDATE: 'livestream:viewers-update',
+    SETTINGS_UPDATE: 'livestream:settings-update',
+    SETTINGS_UPDATED: 'livestream:settings-updated',
     COMMENT: 'livestream:comment',
     COMMENTED: 'livestream:commented',
     REACTION: 'livestream:reaction',
-    REACTED: 'livestream:reacted'
+    REACTED: 'livestream:reacted',
+    POLICY_BLOCKED: 'livestream:policy-blocked'
 });
 
 const ROOM_EVENTS = Object.freeze({
@@ -761,6 +764,23 @@ io.on('connection', (socket) => {
         }
     };
 
+    const sanitizeLivestreamSettings = (settings = {}) => ({
+        slowMode: !!settings?.slowMode,
+        subOnlyMode: !!settings?.subOnlyMode,
+        noiseSuppression: settings?.noiseSuppression !== false,
+        quality: typeof settings?.quality === 'string' ? settings.quality : '1080p'
+    });
+
+    const isLivestreamHost = (session, username) => session?.host && username && session.host === username;
+
+    const emitLivestreamPolicyBlocked = (socketInstance, session, payload = {}) => {
+        if (!socketInstance || !session?.sessionId) return;
+        socketInstance.emit(LIVESTREAM_EVENTS.POLICY_BLOCKED, {
+            sessionId: session.sessionId,
+            ...payload
+        });
+    };
+
     const stopLivestreamSession = (session, reason = 'stopped') => {
         if (!session?.sessionId) return;
         livestreamSessions.delete(session.sessionId);
@@ -885,6 +905,8 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            const settings = sanitizeLivestreamSettings(data?.settings || {});
+
             const sessionId = `${room}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const session = {
                 sessionId,
@@ -893,7 +915,9 @@ io.on('connection', (socket) => {
                 visibility: data?.visibility === 'public' ? 'public' : 'room',
                 source: data?.source || 'camera',
                 hostSocketId: socket.id,
-                viewers: new Set()
+                viewers: new Set(),
+                settings,
+                lastCommentAtByUser: new Map()
             };
 
             livestreamSessions.set(sessionId, session);
@@ -907,6 +931,7 @@ io.on('connection', (socket) => {
                 room,
                 visibility: session.visibility,
                 source: session.source,
+                settings: session.settings,
                 time: new Date().toISOString()
             });
 
@@ -917,12 +942,37 @@ io.on('connection', (socket) => {
                     room,
                     visibility: session.visibility,
                     source: session.source,
+                    settings: session.settings,
                     time: new Date().toISOString()
                 });
             }
         } catch (err) {
             console.error('❌ Failed to start livestream:', err);
             callback?.({ success: false, error: 'Failed to start livestream' });
+        }
+    });
+
+    socket.on(LIVESTREAM_EVENTS.SETTINGS_UPDATE, (data) => {
+        try {
+            const session = getLivestreamSession(data?.sessionId);
+            if (!session) return;
+
+            const sender = data?.from || socket.username;
+            if (!isLivestreamHost(session, sender)) return;
+
+            session.settings = {
+                ...session.settings,
+                ...sanitizeLivestreamSettings(data?.settings || {})
+            };
+
+            io.to(session.room).emit(LIVESTREAM_EVENTS.SETTINGS_UPDATED, {
+                sessionId: session.sessionId,
+                settings: session.settings,
+                updatedBy: sender,
+                time: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error('❌ Failed to update livestream settings:', err);
         }
     });
 
@@ -1018,12 +1068,37 @@ io.on('connection', (socket) => {
         try {
             const session = getLivestreamSession(data?.sessionId);
             const text = typeof data?.text === 'string' ? data.text.trim() : '';
-            if (!session || !text) return;
+            const from = data?.from || socket.username;
+            if (!session || !text || !from) return;
+
+            const isHost = isLivestreamHost(session, from);
+            if (session.settings?.subOnlyMode && !isHost) {
+                emitLivestreamPolicyBlocked(socket, session, {
+                    reason: 'sub-only-mode',
+                    action: 'comment'
+                });
+                return;
+            }
+
+            if (session.settings?.slowMode && !isHost) {
+                const now = Date.now();
+                const lastCommentAt = session.lastCommentAtByUser.get(from) || 0;
+                const waitMs = 5000 - (now - lastCommentAt);
+                if (waitMs > 0) {
+                    emitLivestreamPolicyBlocked(socket, session, {
+                        reason: 'slow-mode',
+                        action: 'comment',
+                        waitMs
+                    });
+                    return;
+                }
+                session.lastCommentAtByUser.set(from, now);
+            }
 
             io.to(session.room).emit(LIVESTREAM_EVENTS.COMMENTED, {
                 id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                 sessionId: session.sessionId,
-                from: data.from || socket.username,
+                from,
                 text,
                 time: new Date().toISOString()
             });
@@ -1035,12 +1110,21 @@ io.on('connection', (socket) => {
     socket.on(LIVESTREAM_EVENTS.REACTION, (data) => {
         try {
             const session = getLivestreamSession(data?.sessionId);
-            if (!session || !data?.emoji) return;
+            const from = data?.from || socket.username;
+            if (!session || !data?.emoji || !from) return;
+
+            if (session.settings?.subOnlyMode && !isLivestreamHost(session, from)) {
+                emitLivestreamPolicyBlocked(socket, session, {
+                    reason: 'sub-only-mode',
+                    action: 'reaction'
+                });
+                return;
+            }
 
             io.to(session.room).emit(LIVESTREAM_EVENTS.REACTED, {
                 id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
                 sessionId: session.sessionId,
-                from: data.from || socket.username,
+                from,
                 emoji: data.emoji,
                 time: new Date().toISOString()
             });
