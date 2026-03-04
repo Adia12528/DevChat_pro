@@ -1663,6 +1663,29 @@
   pointer-events: none;
 }
 
+.modern-call-container.performance-lite .call-background-gradient {
+  opacity: 0.25;
+}
+
+.modern-call-container.performance-lite .video-wrapper,
+.modern-call-container.performance-lite .main-controls-group,
+.modern-call-container.performance-lite .controls-top {
+  box-shadow: none;
+}
+
+.modern-call-container.performance-lite .user-badge,
+.modern-call-container.performance-lite .stats,
+.modern-call-container.performance-lite .duration-badge,
+.modern-call-container.performance-lite .controls-top,
+.modern-call-container.performance-lite .main-controls-group {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.modern-call-container.performance-lite .quality-dot {
+  animation: none;
+}
+
 /* Video Grid */
 .video-grid {
   position: absolute;
@@ -2556,6 +2579,17 @@
 
 .modern-stream-container.theater .stream-sidebar {
   display: none;
+}
+
+.modern-stream-container.no-sidebar .stream-video-area {
+  width: 100% !important;
+}
+
+.modern-stream-container.no-sidebar .stream-sidebar {
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+  border-left: none;
 }
 
 .stream-background-gradient {

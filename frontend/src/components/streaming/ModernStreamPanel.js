@@ -41,6 +41,7 @@ const ModernStreamPanel = ({
   streamSettings
 }) => {
   const [showChat, setShowChat] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
@@ -193,7 +194,7 @@ const ModernStreamPanel = ({
 
   return (
     <motion.div 
-      className={`modern-stream-container ${layout}`}
+      className={`modern-stream-container ${layout} ${isSidebarOpen ? 'with-sidebar' : 'no-sidebar'}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -341,6 +342,19 @@ const ModernStreamPanel = ({
                 </div>
 
                 <div className="control-bar-right">
+                  <button
+                    className={`stream-control-btn ${isSidebarOpen ? 'active' : ''}`}
+                    onClick={() => {
+                      setIsSidebarOpen(prev => {
+                        const next = !prev;
+                        if (next) setShowChat(true);
+                        return next;
+                      });
+                    }}
+                    title={isSidebarOpen ? 'Hide Chat' : 'Show Chat'}
+                  >
+                    {isSidebarOpen ? <X size={20} /> : <MessageSquare size={20} />}
+                  </button>
                   <button className="stream-control-btn" onClick={() => handleReaction('❤️')}>
                     <Heart size={20} />
                   </button>
@@ -365,7 +379,7 @@ const ModernStreamPanel = ({
         </div>
       </div>
 
-      <div className="stream-sidebar open">
+      <div className={`stream-sidebar ${isSidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="sidebar-tabs">
           <button className={`tab ${showChat ? 'active' : ''}`} onClick={() => setShowChat(true)}>
             <MessageSquare size={16} />

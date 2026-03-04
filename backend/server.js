@@ -1137,4 +1137,37 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(PORT, () => console.log(`🚀 Production Server on ${PORT}`));
+let activePort = Number(PORT) || 5000;
+let retryListenTimer = null;
+
+const startServer = (port) => {
+    if (server.listening) return;
+    activePort = Number(port) || activePort;
+    server.listen(activePort, () => {
+        if (retryListenTimer) {
+            clearTimeout(retryListenTimer);
+            retryListenTimer = null;
+        }
+        console.log(`🚀 Production Server on ${activePort}`);
+    });
+};
+
+server.on('error', (error) => {
+    if (error?.code === 'EADDRINUSE') {
+        const failedPort = activePort;
+        activePort += 1;
+        console.warn(`⚠️ Port ${failedPort} is in use. Retrying on ${activePort}...`);
+        if (retryListenTimer) {
+            clearTimeout(retryListenTimer);
+        }
+        retryListenTimer = setTimeout(() => {
+            retryListenTimer = null;
+            startServer(activePort);
+        }, 120);
+        return;
+    }
+
+    console.error('❌ Server startup error:', error);
+});
+
+startServer(activePort);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, 
   Maximize2, Minimize2, Users, Settings, Volume2, 
@@ -39,13 +39,32 @@ const CallPanel = ({
   const [layout, setLayout] = useState('grid');
   const [videoQuality, setVideoQuality] = useState('HD');
   const [audioLevel, setAudioLevel] = useState(0);
-  const [networkStats, setNetworkStats] = useState({
-    bitrate: 0,
-    packetLoss: 0,
-    latency: 0
-  });
   const audioAnalyserRef = useRef(null);
-  const animationFrameRef = useRef(null);
+  const audioLevelIntervalRef = useRef(null);
+
+  const isPerformanceLite = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const lowCoreDevice = typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+      ? navigator.hardwareConcurrency <= 4
+      : false;
+    return Boolean(prefersReducedMotion || lowCoreDevice);
+  }, []);
+
+  const networkStats = useMemo(() => {
+    switch (connectionQuality) {
+      case 'excellent':
+        return { bitrate: 2200, packetLoss: 0.1, latency: 22 };
+      case 'good':
+        return { bitrate: 1600, packetLoss: 0.4, latency: 38 };
+      case 'fair':
+        return { bitrate: 1050, packetLoss: 0.9, latency: 56 };
+      case 'poor':
+        return { bitrate: 620, packetLoss: 1.8, latency: 95 };
+      default:
+        return { bitrate: 450, packetLoss: 2.5, latency: 130 };
+    }
+  }, [connectionQuality]);
 
   useEffect(() => {
     if (localStream && !isMuted) {
@@ -63,30 +82,33 @@ const CallPanel = ({
           analyser.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
           setAudioLevel(average / 255);
-          animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
         }
       };
       
       updateAudioLevel();
+      audioLevelIntervalRef.current = setInterval(updateAudioLevel, isPerformanceLite ? 240 : 140);
       
       return () => {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
+        if (audioLevelIntervalRef.current) {
+          clearInterval(audioLevelIntervalRef.current);
+          audioLevelIntervalRef.current = null;
         }
+        setAudioLevel(0);
         audioContext.close();
       };
     }
-  }, [localStream, isMuted]);
+    if (audioLevelIntervalRef.current) {
+      clearInterval(audioLevelIntervalRef.current);
+      audioLevelIntervalRef.current = null;
+    }
+    setAudioLevel(0);
+  }, [localStream, isMuted, isPerformanceLite]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNetworkStats({
-        bitrate: Math.floor(Math.random() * 2000) + 500,
-        packetLoss: Math.random() * 2,
-        latency: Math.floor(Math.random() * 50) + 10
-      });
-    }, 2000);
-    return () => clearInterval(interval);
+  useEffect(() => () => {
+    if (audioLevelIntervalRef.current) {
+      clearInterval(audioLevelIntervalRef.current);
+      audioLevelIntervalRef.current = null;
+    }
   }, []);
 
   const getQualityColor = () => {
@@ -152,7 +174,7 @@ const CallPanel = ({
 
   return (
     <motion.div 
-      className="modern-call-container"
+      className={`modern-call-container ${isPerformanceLite ? 'performance-lite' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

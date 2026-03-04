@@ -464,6 +464,8 @@ function AppContent() {
   const liveStreamInfoRef = useRef(null);
   const livestreamHostPeersRef = useRef(new Map());
   const livestreamViewerPeerRef = useRef(null);
+  const livestreamViewerReconnectTimeoutRef = useRef(null);
+  const livestreamHostDisconnectTimeoutsRef = useRef(new Map());
   const livestreamLocalStreamRef = useRef(null);
   const livestreamStartTimeoutRef = useRef(null);
   const callTimeoutRef = useRef(null);
@@ -481,6 +483,7 @@ function AppContent() {
   const ringtoneRef = useRef(null);
   const ringtoneIntervalRef = useRef(null);
   const ringtoneAudioContextRef = useRef(null);
+  const callTimingRef = useRef(null);
   const endCallRef = useRef(() => {});
   const idleStateRef = useRef(false);
   const appSettingsRef = useRef(appSettings);
@@ -848,6 +851,40 @@ function AppContent() {
       }
     };
   }, [selectedVideoInputId]);
+
+  const getCallMediaConstraints = useCallback((callKind) => {
+    const adaptiveConstraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
+      callType: callKind,
+      userAgent: navigator.userAgent,
+      connectionInfo: runtimeConnectionInfo
+    }));
+
+    const preferredConstraints = enhancedCall.getCallConstraints?.(callKind);
+    if (!preferredConstraints) {
+      return adaptiveConstraints;
+    }
+
+    const mergedAudio = callKind === 'video'
+      ? {
+          ...(typeof adaptiveConstraints.audio === 'object' ? adaptiveConstraints.audio : {}),
+          ...(typeof preferredConstraints.audio === 'object' ? preferredConstraints.audio : {})
+        }
+      : (typeof preferredConstraints.audio === 'object' ? preferredConstraints.audio : adaptiveConstraints.audio);
+
+    const mergedVideo = callKind === 'video'
+      ? {
+          ...(typeof adaptiveConstraints.video === 'object' ? adaptiveConstraints.video : {}),
+          ...(typeof preferredConstraints.video === 'object' ? preferredConstraints.video : {})
+        }
+      : false;
+
+    return {
+      ...adaptiveConstraints,
+      ...preferredConstraints,
+      audio: mergedAudio,
+      video: mergedVideo
+    };
+  }, [enhancedCall, runtimeConnectionInfo, withPreferredVideoDevice]);
 
   const applyCameraSelectionToActiveStream = useCallback(async (cameraId) => {
     const hasActiveVideoSession =
@@ -1289,6 +1326,16 @@ function AppContent() {
 
     // Call signaling events
     socket.on(CALL_EVENTS.OFFER, (data) => {
+      const incomingAt = nowMs();
+      callTimingRef.current = {
+        role: 'callee',
+        peer: data?.from,
+        incomingOfferAt: incomingAt,
+        firstRemoteTrackAt: null,
+        firstRemoteTrackKind: null,
+        answerSentAt: null
+      };
+      logCallTiming('Incoming offer', { from: data?.from, incomingOfferAt: incomingAt });
       setIncomingCall(data);
       playRingtone();
     });
@@ -1305,19 +1352,26 @@ function AppContent() {
         }
 
         if (pendingIceCandidatesRef.current.length > 0) {
-          const remaining = [];
-          for (const candidate of pendingIceCandidatesRef.current) {
-            if (!candidate?.candidate) continue;
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch {
-              remaining.push(candidate);
-            }
-          }
-          pendingIceCandidatesRef.current = remaining;
+          const queuedCandidates = pendingIceCandidatesRef.current.filter(candidate => candidate?.candidate);
+          pendingIceCandidatesRef.current = [];
+          const results = await Promise.allSettled(
+            queuedCandidates.map(candidate => pc.addIceCandidate(new RTCIceCandidate(candidate)))
+          );
+          pendingIceCandidatesRef.current = queuedCandidates.filter((candidate, index) => results[index]?.status === 'rejected');
         }
 
         if (callStateRef.current === 'calling' || callStateRef.current === 'ringing') {
+          const timing = callTimingRef.current;
+          if (timing?.role === 'caller' && !timing.answerReceivedAt) {
+            const answerReceivedAt = nowMs();
+            timing.answerReceivedAt = answerReceivedAt;
+            callTimingRef.current = timing;
+            logCallTiming('Answer received', {
+              peer: timing.peer || data?.from,
+              offerToAnswer: timing.offerSentAt ? (answerReceivedAt - timing.offerSentAt) : undefined
+            });
+          }
+
           setCallState('active');
           startCallTimer();
           stopRingtone();
@@ -1563,6 +1617,9 @@ function AppContent() {
       if (reconnectCountdownRef.current) clearInterval(reconnectCountdownRef.current);
       if (reconnectRetryTimeoutRef.current) clearTimeout(reconnectRetryTimeoutRef.current);
       if (remoteTrackTimeoutRef.current) clearTimeout(remoteTrackTimeoutRef.current);
+      if (livestreamViewerReconnectTimeoutRef.current) clearTimeout(livestreamViewerReconnectTimeoutRef.current);
+      livestreamHostDisconnectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+      livestreamHostDisconnectTimeoutsRef.current.clear();
       if (statsUpdateIntervalRef.current) clearInterval(statsUpdateIntervalRef.current);
       stopRingtone();
       stopCallTimer();
@@ -1596,7 +1653,10 @@ function AppContent() {
 
   const shouldNotifyForMessage = useCallback((messagePayload, isDifferentRoom) => {
     if (!messagePayload || messagePayload.sender === usernameRef.current) return false;
-    if (!isDifferentRoom) return false;
+
+    const callState = callStateRef.current;
+    const isRealtimeMediaActive = Boolean(liveStreamInfoRef.current) || callState === 'active' || callState === 'calling' || callState === 'ringing';
+    if (!isDifferentRoom && !isRealtimeMediaActive) return false;
 
     const prefs = notificationPrefsRef.current;
     const settings = appSettingsRef.current;
@@ -1623,8 +1683,15 @@ function AppContent() {
 
     const prefs = notificationPrefsRef.current;
     const roomId = messagePayload.room || '';
+    const isDm = roomId.includes('_dm_');
+    const mentionsCurrentUser =
+      messagePayload.text?.includes(`@${usernameRef.current}`) ||
+      messagePayload.text?.includes('@everyone');
+
     if (prefs.mutedRooms.includes(roomId)) return false;
-    if (isWithinQuietHours()) return false;
+    if (prefs.dmOnlyPriority && !isDm) return false;
+    if (prefs.mentionOnly && !mentionsCurrentUser) return false;
+    if (isWithinQuietHours() && !mentionsCurrentUser) return false;
 
     return soundEnabledRef.current;
   }, [isWithinQuietHours]);
@@ -3041,6 +3108,12 @@ function AppContent() {
 
     livestreamHostPeersRef.current.forEach(pc => pc.close());
     livestreamHostPeersRef.current.clear();
+    livestreamHostDisconnectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+    livestreamHostDisconnectTimeoutsRef.current.clear();
+    if (livestreamViewerReconnectTimeoutRef.current) {
+      clearTimeout(livestreamViewerReconnectTimeoutRef.current);
+      livestreamViewerReconnectTimeoutRef.current = null;
+    }
     if (livestreamViewerPeerRef.current) livestreamViewerPeerRef.current.close();
     if (livestreamLocalStreamRef.current) {
       livestreamLocalStreamRef.current.getTracks().forEach(t => t.stop());
@@ -3090,6 +3163,34 @@ function AppContent() {
   const clearCallTimeout = useCallback(() => {
     if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
     callTimeoutRef.current = null;
+  }, []);
+
+  const nowMs = useCallback(() => {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+    return Date.now();
+  }, []);
+
+  const logCallTiming = useCallback((label, payload = {}) => {
+    try {
+      const details = Object.entries(payload)
+        .filter(([, value]) => value !== undefined && value !== null)
+        .map(([key, value]) => {
+          if (typeof value === 'number') return `${key}=${value.toFixed(1)}ms`;
+          return `${key}=${String(value)}`;
+        })
+        .join(' | ');
+      console.log(`⏱️ [CallSetup] ${label}${details ? ` | ${details}` : ''}`);
+    } catch {
+      console.log(`⏱️ [CallSetup] ${label}`);
+    }
+  }, []);
+
+  const debugLog = useCallback((...args) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CallDebug]', ...args);
+    }
   }, []);
 
   const waitForIceGatheringComplete = useCallback((pc, timeoutMs = 3500) => {
@@ -3226,6 +3327,25 @@ function AppContent() {
 
     pc.ontrack = (event) => {
       console.log('🎥 Remote track:', event.track.kind);
+
+      const timing = callTimingRef.current;
+      if (timing && !timing.firstRemoteTrackAt) {
+        const firstRemoteTrackAt = nowMs();
+        timing.firstRemoteTrackAt = firstRemoteTrackAt;
+        timing.firstRemoteTrackKind = event.track?.kind || 'unknown';
+        callTimingRef.current = timing;
+
+        logCallTiming('First remote track', {
+          role: timing.role,
+          peer: timing.peer || targetUsername,
+          track: timing.firstRemoteTrackKind,
+          offerToFirstMedia: timing.offerSentAt ? (firstRemoteTrackAt - timing.offerSentAt) : undefined,
+          answerToFirstMedia: timing.answerReceivedAt
+            ? (firstRemoteTrackAt - timing.answerReceivedAt)
+            : (timing.answerSentAt ? (firstRemoteTrackAt - timing.answerSentAt) : undefined),
+          incomingOfferToFirstMedia: timing.incomingOfferAt ? (firstRemoteTrackAt - timing.incomingOfferAt) : undefined
+        });
+      }
       
       if (remoteTrackTimeoutRef.current) {
         clearTimeout(remoteTrackTimeoutRef.current);
@@ -3361,9 +3481,15 @@ function AppContent() {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [iceServersConfig, attachRemoteStreamToElement]);
+  }, [iceServersConfig, attachRemoteStreamToElement, logCallTiming, nowMs]);
 
   const closeLivestreamHostPeer = useCallback((viewerUsername) => {
+    const disconnectTimer = livestreamHostDisconnectTimeoutsRef.current.get(viewerUsername);
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer);
+      livestreamHostDisconnectTimeoutsRef.current.delete(viewerUsername);
+    }
+
     const pc = livestreamHostPeersRef.current.get(viewerUsername);
     if (pc) {
       pc.close();
@@ -3371,7 +3497,16 @@ function AppContent() {
     }
   }, []);
 
+  const clearLivestreamViewerReconnectTimeout = useCallback(() => {
+    if (livestreamViewerReconnectTimeoutRef.current) {
+      clearTimeout(livestreamViewerReconnectTimeoutRef.current);
+      livestreamViewerReconnectTimeoutRef.current = null;
+    }
+  }, []);
+
   const closeLivestreamViewerPeer = useCallback(() => {
+    clearLivestreamViewerReconnectTimeout();
+
     if (livestreamViewerPeerRef.current) {
       livestreamViewerPeerRef.current.close();
       livestreamViewerPeerRef.current = null;
@@ -3382,7 +3517,7 @@ function AppContent() {
     }
     remoteStreamRef.current = null;
     setRemoteStream(null);
-  }, []);
+  }, [clearLivestreamViewerReconnectTimeout]);
 
   const applyLivestreamIncomingTrack = useCallback((event) => {
     const incomingStream = event.streams?.[0];
@@ -3450,8 +3585,25 @@ function AppContent() {
     });
 
     viewerPc.onconnectionstatechange = () => {
-      if (viewerPc.connectionState === 'failed' || viewerPc.connectionState === 'disconnected') {
-        socketRef.current?.emit(LIVESTREAM_EVENTS.JOIN_REQUEST, { sessionId, from: usernameRef.current });
+      const state = viewerPc.connectionState;
+      if (state === 'connected') {
+        clearLivestreamViewerReconnectTimeout();
+        return;
+      }
+
+      if (state === 'failed' || state === 'disconnected') {
+        clearLivestreamViewerReconnectTimeout();
+        livestreamViewerReconnectTimeoutRef.current = setTimeout(() => {
+          const currentSessionId = liveStreamInfoRef.current?.sessionId;
+          if (currentSessionId === sessionId && livestreamViewerPeerRef.current === viewerPc) {
+            socketRef.current?.emit(LIVESTREAM_EVENTS.JOIN_REQUEST, { sessionId, from: usernameRef.current });
+          }
+          livestreamViewerReconnectTimeoutRef.current = null;
+        }, 8000);
+      }
+
+      if (state === 'closed') {
+        clearLivestreamViewerReconnectTimeout();
       }
     };
 
@@ -3470,7 +3622,7 @@ function AppContent() {
     setCallPeer({ username: `${host} • LIVE`, userId: host });
     setCallState('active');
     startCallTimer();
-  }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, iceServersConfig, startCallTimer, waitForIceGatheringComplete]);
+  }, [applyLivestreamIncomingTrack, closeLivestreamViewerPeer, clearLivestreamViewerReconnectTimeout, iceServersConfig, startCallTimer, waitForIceGatheringComplete]);
 
   const createLivestreamHostPeer = useCallback(async (viewerUsername, sessionId, stream) => {
     if (!viewerUsername || !sessionId || !stream || !socketRef.current) return;
@@ -3492,10 +3644,37 @@ function AppContent() {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' && typeof pc.restartIce === 'function') {
+      const state = pc.connectionState;
+      const existingTimer = livestreamHostDisconnectTimeoutsRef.current.get(viewerUsername);
+
+      if (state === 'connected' && existingTimer) {
+        clearTimeout(existingTimer);
+        livestreamHostDisconnectTimeoutsRef.current.delete(viewerUsername);
+      }
+
+      if (state === 'failed' && typeof pc.restartIce === 'function') {
         pc.restartIce();
       }
-      if (pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+
+      if (state === 'disconnected') {
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        const disconnectTimer = setTimeout(() => {
+          const trackedPeer = livestreamHostPeersRef.current.get(viewerUsername);
+          if (trackedPeer === pc && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed')) {
+            closeLivestreamHostPeer(viewerUsername);
+          }
+          livestreamHostDisconnectTimeoutsRef.current.delete(viewerUsername);
+        }, 8000);
+        livestreamHostDisconnectTimeoutsRef.current.set(viewerUsername, disconnectTimer);
+      }
+
+      if (state === 'closed') {
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+          livestreamHostDisconnectTimeoutsRef.current.delete(viewerUsername);
+        }
         closeLivestreamHostPeer(viewerUsername);
       }
     };
@@ -3526,6 +3705,11 @@ function AppContent() {
     livestreamHostPeersRef.current.forEach(pc => pc.close());
     livestreamHostPeersRef.current.clear();
 
+    livestreamHostDisconnectTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
+    livestreamHostDisconnectTimeoutsRef.current.clear();
+
+    clearLivestreamViewerReconnectTimeout();
+
     if (livestreamStartTimeoutRef.current) {
       clearTimeout(livestreamStartTimeoutRef.current);
       livestreamStartTimeoutRef.current = null;
@@ -3550,7 +3734,7 @@ function AppContent() {
     setLivestreamComments([]);
     setLivestreamCommentInput('');
     setSuccessMessage('Livestream stopped');
-  }, [stopCallTimer]);
+  }, [clearLivestreamViewerReconnectTimeout, stopCallTimer]);
 
   const buildLivestreamSourceStream = useCallback(async (sourceMode) => {
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -3560,11 +3744,7 @@ function AppContent() {
 
     if (source === 'both' && !isMobile && typeof navigator.mediaDevices.getDisplayMedia === 'function') {
       try {
-        const cameraConstraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
-          callType: 'video',
-          userAgent: navigator.userAgent,
-          connectionInfo: runtimeConnectionInfo
-        }));
+        const cameraConstraints = getCallMediaConstraints('video');
         const cameraStream = await navigator.mediaDevices.getUserMedia(cameraConstraints);
         const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         const composedStream = new MediaStream();
@@ -3589,7 +3769,11 @@ function AppContent() {
             displayStream.getAudioTracks().forEach(t => composedStream.addTrack(t));
           } else {
             try {
-              const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+              const preferredAudio = enhancedCall.getCallConstraints?.('voice')?.audio;
+              const micStream = await navigator.mediaDevices.getUserMedia({
+                audio: preferredAudio || true,
+                video: false
+              });
               micStream.getAudioTracks().forEach(t => composedStream.addTrack(t));
             } catch {}
           }
@@ -3601,11 +3785,7 @@ function AppContent() {
       }
     }
 
-    const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
-      callType: 'video',
-      userAgent: navigator.userAgent,
-      connectionInfo: runtimeConnectionInfo
-    }));
+    const constraints = getCallMediaConstraints('video');
 
     try {
       const cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -3617,7 +3797,7 @@ function AppContent() {
       refreshVideoInputs();
       return { stream: fallbackStream, source: 'camera' };
     }
-  }, [runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs]);
+  }, [enhancedCall, getCallMediaConstraints, refreshVideoInputs, withPreferredVideoDevice]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
     const rollbackLivestreamStart = (message) => {
@@ -3851,6 +4031,9 @@ function AppContent() {
       return;
     }
 
+    let stream = null;
+    let pc = null;
+
     try {
       pendingIceCandidatesRef.current = [];
       seenIceCandidateKeysRef.current.clear();
@@ -3859,13 +4042,8 @@ function AppContent() {
       setCallState('calling');
       setCallError(null);
 
-      const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
-        callType: type,
-        userAgent: navigator.userAgent,
-        connectionInfo: runtimeConnectionInfo
-      }));
+      const constraints = getCallMediaConstraints(type);
 
-      let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (mediaErr) {
@@ -3881,14 +4059,16 @@ function AppContent() {
         localVideoRef.current.srcObject = stream;
       }
 
-      const pc = createPeerConnection(targetUser, { callKind: type });
+      pc = createPeerConnection(targetUser, { callKind: type });
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      await optimizeRtpSenders(pc, {
+      optimizeRtpSenders(pc, {
         callType: type,
         userAgent: navigator.userAgent,
         connectionInfo: runtimeConnectionInfo
+      }).catch((err) => {
+        console.warn('RTP optimization fallback:', err);
       });
 
       const shouldRecord = localStorage.getItem('autoRecordCalls') === 'true';
@@ -3902,21 +4082,26 @@ function AppContent() {
         }
       }
 
-      let offer = await pc.createOffer();
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      const isMobileCaller = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isMobileCaller) {
-        await waitForIceGatheringComplete(pc, 4000);
-        offer = pc.localDescription || offer;
-      }
 
       socketRef.current.emit(CALL_EVENTS.OFFER, {
         to: targetUser,
         from: username,
         callType: type,
-        offer: offer
+        offer: pc.localDescription || offer
       });
+
+      const offerSentAt = nowMs();
+      callTimingRef.current = {
+        role: 'caller',
+        peer: targetUser,
+        offerSentAt,
+        answerReceivedAt: null,
+        firstRemoteTrackAt: null,
+        firstRemoteTrackKind: null
+      };
+      logCallTiming('Offer sent', { to: targetUser, offerSentAt });
 
       clearCallTimeout();
       callTimeoutRef.current = setTimeout(() => {
@@ -3938,11 +4123,27 @@ function AppContent() {
       else errorMsg = err.message || errorMsg;
       
       setCallError(errorMsg);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (pc) {
+        pc.close();
+      }
+      if (peerConnectionRef.current === pc) {
+        peerConnectionRef.current = null;
+      }
+      setLocalStream(null);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      setCallPeer(null);
+      setCallType(null);
+      callTimingRef.current = null;
       setCallState('idle');
       stopRingtone();
       clearCallTimeout();
     }
-  }, [username, createPeerConnection, playRingtone, stopRingtone, clearCallTimeout, waitForIceGatheringComplete, withPreferredVideoDevice, refreshVideoInputs]);
+  }, [username, createPeerConnection, playRingtone, stopRingtone, clearCallTimeout, waitForIceGatheringComplete, getCallMediaConstraints, refreshVideoInputs, withPreferredVideoDevice, logCallTiming, nowMs]);
 
   const rejectCall = useCallback(() => {
     if (!incomingCall || !socketRef.current) return;
@@ -3967,6 +4168,9 @@ function AppContent() {
 
   const answerCall = useCallback(async () => {
     if (!incomingCall || !socketRef.current) return;
+
+    let stream = null;
+    let pc = null;
 
     if (incomingCall.isLivestream) {
       stopRingtone();
@@ -4002,13 +4206,8 @@ function AppContent() {
       setCallType(incomingCall.callType);
       setCallPeer({ username: callerUsername, userId: callerUsername });
 
-      const constraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
-        callType: incomingCall.callType,
-        userAgent: navigator.userAgent,
-        connectionInfo: runtimeConnectionInfo
-      }));
+      const constraints = getCallMediaConstraints(incomingCall.callType);
 
-      let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (mediaErr) {
@@ -4028,7 +4227,7 @@ function AppContent() {
       callStatsRef.current = stats;
       setCallStats(stats.getStats());
 
-      const pc = createPeerConnection(callerUsername, { callKind: incomingCall.callType });
+      pc = createPeerConnection(callerUsername, { callKind: incomingCall.callType });
       peerConnectionRef.current = pc;
 
       const qualityController = new AdaptiveQualityController(pc);
@@ -4039,23 +4238,21 @@ function AppContent() {
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      await optimizeRtpSenders(pc, {
+      optimizeRtpSenders(pc, {
         callType: incomingCall.callType,
         userAgent: navigator.userAgent,
         connectionInfo: runtimeConnectionInfo
+      }).catch((err) => {
+        console.warn('RTP optimization fallback:', err);
       });
 
       if (pendingIceCandidatesRef.current.length > 0) {
-        const failedCandidates = [];
-        for (const candidate of pendingIceCandidatesRef.current) {
-          if (!candidate?.candidate) continue;
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (iceError) {
-            failedCandidates.push(candidate);
-          }
-        }
-        pendingIceCandidatesRef.current = failedCandidates;
+        const queuedCandidates = pendingIceCandidatesRef.current.filter(candidate => candidate?.candidate);
+        pendingIceCandidatesRef.current = [];
+        const results = await Promise.allSettled(
+          queuedCandidates.map(candidate => pc.addIceCandidate(new RTCIceCandidate(candidate)))
+        );
+        pendingIceCandidatesRef.current = queuedCandidates.filter((candidate, index) => results[index]?.status === 'rejected');
       }
 
       const answer = await pc.createAnswer();
@@ -4075,8 +4272,19 @@ function AppContent() {
       socketRef.current.emit(CALL_EVENTS.ANSWER, {
         to: callerUsername,
         from: username,
-        answer: answer
+        answer: pc.localDescription || answer
       });
+
+      const timing = callTimingRef.current;
+      if (timing?.role === 'callee') {
+        const answerSentAt = nowMs();
+        timing.answerSentAt = answerSentAt;
+        callTimingRef.current = timing;
+        logCallTiming('Answer sent', {
+          to: callerUsername,
+          incomingOfferToAnswer: timing.incomingOfferAt ? (answerSentAt - timing.incomingOfferAt) : undefined
+        });
+      }
 
       if (remoteTrackTimeoutRef.current) clearTimeout(remoteTrackTimeoutRef.current);
       remoteTrackTimeoutRef.current = setTimeout(() => {
@@ -4102,9 +4310,26 @@ function AppContent() {
     } catch (err) {
       console.error('Error answering call:', err);
       setCallError(err.message || 'Failed to answer call');
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (pc) {
+        pc.close();
+      }
+      if (peerConnectionRef.current === pc) {
+        peerConnectionRef.current = null;
+      }
+      setLocalStream(null);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      setCallState('idle');
+      setCallType(null);
+      setCallPeer(null);
+      callTimingRef.current = null;
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, withPreferredVideoDevice, refreshVideoInputs, joinLivestreamAsViewer]);
+  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, getCallMediaConstraints, withPreferredVideoDevice, refreshVideoInputs, joinLivestreamAsViewer, logCallTiming, nowMs]);
 
   const endCall = useCallback((notifyPeer = true) => {
     console.log('Ending call');
@@ -4140,6 +4365,7 @@ function AppContent() {
       livestreamViewerPeerRef.current.close();
       livestreamViewerPeerRef.current = null;
     }
+    clearLivestreamViewerReconnectTimeout();
 
     if (callRecorderRef.current) {
       callRecorderRef.current.stop();
@@ -4214,9 +4440,10 @@ function AppContent() {
     setLivestreamComments([]);
     setLivestreamCommentInput('');
     setLivestreamViewerExpanded(false);
+    callTimingRef.current = null;
     stopCallTimer();
     stopRingtone();
-  }, [localStream, remoteStream, callPeer, username, callType, callDuration, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream]);
+  }, [localStream, remoteStream, callPeer, username, callType, callDuration, stopCallTimer, stopRingtone, clearCallTimeout, stopHostedLivestream, clearLivestreamViewerReconnectTimeout]);
 
   useEffect(() => {
     endCallRef.current = endCall;
