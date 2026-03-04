@@ -918,6 +918,70 @@
   color: white;
 }
 
+.call-camera-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-camera-toast {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.call-camera-toast.success {
+  background: color-mix(in srgb, var(--success) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 55%, transparent);
+  color: color-mix(in srgb, var(--success) 88%, white);
+}
+
+.call-camera-toast.info {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, white);
+}
+
+.call-camera-toast.error {
+  background: color-mix(in srgb, var(--error) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 55%, transparent);
+  color: color-mix(in srgb, var(--error) 90%, white);
+}
+
+.call-camera-selector select {
+  flex: 1;
+  min-height: 36px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  color: #fff;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.call-camera-refresh {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-camera-refresh:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.call-camera-refresh .spin {
+  animation: spin 1s linear infinite;
+}
+
 .toggle {
   position: relative;
   display: inline-block;
@@ -1087,4 +1151,192 @@
 
 .minimized-action.end {
   background: var(--error);
+}
+
+@media (max-width: 900px) {
+  .modern-call-controls {
+    bottom: 14px;
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .controls-top {
+    padding: 10px 14px;
+    border-radius: 20px;
+  }
+
+  .main-controls-group {
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 22px;
+  }
+
+  .main-control {
+    min-width: 68px;
+    padding: 8px 10px;
+  }
+
+  .control-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .controls-bottom {
+    padding: 8px 12px;
+    border-radius: 20px;
+  }
+
+  .call-sidebar {
+    width: min(360px, 88vw);
+  }
+
+  .sidebar-header {
+    padding: 14px;
+  }
+
+  .sidebar-header button {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-content {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 600px) {
+  .modern-call-controls {
+    bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 10px;
+    padding: 0 8px;
+  }
+
+  .controls-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border-radius: 16px;
+  }
+
+  .call-info-right {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .main-controls-group {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 8px;
+    border-radius: 16px;
+  }
+
+  .main-control {
+    min-width: 60px;
+    min-height: 64px;
+    padding: 6px 4px;
+    border-radius: 14px;
+  }
+
+  .control-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .control-label {
+    font-size: 11px;
+  }
+
+  .controls-bottom {
+    padding: 8px;
+    border-radius: 16px;
+  }
+
+  .device-status {
+    gap: 6px;
+  }
+
+  .device-indicator,
+  .connection-badge {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .call-sidebar {
+    width: 100%;
+    left: 0;
+    right: 0;
+    border-left: none;
+  }
+
+  .quality-option,
+  .layout-option,
+  .chat-input button,
+  .call-camera-refresh {
+    min-height: 42px;
+  }
+
+  .call-camera-selector select,
+  .setting-item select,
+  .chat-input input {
+    min-height: 42px;
+  }
+}
+
+@media (max-width: 360px) {
+  .modern-call-controls {
+    bottom: max(6px, env(safe-area-inset-bottom));
+    gap: 8px;
+    padding: 0 6px;
+  }
+
+  .controls-top,
+  .main-controls-group,
+  .controls-bottom {
+    border-radius: 14px;
+  }
+
+  .main-controls-group {
+    gap: 6px;
+    padding: 8px 6px;
+  }
+
+  .main-control {
+    min-width: 54px;
+    min-height: 60px;
+    padding: 6px 2px;
+  }
+
+  .control-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .control-label {
+    font-size: 10px;
+  }
+
+  .call-info-right {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .device-indicator,
+  .connection-badge {
+    font-size: 10px;
+    padding: 5px 6px;
+  }
+
+  .quality-option,
+  .layout-option,
+  .chat-input button,
+  .call-camera-refresh,
+  .call-camera-selector select,
+  .setting-item select,
+  .chat-input input {
+    min-height: 40px;
+  }
 }

@@ -1,12 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Mic, Volume2, Wifi } from 'lucide-react';
+import { X, Mic, Volume2, Wifi, Camera, RefreshCw } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
+import { detectDevices } from '../../utils/settings';
 
 const CallSettings = ({ onClose, callHook }) => {
   const callApi = callHook || useEnhancedCall();
-  const { settings, updateCallSettings } = callApi;
+  const {
+    settings,
+    activeDevices,
+    setActiveDevices,
+    updateCallSettings,
+    savePreferredDevices,
+  } = callApi;
   const [localSettings, setLocalSettings] = useState(settings || {});
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [isLoadingCameras, setIsLoadingCameras] = useState(false);
 
   useEffect(() => {
     setLocalSettings(settings || {});
@@ -16,10 +25,40 @@ const CallSettings = ({ onClose, callHook }) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const loadCameraDevices = async () => {
+    setIsLoadingCameras(true);
+    try {
+      const deviceList = await detectDevices({
+        requestPermission: true,
+        requestAudio: false,
+        requestVideo: true,
+      });
+      setCameraDevices(deviceList.cameras || []);
+    } catch (error) {
+      console.error('Failed to load cameras:', error);
+      setCameraDevices([]);
+    } finally {
+      setIsLoadingCameras(false);
+    }
+  };
+
+  const handleCameraChange = (deviceId) => {
+    if (typeof setActiveDevices === 'function') {
+      setActiveDevices((prev) => ({ ...prev, camera: deviceId }));
+    }
+  };
+
   const handleSave = () => {
     updateCallSettings(localSettings);
+    if (typeof savePreferredDevices === 'function') {
+      savePreferredDevices();
+    }
     onClose();
   };
+
+  useEffect(() => {
+    loadCameraDevices();
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -37,7 +76,7 @@ const CallSettings = ({ onClose, callHook }) => {
 
   const content = (
     <div className="settings-panel-overlay" onClick={onClose}>
-      <div className="settings-panel" style={{ zIndex: 26001 }} onClick={(event) => event.stopPropagation()}>
+      <div className="settings-panel call-settings-panel" style={{ zIndex: 26001 }} onClick={(event) => event.stopPropagation()}>
         <div className="settings-header">
           <h2>Call Settings</h2>
           <button className="close-btn" onClick={onClose} type="button">
@@ -46,6 +85,41 @@ const CallSettings = ({ onClose, callHook }) => {
         </div>
 
         <div className="settings-content">
+        <div className="settings-section">
+          <h3>
+            <Camera size={18} />
+            Camera Device
+          </h3>
+
+          <div className="device-selector">
+            <select
+              value={activeDevices?.camera || 'system'}
+              onChange={(e) => handleCameraChange(e.target.value)}
+              disabled={isLoadingCameras}
+            >
+              <option value="system">System Default</option>
+              {cameraDevices.map((camera) => (
+                <option key={camera.deviceId} value={camera.deviceId}>
+                  {camera.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              className="btn-refresh"
+              onClick={loadCameraDevices}
+              type="button"
+              disabled={isLoadingCameras}
+              aria-label="Refresh camera list"
+              title="Refresh camera list"
+            >
+              <RefreshCw size={16} className={isLoadingCameras ? 'spin' : ''} />
+            </button>
+          </div>
+
+          <p className="call-settings-note">Camera preference is applied immediately when possible, and always on next call start.</p>
+        </div>
+
         <div className="settings-section">
           <h3>
             <Mic size={18} />

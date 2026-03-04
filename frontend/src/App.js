@@ -209,6 +209,8 @@ function AppContent() {
   const [mentionedMessages, setMentionedMessages] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [inCallCameraToast, setInCallCameraToast] = useState(null);
+  const [isRefreshingInCallCameras, setIsRefreshingInCallCameras] = useState(false);
   
   // ==================== ROOM MANAGEMENT ====================
   const [rooms, setRooms] = useState([]);
@@ -876,6 +878,12 @@ function AppContent() {
   }, [errorMessage]);
 
   useEffect(() => {
+    if (!inCallCameraToast) return;
+    const timer = setTimeout(() => setInCallCameraToast(null), 2200);
+    return () => clearTimeout(timer);
+  }, [inCallCameraToast]);
+
+  useEffect(() => {
     if (selectedVideoInputId) {
       localStorage.setItem('devchatPreferredCameraId', selectedVideoInputId);
     }
@@ -925,7 +933,9 @@ function AppContent() {
 
   // ==================== DEVICE ENUMERATION ====================
   const refreshVideoInputs = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return { ok: false, skipped: true, cameraCount: 0 };
+    }
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cameras = devices
@@ -958,8 +968,11 @@ function AppContent() {
         setSelectedAudioInputId('');
         setStreamPanelSettings(prev => ({ ...prev, microphoneId: 'default' }));
       }
+
+      return { ok: true, skipped: false, cameraCount: cameras.length };
     } catch (err) {
       console.warn('Failed to enumerate cameras:', err);
+      return { ok: false, skipped: false, cameraCount: 0 };
     }
   }, [selectedAudioInputId, selectedVideoInputId]);
 
@@ -1169,10 +1182,14 @@ function AppContent() {
       callStateRef.current === 'active' ||
       Boolean(liveStreamInfoRef.current?.isHost);
 
-    if (!hasActiveVideoSession || !navigator.mediaDevices?.getUserMedia) return;
+    if (!hasActiveVideoSession || !navigator.mediaDevices?.getUserMedia) {
+      return { ok: false, skipped: true };
+    }
 
     const currentLocalStream = localStreamRef.current;
-    if (!currentLocalStream) return;
+    if (!currentLocalStream) {
+      return { ok: false, skipped: true };
+    }
 
     try {
       const preferredId = cameraId && cameraId !== 'default' ? cameraId : '';
@@ -1213,7 +1230,7 @@ function AppContent() {
       const replacementVideoTrack = replacementStream.getVideoTracks()[0];
       if (!replacementVideoTrack) {
         replacementStream.getTracks().forEach(track => track.stop());
-        return;
+        return { ok: false, skipped: true };
       }
 
       const oldVideoTracks = currentLocalStream.getVideoTracks();
@@ -1251,9 +1268,11 @@ function AppContent() {
 
       setLocalStream(currentLocalStream);
       setSuccessMessage('Camera switched successfully');
+      return { ok: true };
     } catch (error) {
       console.warn('Failed to switch camera immediately:', error);
       setErrorMessage('Could not switch camera right now. It will apply next start.');
+      return { ok: false, skipped: false };
     }
   }, [getStreamQualityVideoConstraints, streamPanelSettings?.quality]);
 
@@ -1325,6 +1344,44 @@ function AppContent() {
       setErrorMessage('Could not switch microphone right now. It will apply next start.');
     }
   }, []);
+
+  const handleInCallCameraChange = useCallback(async (cameraId) => {
+    const normalizedCameraId = cameraId === 'default' ? '' : cameraId;
+    setSelectedVideoInputId(normalizedCameraId);
+    const result = await applyCameraSelectionToActiveStream(cameraId);
+    if (!result || result.skipped) return;
+
+    setInCallCameraToast({
+      type: result.ok ? 'success' : 'error',
+      message: result.ok ? 'Camera switched' : 'Camera switch failed'
+    });
+  }, [applyCameraSelectionToActiveStream]);
+
+  const handleInCallCameraRefresh = useCallback(async () => {
+    if (isRefreshingInCallCameras) return;
+
+    setIsRefreshingInCallCameras(true);
+    setInCallCameraToast({ type: 'info', message: 'Refreshing cameras...' });
+
+    try {
+      const result = await refreshVideoInputs();
+
+      if (result?.ok) {
+        const count = Number(result.cameraCount) || 0;
+        setInCallCameraToast({
+          type: 'success',
+          message: count > 0 ? `Found ${count} camera${count === 1 ? '' : 's'}` : 'No cameras detected'
+        });
+        return;
+      }
+
+      if (!result?.skipped) {
+        setInCallCameraToast({ type: 'error', message: 'Failed to refresh cameras' });
+      }
+    } finally {
+      setIsRefreshingInCallCameras(false);
+    }
+  }, [isRefreshingInCallCameras, refreshVideoInputs]);
 
   const switchLivestreamSource = useCallback(async () => {
     const activeSession = liveStreamInfoRef.current;
@@ -1564,11 +1621,16 @@ function AppContent() {
       lastMessageIdRef.current = data._id;
       
       if (blockedUsersRef.current.includes(data.sender)) return;
+
+      const incomingRoom = data.room || roomRef.current;
+      const isDifferentRoom = incomingRoom && incomingRoom !== roomRef.current;
       
-      setChat(prev => [...prev, data]);
+      if (!isDifferentRoom) {
+        setChat(prev => [...prev, data]);
+      }
       
       // Clear typing indicator
-      if (typingTimersRef.current.has(data.sender)) {
+      if (!isDifferentRoom && typingTimersRef.current.has(data.sender)) {
         clearTimeout(typingTimersRef.current.get(data.sender));
         typingTimersRef.current.delete(data.sender);
         setTypingUsers(prev => {
@@ -1579,7 +1641,7 @@ function AppContent() {
       }
       
       // Handle unread count
-      if (!isAtBottomRef.current && data.sender !== usernameRef.current) {
+      if (!isDifferentRoom && !isAtBottomRef.current && data.sender !== usernameRef.current) {
         setUnreadCount(c => c + 1);
       }
       
@@ -1595,7 +1657,6 @@ function AppContent() {
         }
       }
 
-      const isDifferentRoom = data.room && data.room !== roomRef.current;
       if (shouldNotifyForMessage(data, isDifferentRoom)) {
         setNotificationItems(prev => {
           const itemId = data._id || `${data.sender}-${data.time}-${data.room}`;
@@ -2502,9 +2563,14 @@ function AppContent() {
   const filteredChat = useMemo(() => {
     const query = debouncedSearchQuery.trim().toLowerCase();
     const dmQuery = dmSearchQuery.trim().toLowerCase();
-    const isDmRoom = (activeRoom || room).includes('_dm_');
+    const currentRoomId = activeRoom || room;
+    const isDmRoom = currentRoomId.includes('_dm_');
 
     return chat.filter(msg => {
+      if (msg.room && currentRoomId && msg.room !== currentRoomId) {
+        return false;
+      }
+
       const msgText = (msg.text || '').toLowerCase();
       const msgSender = (msg.sender || '').toLowerCase();
 
@@ -3555,6 +3621,10 @@ function AppContent() {
 
   const switchRoom = useCallback((roomId) => {
     const previousRoomId = roomRef.current;
+
+    if (roomId && !roomId.includes('_dm_')) {
+      setGroupRoomId(roomId);
+    }
     
     setActiveRoom(roomId);
     setRoom(roomId);
@@ -5343,7 +5413,21 @@ function AppContent() {
 
   const currentRoomId = activeRoom || room;
   const currentRoomInfo = useMemo(() => rooms.find(r => r.id === currentRoomId) || null, [rooms, currentRoomId]);
+  const isDmRoomActive = useMemo(() => !!currentRoomId && currentRoomId.includes('_dm_'), [currentRoomId]);
   const isGroupRoomActive = useMemo(() => !!currentRoomId && !currentRoomId.includes('_dm_'), [currentRoomId]);
+  const dmBackTargetRoomId = useMemo(() => {
+    if (groupRoomId && !groupRoomId.includes('_dm_')) {
+      return groupRoomId;
+    }
+
+    const registryGroupRoom = activeRoomRegistry.find((entry) => entry?.id && !entry.id.includes('_dm_'))?.id;
+    if (registryGroupRoom) {
+      return registryGroupRoom;
+    }
+
+    const localGroupRoom = rooms.find((entry) => entry?.id && entry.type !== 'dm' && !entry.id.includes('_dm_'))?.id;
+    return localGroupRoom || '';
+  }, [groupRoomId, activeRoomRegistry, rooms]);
 
   const globalOnlineUsers = useMemo(() => {
     const fromGlobal = globalPresenceUsers.filter(u => typeof u === 'string' && u.trim());
@@ -6102,8 +6186,8 @@ function AppContent() {
           </AnimatePresence>
         </div>
         
-        {currentRoomInfo?.type === 'dm' && groupRoomId && (
-          <button className="dm-back-btn" onClick={() => switchRoom(groupRoomId)} title="Back to group chat"><ChevronLeft size={16} /><span>Group</span></button>
+        {isDmRoomActive && dmBackTargetRoomId && (
+          <button className="dm-back-btn" onClick={() => switchRoom(dmBackTargetRoomId)} title="Back to group chat"><ChevronLeft size={16} /><span>Group</span></button>
         )}
 
         <div className="meta">
@@ -6720,6 +6804,12 @@ function AppContent() {
             remoteStream={remoteStream}
             remoteIsScreenSharing={remoteIsScreenSharing}
             connectionQuality={connectionQuality}
+            cameraDevices={videoInputDevices}
+            selectedCameraId={selectedVideoInputId}
+            onCameraChange={handleInCallCameraChange}
+            onRefreshCameraDevices={handleInCallCameraRefresh}
+            isRefreshingCameras={isRefreshingInCallCameras}
+            cameraStatusToast={inCallCameraToast}
           />
         </Suspense>
       )}

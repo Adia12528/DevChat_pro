@@ -7,6 +7,7 @@ import {
   Bluetooth, Wifi, WifiOff, Battery, Clock, X,
   ChevronUp, ChevronDown, Camera, CameraOff,
   Sparkles, BarChart3, Download, Radio
+  , RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -30,7 +31,13 @@ const CallPanel = ({
   remoteStream,
   remoteIsScreenSharing,
   connectionQuality = 'excellent',
-  participants = []
+  participants = [],
+  cameraDevices = [],
+  selectedCameraId = '',
+  onCameraChange,
+  onRefreshCameraDevices,
+  isRefreshingCameras = false,
+  cameraStatusToast = null,
 }) => {
   const [showControls, setShowControls] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
@@ -482,6 +489,38 @@ const CallPanel = ({
                   ))}
                 </div>
               </div>
+              {callType === 'video' && (
+                <div className="settings-section">
+                  <h4>Camera Device</h4>
+                  {cameraStatusToast?.message && (
+                    <div className={`call-camera-toast ${cameraStatusToast.type === 'error' ? 'error' : cameraStatusToast.type === 'info' ? 'info' : 'success'}`} role="status" aria-live="polite">
+                      {cameraStatusToast.message}
+                    </div>
+                  )}
+                  <div className="call-camera-selector">
+                    <select
+                      value={selectedCameraId || 'default'}
+                      onChange={(event) => onCameraChange?.(event.target.value)}
+                    >
+                      <option value="default">System Default</option>
+                      {cameraDevices.map((camera) => (
+                        <option key={camera.deviceId} value={camera.deviceId}>
+                          {camera.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="call-camera-refresh"
+                      onClick={() => onRefreshCameraDevices?.()}
+                      title="Refresh cameras"
+                      aria-label="Refresh cameras"
+                    >
+                      <RefreshCw size={14} className={isRefreshingCameras ? 'spin' : ''} />
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="settings-section">
                 <h4>Audio</h4>
                 <div className="setting-item">
