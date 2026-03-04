@@ -493,6 +493,7 @@ function AppContent() {
   const callTimingRef = useRef(null);
   const endCallRef = useRef(() => {});
   const idleStateRef = useRef(false);
+  const isMutedRef = useRef(false);
   const appSettingsRef = useRef(appSettings);
   const notificationPrefsRef = useRef(notificationPrefs);
   const blockedUsersRef = useRef(blockedUsers);
@@ -513,10 +514,27 @@ function AppContent() {
   useEffect(() => { callStateRef.current = callState; }, [callState]);
   useEffect(() => { callPeerRef.current = callPeer; }, [callPeer]);
   useEffect(() => { liveStreamInfoRef.current = liveStreamInfo; }, [liveStreamInfo]);
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
   useEffect(() => { autoJoinLivestreamRef.current = autoJoinLivestream; }, [autoJoinLivestream]);
   useEffect(() => { appSettingsRef.current = appSettings; }, [appSettings]);
   useEffect(() => { notificationPrefsRef.current = notificationPrefs; }, [notificationPrefs]);
   useEffect(() => { blockedUsersRef.current = blockedUsers; }, [blockedUsers]);
+
+  useEffect(() => {
+    const activeLocalStream = localStreamRef.current || localStream;
+    if (activeLocalStream) {
+      activeLocalStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+    }
+
+    const viewerLocalStream = livestreamLocalStreamRef.current;
+    if (viewerLocalStream && viewerLocalStream !== activeLocalStream) {
+      viewerLocalStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+    }
+  }, [localStream, isMuted]);
 
   // ==================== INITIAL SETUP ====================
   useEffect(() => {
@@ -1184,6 +1202,8 @@ function AppContent() {
         return;
       }
 
+      replacementAudioTrack.enabled = !isMutedRef.current;
+
       const oldAudioTracks = currentLocalStream.getAudioTracks();
       oldAudioTracks.forEach(track => {
         currentLocalStream.removeTrack(track);
@@ -1197,7 +1217,9 @@ function AppContent() {
           viewerLocalStream.removeTrack(track);
           track.stop();
         });
-        viewerLocalStream.addTrack(replacementAudioTrack.clone());
+        const viewerAudioTrack = replacementAudioTrack.clone();
+        viewerAudioTrack.enabled = !isMutedRef.current;
+        viewerLocalStream.addTrack(viewerAudioTrack);
       }
 
       const replaceOnPeerConnection = async (peerConnection) => {
@@ -4879,13 +4901,27 @@ function AppContent() {
   }, [endCall]);
 
   const toggleMute = useCallback(() => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
+    const activeLocalStream = localStreamRef.current || livestreamLocalStreamRef.current || localStream;
+    if (!activeLocalStream) return;
+
+    const audioTracks = activeLocalStream.getAudioTracks();
+    if (!audioTracks.length) return;
+
+    const shouldMute = audioTracks.some(track => track.enabled);
+    const nextTrackEnabled = !shouldMute;
+
+    audioTracks.forEach(track => {
+      track.enabled = nextTrackEnabled;
+    });
+
+    const viewerLocalStream = livestreamLocalStreamRef.current;
+    if (viewerLocalStream && viewerLocalStream !== activeLocalStream) {
+      viewerLocalStream.getAudioTracks().forEach(track => {
+        track.enabled = nextTrackEnabled;
+      });
     }
+
+    setIsMuted(shouldMute);
   }, [localStream]);
 
   const toggleVideo = useCallback(() => {
