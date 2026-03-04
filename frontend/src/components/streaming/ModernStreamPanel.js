@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Radio, Users, MessageSquare, Heart, ThumbsUp, 
   Share2, Settings, Mic, MicOff, Camera, CameraOff,
@@ -218,6 +219,120 @@ const ModernStreamPanel = ({
       document.removeEventListener('keydown', handleEsc);
     };
   }, [showSettings]);
+
+  useEffect(() => {
+    if (!showSettings || typeof document === 'undefined') return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showSettings]);
+
+  const settingsModal = (
+    <AnimatePresence>
+      {showSettings && (
+        <motion.div
+          className="stream-settings-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={closeSettings}
+        >
+          <motion.div
+            className="stream-settings-modal"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-header">
+              <h3>Stream Settings</h3>
+              <button onClick={closeSettings} aria-label="Close stream settings">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="settings-content">
+              <div className="settings-group">
+                <h4>Video Quality</h4>
+                <div className="quality-presets">
+                  {['Auto', '480p', '720p', '1080p', '4K'].map(q => (
+                    <button
+                      key={q}
+                      className={`preset ${selectedQuality === q ? 'active' : ''}`}
+                      onClick={() => setSelectedQuality(q)}
+                      type="button"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-group">
+                <h4>Video Devices</h4>
+                <div className="setting-item">
+                  <span>Camera</span>
+                  <select value={selectedCamera} onChange={(event) => setSelectedCamera(event.target.value)}>
+                    {availableCameraOptions.map((camera, index) => (
+                      <option key={`${camera.deviceId}-${index}`} value={camera.deviceId}>{camera.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="settings-group">
+                <h4>Audio</h4>
+                <div className="setting-item">
+                  <span>Microphone</span>
+                  <select value={selectedMicrophone} onChange={(event) => setSelectedMicrophone(event.target.value)}>
+                    {availableMicrophoneOptions.map((microphone, index) => (
+                      <option key={`${microphone.deviceId}-${index}`} value={microphone.deviceId}>{microphone.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span>Audio Output</span>
+                  <select value={selectedSpeaker} onChange={(event) => setSelectedSpeaker(event.target.value)}>
+                    {availableSpeakerOptions.map((speaker, index) => (
+                      <option key={`${speaker.deviceId}-${index}`} value={speaker.deviceId}>{speaker.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="setting-item">
+                  <span>Noise Suppression</span>
+                  <label className="toggle">
+                    <input type="checkbox" checked={noiseSuppression} onChange={(event) => setNoiseSuppression(event.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+              </div>
+              <div className="settings-group">
+                <h4>Chat</h4>
+                <div className="setting-item">
+                  <span>Slow Mode</span>
+                  <label className="toggle">
+                    <input type="checkbox" checked={slowMode} onChange={(event) => setSlowMode(event.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+                <div className="setting-item">
+                  <span>Sub Only Mode</span>
+                  <label className="toggle">
+                    <input type="checkbox" checked={subOnlyMode} onChange={(event) => setSubOnlyMode(event.target.checked)} />
+                    <span className="toggle-slider" />
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="settings-actions">
+              <button className="settings-btn secondary" onClick={closeSettings} type="button">Cancel</button>
+              <button className="settings-btn primary" onClick={applySettings} type="button">Save & Close</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 
   return (
     <motion.div 
@@ -478,107 +593,7 @@ const ModernStreamPanel = ({
         </AnimatePresence>
       </div>
 
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            className="stream-settings-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={closeSettings}
-          >
-            <motion.div 
-              className="stream-settings-modal"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="settings-header">
-                <h3>Stream Settings</h3>
-                <button onClick={closeSettings} aria-label="Close stream settings">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="settings-content">
-                <div className="settings-group">
-                  <h4>Video Quality</h4>
-                  <div className="quality-presets">
-                    {['Auto', '480p', '720p', '1080p', '4K'].map(q => (
-                      <button 
-                        key={q} 
-                        className={`preset ${selectedQuality === q ? 'active' : ''}`}
-                        onClick={() => setSelectedQuality(q)}
-                        type="button"
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="settings-group">
-                  <h4>Video Devices</h4>
-                  <div className="setting-item">
-                    <span>Camera</span>
-                    <select value={selectedCamera} onChange={(event) => setSelectedCamera(event.target.value)}>
-                      {availableCameraOptions.map((camera, index) => (
-                        <option key={`${camera.deviceId}-${index}`} value={camera.deviceId}>{camera.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="settings-group">
-                  <h4>Audio</h4>
-                  <div className="setting-item">
-                    <span>Microphone</span>
-                    <select value={selectedMicrophone} onChange={(event) => setSelectedMicrophone(event.target.value)}>
-                      {availableMicrophoneOptions.map((microphone, index) => (
-                        <option key={`${microphone.deviceId}-${index}`} value={microphone.deviceId}>{microphone.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="setting-item">
-                    <span>Audio Output</span>
-                    <select value={selectedSpeaker} onChange={(event) => setSelectedSpeaker(event.target.value)}>
-                      {availableSpeakerOptions.map((speaker, index) => (
-                        <option key={`${speaker.deviceId}-${index}`} value={speaker.deviceId}>{speaker.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="setting-item">
-                    <span>Noise Suppression</span>
-                    <label className="toggle">
-                      <input type="checkbox" checked={noiseSuppression} onChange={(event) => setNoiseSuppression(event.target.checked)} />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
-                </div>
-                <div className="settings-group">
-                  <h4>Chat</h4>
-                  <div className="setting-item">
-                    <span>Slow Mode</span>
-                    <label className="toggle">
-                      <input type="checkbox" checked={slowMode} onChange={(event) => setSlowMode(event.target.checked)} />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
-                  <div className="setting-item">
-                    <span>Sub Only Mode</span>
-                    <label className="toggle">
-                      <input type="checkbox" checked={subOnlyMode} onChange={(event) => setSubOnlyMode(event.target.checked)} />
-                      <span className="toggle-slider" />
-                    </label>
-                  </div>
-                </div>
-              </div>
-              <div className="settings-actions">
-                <button className="settings-btn secondary" onClick={closeSettings} type="button">Cancel</button>
-                <button className="settings-btn primary" onClick={applySettings} type="button">Save & Close</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== 'undefined' ? createPortal(settingsModal, document.body) : settingsModal}
     </motion.div>
   );
 };
