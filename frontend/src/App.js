@@ -840,6 +840,22 @@ function AppContent() {
     return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshVideoInputs);
   }, [refreshVideoInputs]);
 
+  const runtimeConnectionInfo = useMemo(() => {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    return {
+      effectiveType: conn?.effectiveType,
+      downlink: conn?.downlink,
+      rtt: conn?.rtt,
+      saveData: conn?.saveData
+    };
+  }, []);
+
+  const iceServersConfig = useMemo(() => ({
+    iceServers: ICE_SERVERS,
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: getAdaptiveIceTransportPolicy({ userAgent: navigator.userAgent, connectionInfo: runtimeConnectionInfo })
+  }), [runtimeConnectionInfo]);
+
   // ==================== WITH PREFERRED VIDEO DEVICE ====================
   const withPreferredVideoDevice = useCallback((constraints) => {
     if (!selectedVideoInputId || !constraints || constraints.video === false) return constraints;
@@ -3144,22 +3160,6 @@ function AppContent() {
   }, []);
 
   // ==================== WEBRTC FUNCTIONS ====================
-  const runtimeConnectionInfo = useMemo(() => {
-    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    return {
-      effectiveType: conn?.effectiveType,
-      downlink: conn?.downlink,
-      rtt: conn?.rtt,
-      saveData: conn?.saveData
-    };
-  }, []);
-
-  const iceServersConfig = useMemo(() => ({
-    iceServers: ICE_SERVERS,
-    iceCandidatePoolSize: 10,
-    iceTransportPolicy: getAdaptiveIceTransportPolicy({ userAgent: navigator.userAgent, connectionInfo: runtimeConnectionInfo })
-  }), [runtimeConnectionInfo]);
-
   const clearCallTimeout = useCallback(() => {
     if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
     callTimeoutRef.current = null;
