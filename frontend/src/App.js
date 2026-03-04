@@ -1143,6 +1143,112 @@ function AppContent() {
     }
   }, []);
 
+  const switchLivestreamSource = useCallback(async () => {
+    const activeSession = liveStreamInfoRef.current;
+    if (!activeSession?.isHost) return;
+
+    const currentLocalStream = localStreamRef.current;
+    if (!currentLocalStream) {
+      setErrorMessage('No active stream found to switch source.');
+      return;
+    }
+
+    const nextSource = activeSession.source === 'screen' ? 'camera' : 'screen';
+
+    try {
+      let replacementVideoTrack = null;
+      let transientStream = null;
+
+      if (nextSource === 'screen') {
+        if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') {
+          setErrorMessage('Screen sharing is not supported on this device/browser.');
+          return;
+        }
+
+        transientStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        replacementVideoTrack = transientStream.getVideoTracks()[0] || null;
+
+        if (replacementVideoTrack) {
+          replacementVideoTrack.onended = () => {
+            if (liveStreamInfoRef.current?.isHost && liveStreamInfoRef.current?.source === 'screen') {
+              switchLivestreamSource().catch(() => {});
+            }
+          };
+        }
+      } else {
+        const qualityConstraints = getStreamQualityVideoConstraints(streamPanelSettings?.quality);
+        const preferredCameraId = selectedVideoInputId && selectedVideoInputId !== 'default' ? selectedVideoInputId : '';
+
+        const candidateVideoConstraints = preferredCameraId
+          ? [
+              { ...(qualityConstraints || {}), deviceId: { exact: preferredCameraId } },
+              { ...(qualityConstraints || {}), deviceId: { ideal: preferredCameraId } },
+              qualityConstraints || true,
+              { deviceId: { exact: preferredCameraId } },
+              { deviceId: { ideal: preferredCameraId } },
+              true
+            ]
+          : [qualityConstraints || true, true];
+
+        let captureError = null;
+        for (const videoConstraints of candidateVideoConstraints) {
+          try {
+            transientStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
+            replacementVideoTrack = transientStream.getVideoTracks()[0] || null;
+            if (replacementVideoTrack) break;
+          } catch (error) {
+            captureError = error;
+          }
+        }
+
+        if (!replacementVideoTrack) {
+          throw captureError || new Error('Unable to access selected camera');
+        }
+      }
+
+      if (!replacementVideoTrack) {
+        throw new Error('Unable to capture video source');
+      }
+
+      currentLocalStream.getVideoTracks().forEach(track => {
+        currentLocalStream.removeTrack(track);
+        track.stop();
+      });
+      currentLocalStream.addTrack(replacementVideoTrack);
+
+      const replaceOnPeerConnection = async (peerConnection) => {
+        if (!peerConnection) return;
+        const videoSenders = peerConnection.getSenders().filter(sender => sender.track?.kind === 'video');
+        for (const sender of videoSenders) {
+          await sender.replaceTrack(replacementVideoTrack);
+        }
+      };
+
+      await replaceOnPeerConnection(peerConnectionRef.current);
+      await Promise.allSettled(
+        Array.from(livestreamHostPeersRef.current.values()).map(replaceOnPeerConnection)
+      );
+
+      livestreamLocalStreamRef.current = currentLocalStream;
+      setLocalStream(currentLocalStream);
+      setRemoteStream(currentLocalStream);
+
+      setLiveStreamInfo(prev => {
+        if (!prev) return prev;
+        return { ...prev, source: nextSource };
+      });
+      setStreamSource(nextSource);
+
+      setSuccessMessage(nextSource === 'screen' ? 'Switched to screen share' : 'Switched to camera');
+      if (transientStream && transientStream !== currentLocalStream) {
+        transientStream.getAudioTracks().forEach(track => track.stop());
+      }
+    } catch (error) {
+      console.warn('Failed to switch livestream source:', error);
+      setErrorMessage('Could not switch source right now. Please try again.');
+    }
+  }, [getStreamQualityVideoConstraints, selectedVideoInputId, streamPanelSettings?.quality]);
+
   const handleStreamSettingsChange = useCallback((settings = {}) => {
     const mergedSettings = { ...streamPanelSettings, ...settings };
     setStreamPanelSettings(mergedSettings);
@@ -6200,7 +6306,7 @@ function AppContent() {
             onToggleMute={toggleMute}
             onToggleVideo={toggleVideo}
             onEndStream={stopHostedLivestream}
-            onSwitchSource={() => startLivestream(streamVisibility, streamSource === 'camera' ? 'screen' : 'camera')}
+            onSwitchSource={switchLivestreamSource}
             streamTitle={`${liveStreamInfo?.room || room || 'Room'} Live Stream`}
             streamerName={liveStreamInfo?.host || username}
             streamThumbnail="https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=1280"
