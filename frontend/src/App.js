@@ -4222,8 +4222,17 @@ function AppContent() {
           });
         }
 
-        setRemoteStream(stream);
-        remoteStreamRef.current = stream;
+        // Use a fresh MediaStream instance so React notices track updates reliably.
+        const normalizedRemoteStream = new MediaStream(stream.getTracks());
+        setRemoteStream(normalizedRemoteStream);
+        remoteStreamRef.current = normalizedRemoteStream;
+
+        if (event.track?.kind === 'video') {
+          event.track.onunmute = () => {
+            attachRemoteStreamToElement();
+          };
+        }
+
         attachRemoteStreamToElement();
       } catch (err) {
         console.error('Error handling track:', err);
@@ -5340,6 +5349,15 @@ function AppContent() {
   useEffect(() => {
     endCallRef.current = endCall;
   }, [endCall]);
+
+  const previousCallStateRef = useRef('idle');
+  useEffect(() => {
+    const prevState = previousCallStateRef.current;
+    if (callState === 'idle' && prevState !== 'idle') {
+      releaseAllMediaAccess();
+    }
+    previousCallStateRef.current = callState;
+  }, [callState, releaseAllMediaAccess]);
 
   const toggleMute = useCallback(() => {
     const activeLocalStream = localStreamRef.current || livestreamLocalStreamRef.current || localStream;
