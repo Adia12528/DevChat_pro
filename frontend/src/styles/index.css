@@ -3067,16 +3067,16 @@
 
 /* Stream Settings Modal */
 .stream-settings-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 400px;
-  background: #1a1a24;
+  position: relative;
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  color: var(--txt);
   border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  z-index: 11000;
   overflow: hidden;
 }
 
@@ -3090,6 +3090,10 @@
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
   z-index: 10999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
 }
 
 .settings-panel-overlay {
@@ -3263,37 +3267,41 @@
 }
 
 .stream-settings-modal .settings-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
 }
 
 .stream-settings-modal .settings-header h3 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   margin: 0;
+  color: var(--txt);
 }
 
 .stream-settings-modal .settings-header button {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--txt-muted);
   cursor: pointer;
-  padding: 4px;
+  padding: 6px;
   border-radius: 8px;
   transition: all 0.2s;
 }
 
 .stream-settings-modal .settings-header button:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--hover);
+  color: var(--txt);
 }
 
 .stream-settings-modal .settings-content {
-  padding: 24px;
-  max-height: 70vh;
+  flex: 1;
+  padding: 16px 20px;
+  max-height: none;
   overflow-y: auto;
 }
 
@@ -3301,8 +3309,10 @@
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 16px 24px 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
 .stream-settings-modal .settings-btn {
@@ -3316,17 +3326,17 @@
 }
 
 .stream-settings-modal .settings-btn.secondary {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--input-bg);
+  color: var(--txt);
 }
 
 .stream-settings-modal .settings-btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--hover);
 }
 
 .stream-settings-modal .settings-btn.primary {
-  background: #00a884;
-  color: white;
+  background: var(--primary);
+  color: #fff;
 }
 
 .stream-settings-modal .settings-btn.primary:hover {
@@ -3334,28 +3344,29 @@
 }
 
 .settings-group {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .settings-group h4 {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 16px;
-  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 10px;
+  color: var(--txt);
 }
 
 .quality-presets {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 8px;
 }
 
 .preset {
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  min-height: 38px;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: white;
+  color: var(--txt);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -3363,8 +3374,26 @@
 
 .preset:hover,
 .preset.active {
-  background: #00a884;
-  border-color: #00a884;
+  background: rgba(0, 168, 132, 0.14);
+  border-color: var(--primary);
+}
+
+.stream-settings-modal .setting-item {
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stream-settings-modal .setting-item span {
+  color: var(--txt);
+  font-size: 13px;
+}
+
+.stream-settings-modal .setting-item select {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--txt);
 }
 
 /* Animations */
@@ -3945,12 +3974,48 @@
 /* ==================== STREAMING RESPONSIVE FIXES ==================== */
 
 .stream-settings-modal {
-  width: min(420px, calc(100vw - 24px));
-  max-height: calc(100vh - 24px);
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
 }
 
 .stream-settings-modal .settings-content {
-  max-height: calc(100vh - 190px);
+  max-height: none;
+}
+
+@media (max-width: 768px) {
+  .stream-settings-backdrop {
+    padding: 8px;
+  }
+
+  .stream-settings-modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+
+  .stream-settings-modal .settings-header,
+  .stream-settings-modal .settings-content,
+  .stream-settings-modal .settings-actions {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .stream-settings-modal .settings-actions {
+    justify-content: stretch;
+  }
+
+  .stream-settings-modal .settings-btn {
+    flex: 1;
+  }
+
+  .stream-settings-modal .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stream-settings-modal .setting-item select {
+    width: 100%;
+  }
 }
 
 @media (max-width: 1024px) {
