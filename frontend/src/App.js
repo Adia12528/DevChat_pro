@@ -222,6 +222,10 @@ function AppContent() {
   const [selectedVideoInputId, setSelectedVideoInputId] = useState(() => 
     localStorage.getItem('devchatPreferredCameraId') || ''
   );
+  const [audioInputDevices, setAudioInputDevices] = useState([]);
+  const [selectedAudioInputId, setSelectedAudioInputId] = useState(() =>
+    localStorage.getItem('devchatPreferredMicrophoneId') || ''
+  );
   const [audioOutputDevices, setAudioOutputDevices] = useState([]);
   const [audioOutputDevice, setAudioOutputDevice] = useState(() =>
     localStorage.getItem('devchatPreferredAudioOutput') || 'default'
@@ -377,7 +381,7 @@ function AppContent() {
       const parsed = JSON.parse(localStorage.getItem('devchatStreamPanelSettings') || '{}');
       return {
         quality: parsed.quality || '1080p',
-        microphone: parsed.microphone || 'Default',
+        microphoneId: parsed.microphoneId || localStorage.getItem('devchatPreferredMicrophoneId') || 'default',
         noiseSuppression: parsed.noiseSuppression ?? true,
         slowMode: parsed.slowMode ?? false,
         subOnlyMode: parsed.subOnlyMode ?? false
@@ -385,7 +389,7 @@ function AppContent() {
     } catch {
       return {
         quality: '1080p',
-        microphone: 'Default',
+        microphoneId: localStorage.getItem('devchatPreferredMicrophoneId') || 'default',
         noiseSuppression: true,
         slowMode: false,
         subOnlyMode: false
@@ -774,6 +778,10 @@ function AppContent() {
   }, [selectedVideoInputId]);
 
   useEffect(() => {
+    localStorage.setItem('devchatPreferredMicrophoneId', selectedAudioInputId || '');
+  }, [selectedAudioInputId]);
+
+  useEffect(() => {
     localStorage.setItem('devchatPreferredAudioOutput', audioOutputDevice || 'default');
   }, [audioOutputDevice]);
 
@@ -822,6 +830,12 @@ function AppContent() {
           deviceId: d.deviceId,
           label: d.label || `External Camera ${i + 1}`
         }));
+      const microphones = devices
+        .filter(d => d.kind === 'audioinput')
+        .map((d, i) => ({
+          deviceId: d.deviceId,
+          label: d.label || `External Microphone ${i + 1}`
+        }));
       const speakers = devices
         .filter(d => d.kind === 'audiooutput')
         .map((d, i) => ({
@@ -829,6 +843,7 @@ function AppContent() {
           label: d.label || `External Speaker ${i + 1}`
         }));
       setVideoInputDevices(cameras);
+      setAudioInputDevices(microphones);
       setAudioOutputDevices(speakers);
     } catch (err) {
       console.warn('Failed to enumerate cameras:', err);
@@ -868,12 +883,32 @@ function AppContent() {
     };
   }, [selectedVideoInputId]);
 
+  const withPreferredAudioDevice = useCallback((constraints) => {
+    if (!constraints || constraints.audio === false) return constraints;
+
+    const preferredId = selectedAudioInputId || streamPanelSettings?.microphoneId;
+    const hasPreferredDevice = preferredId && preferredId !== 'default';
+
+    const mergedAudio = {
+      ...(typeof constraints.audio === 'object' ? constraints.audio : {}),
+      echoCancellation: true,
+      noiseSuppression: streamPanelSettings?.noiseSuppression ?? true,
+      autoGainControl: true,
+      ...(hasPreferredDevice ? { deviceId: { exact: preferredId } } : {})
+    };
+
+    return {
+      ...constraints,
+      audio: mergedAudio
+    };
+  }, [selectedAudioInputId, streamPanelSettings?.microphoneId, streamPanelSettings?.noiseSuppression]);
+
   const getCallMediaConstraints = useCallback((callKind) => {
-    const adaptiveConstraints = withPreferredVideoDevice(getAdaptiveMediaConstraints({
+    const adaptiveConstraints = withPreferredAudioDevice(withPreferredVideoDevice(getAdaptiveMediaConstraints({
       callType: callKind,
       userAgent: navigator.userAgent,
       connectionInfo: runtimeConnectionInfo
-    }));
+    })));
 
     const preferredConstraints = enhancedCall.getCallConstraints?.(callKind);
     if (!preferredConstraints) {
@@ -900,7 +935,48 @@ function AppContent() {
       audio: mergedAudio,
       video: mergedVideo
     };
-  }, [enhancedCall, runtimeConnectionInfo, withPreferredVideoDevice]);
+  }, [enhancedCall, runtimeConnectionInfo, withPreferredAudioDevice, withPreferredVideoDevice]);
+
+  const applyStreamQualityToActiveTrack = useCallback(async (quality) => {
+    const qualityProfiles = {
+      'Auto': null,
+      '480p': { width: { ideal: 854 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } },
+      '720p': { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } },
+      '1080p': { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30, max: 60 } },
+      '4K': { width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30, max: 60 } }
+    };
+
+    const profile = qualityProfiles[quality];
+    if (!profile) return;
+
+    const currentLocalStream = localStreamRef.current;
+    const activeVideoTrack = currentLocalStream?.getVideoTracks?.()[0];
+    if (!activeVideoTrack || typeof activeVideoTrack.applyConstraints !== 'function') return;
+
+    try {
+      await activeVideoTrack.applyConstraints(profile);
+      setSuccessMessage('Stream quality updated');
+    } catch (error) {
+      console.warn('Failed to apply stream quality immediately:', error);
+      setErrorMessage('Could not apply selected quality right now. It will apply next start.');
+    }
+  }, []);
+
+  const applyAudioProcessingToActiveTrack = useCallback(async (noiseSuppressionEnabled) => {
+    const currentLocalStream = localStreamRef.current;
+    const activeAudioTrack = currentLocalStream?.getAudioTracks?.()[0];
+    if (!activeAudioTrack || typeof activeAudioTrack.applyConstraints !== 'function') return;
+
+    try {
+      await activeAudioTrack.applyConstraints({
+        echoCancellation: true,
+        noiseSuppression: !!noiseSuppressionEnabled,
+        autoGainControl: true
+      });
+    } catch (error) {
+      console.warn('Failed to apply noise suppression immediately:', error);
+    }
+  }, []);
 
   const applyCameraSelectionToActiveStream = useCallback(async (cameraId) => {
     const hasActiveVideoSession =
@@ -967,8 +1043,81 @@ function AppContent() {
     }
   }, []);
 
+  const applyMicrophoneSelectionToActiveStream = useCallback(async (microphoneId, noiseSuppressionEnabled = true) => {
+    const hasActiveAudioSession =
+      callStateRef.current === 'active' ||
+      Boolean(liveStreamInfoRef.current?.isHost);
+
+    if (!hasActiveAudioSession || !navigator.mediaDevices?.getUserMedia) return;
+
+    const currentLocalStream = localStreamRef.current;
+    if (!currentLocalStream) return;
+
+    try {
+      const preferredId = microphoneId && microphoneId !== 'default' ? microphoneId : '';
+      const replacementStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          ...(preferredId ? { deviceId: { exact: preferredId } } : {}),
+          echoCancellation: true,
+          noiseSuppression: !!noiseSuppressionEnabled,
+          autoGainControl: true
+        },
+        video: false
+      });
+
+      const replacementAudioTrack = replacementStream.getAudioTracks()[0];
+      if (!replacementAudioTrack) {
+        replacementStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      const oldAudioTracks = currentLocalStream.getAudioTracks();
+      oldAudioTracks.forEach(track => {
+        currentLocalStream.removeTrack(track);
+        track.stop();
+      });
+      currentLocalStream.addTrack(replacementAudioTrack);
+
+      const viewerLocalStream = livestreamLocalStreamRef.current;
+      if (viewerLocalStream && viewerLocalStream !== currentLocalStream) {
+        viewerLocalStream.getAudioTracks().forEach(track => {
+          viewerLocalStream.removeTrack(track);
+          track.stop();
+        });
+        viewerLocalStream.addTrack(replacementAudioTrack.clone());
+      }
+
+      const replaceOnPeerConnection = async (peerConnection) => {
+        if (!peerConnection) return;
+        const audioSender = peerConnection.getSenders().find(sender => sender.track?.kind === 'audio');
+        if (audioSender) {
+          await audioSender.replaceTrack(replacementAudioTrack);
+        }
+      };
+
+      await replaceOnPeerConnection(peerConnectionRef.current);
+      await Promise.allSettled(
+        Array.from(livestreamHostPeersRef.current.values()).map(replaceOnPeerConnection)
+      );
+
+      setLocalStream(currentLocalStream);
+      setSuccessMessage('Microphone switched successfully');
+    } catch (error) {
+      console.warn('Failed to switch microphone immediately:', error);
+      setErrorMessage('Could not switch microphone right now. It will apply next start.');
+    }
+  }, []);
+
   const handleStreamSettingsChange = useCallback((settings = {}) => {
     setStreamPanelSettings(prev => ({ ...prev, ...settings }));
+
+    if (typeof settings.quality === 'string' && settings.quality.trim()) {
+      applyStreamQualityToActiveTrack(settings.quality);
+    }
+
+    if (typeof settings.noiseSuppression === 'boolean') {
+      applyAudioProcessingToActiveTrack(settings.noiseSuppression);
+    }
 
     if (typeof settings.cameraId === 'string') {
       const normalizedCameraId = settings.cameraId === 'default' ? '' : settings.cameraId;
@@ -976,10 +1125,26 @@ function AppContent() {
       applyCameraSelectionToActiveStream(settings.cameraId);
     }
 
+    const nextMicrophoneId = typeof settings.microphoneId === 'string'
+      ? settings.microphoneId
+      : (typeof settings.microphone === 'string' ? settings.microphone : null);
+
+    if (nextMicrophoneId) {
+      const normalizedMicId = nextMicrophoneId === 'default' ? '' : nextMicrophoneId;
+      setSelectedAudioInputId(normalizedMicId);
+      applyMicrophoneSelectionToActiveStream(nextMicrophoneId, settings.noiseSuppression ?? streamPanelSettings.noiseSuppression);
+    }
+
     if (typeof settings.audioOutput === 'string' && settings.audioOutput.trim()) {
       setAudioOutputDevice(settings.audioOutput);
     }
-  }, [applyCameraSelectionToActiveStream]);
+  }, [
+    applyAudioProcessingToActiveTrack,
+    applyCameraSelectionToActiveStream,
+    applyMicrophoneSelectionToActiveStream,
+    applyStreamQualityToActiveTrack,
+    streamPanelSettings.noiseSuppression
+  ]);
 
   useEffect(() => {
     const applyAudioOutput = async () => {
@@ -3769,7 +3934,9 @@ function AppContent() {
             displayStream.getAudioTracks().forEach(t => composedStream.addTrack(t));
           } else {
             try {
-              const preferredAudio = enhancedCall.getCallConstraints?.('voice')?.audio;
+              const preferredAudio = withPreferredAudioDevice({
+                audio: enhancedCall.getCallConstraints?.('voice')?.audio || true
+              }).audio;
               const micStream = await navigator.mediaDevices.getUserMedia({
                 audio: preferredAudio || true,
                 video: false
@@ -3792,12 +3959,12 @@ function AppContent() {
       refreshVideoInputs();
       return { stream: cameraStream, source: 'camera' };
     } catch {
-      const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints('video'));
+      const fallbackConstraints = withPreferredAudioDevice(withPreferredVideoDevice(getFallbackMediaConstraints('video')));
       const fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
       refreshVideoInputs();
       return { stream: fallbackStream, source: 'camera' };
     }
-  }, [enhancedCall, getCallMediaConstraints, refreshVideoInputs, withPreferredVideoDevice]);
+  }, [enhancedCall, getCallMediaConstraints, refreshVideoInputs, withPreferredAudioDevice, withPreferredVideoDevice]);
 
   const startLivestream = useCallback(async (visibilityMode, sourceMode = 'camera') => {
     const rollbackLivestreamStart = (message) => {
@@ -5955,6 +6122,8 @@ function AppContent() {
             shares={liveStreamInfo?.viewerCount || viewers || 0}
             cameraDevices={videoInputDevices}
             selectedCameraId={selectedVideoInputId}
+            microphoneDevices={audioInputDevices}
+            selectedMicrophoneId={selectedAudioInputId || streamPanelSettings.microphoneId || 'default'}
             audioOutputDevices={audioOutputDevices}
             selectedAudioOutput={audioOutputDevice}
             streamSettings={streamPanelSettings}

@@ -2,11 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Radio, Users, MessageSquare, Heart, ThumbsUp, 
   Share2, Settings, Mic, MicOff, Camera, CameraOff,
-  MonitorUp, ScreenShare, ScreenShareOff, X,
-  ChevronUp, ChevronDown, Maximize2, Minimize2,
-  Download, Gift, Sparkles, Clock, Wifi, WifiOff,
-  Volume2, VolumeX, Play, Pause, SkipForward,
-  SkipBack, RotateCcw, RotateCw
+  MonitorUp, ScreenShareOff, X,
+  Clock, Wifi
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import '../../styles/index.css';
@@ -36,6 +33,8 @@ const ModernStreamPanel = ({
   onSettingsChange,
   cameraDevices = [],
   selectedCameraId = '',
+  microphoneDevices = [],
+  selectedMicrophoneId = 'default',
   audioOutputDevices = [],
   selectedAudioOutput = 'default',
   streamSettings
@@ -46,17 +45,16 @@ const ModernStreamPanel = ({
   const [showSettings, setShowSettings] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [layout, setLayout] = useState('cinema');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isPip, setIsPip] = useState(false);
   const [reactions, setReactions] = useState([]);
   const [selectedQuality, setSelectedQuality] = useState(streamSettings?.quality || streamQuality || '1080p');
-  const [selectedMicrophone, setSelectedMicrophone] = useState(streamSettings?.microphone || 'Default');
+  const [selectedMicrophone, setSelectedMicrophone] = useState(selectedMicrophoneId || streamSettings?.microphoneId || 'default');
   const [selectedCamera, setSelectedCamera] = useState(selectedCameraId || 'default');
   const [selectedSpeaker, setSelectedSpeaker] = useState(selectedAudioOutput || 'default');
   const [noiseSuppression, setNoiseSuppression] = useState(streamSettings?.noiseSuppression ?? true);
   const [slowMode, setSlowMode] = useState(streamSettings?.slowMode ?? false);
   const [subOnlyMode, setSubOnlyMode] = useState(streamSettings?.subOnlyMode ?? false);
   const [fallbackCameraDevices, setFallbackCameraDevices] = useState([]);
+  const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
   const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
   const streamVideoRef = useRef(null);
 
@@ -80,11 +78,11 @@ const ModernStreamPanel = ({
   useEffect(() => {
     if (!streamSettings) return;
     setSelectedQuality(streamSettings.quality || streamQuality || '1080p');
-    setSelectedMicrophone(streamSettings.microphone || 'Default');
+    setSelectedMicrophone(streamSettings.microphoneId || selectedMicrophoneId || 'default');
     setNoiseSuppression(streamSettings.noiseSuppression ?? true);
     setSlowMode(streamSettings.slowMode ?? false);
     setSubOnlyMode(streamSettings.subOnlyMode ?? false);
-  }, [streamSettings, streamQuality]);
+  }, [streamSettings, streamQuality, selectedMicrophoneId]);
 
   useEffect(() => {
     setSelectedCamera(selectedCameraId || 'default');
@@ -93,6 +91,10 @@ const ModernStreamPanel = ({
   useEffect(() => {
     setSelectedSpeaker(selectedAudioOutput || 'default');
   }, [selectedAudioOutput]);
+
+  useEffect(() => {
+    setSelectedMicrophone(selectedMicrophoneId || 'default');
+  }, [selectedMicrophoneId]);
 
   useEffect(() => {
     const loadDeviceOptions = async () => {
@@ -105,6 +107,12 @@ const ModernStreamPanel = ({
             deviceId: device.deviceId,
             label: device.label || `External Camera ${index + 1}`
           }));
+        const microphones = devices
+          .filter((device) => device.kind === 'audioinput')
+          .map((device, index) => ({
+            deviceId: device.deviceId,
+            label: device.label || `External Microphone ${index + 1}`
+          }));
         const outputs = devices
           .filter((device) => device.kind === 'audiooutput')
           .map((device, index) => ({
@@ -112,9 +120,11 @@ const ModernStreamPanel = ({
             label: device.label || `External Speaker ${index + 1}`
           }));
         setFallbackCameraDevices(cameras);
+        setFallbackMicrophoneDevices(microphones);
         setFallbackAudioOutputs(outputs);
       } catch (error) {
         setFallbackCameraDevices([]);
+        setFallbackMicrophoneDevices([]);
         setFallbackAudioOutputs([]);
       }
     };
@@ -136,6 +146,11 @@ const ModernStreamPanel = ({
   const availableSpeakerOptions = [
     { deviceId: 'default', label: 'Default Speaker' },
     ...(audioOutputDevices.length > 0 ? audioOutputDevices : fallbackAudioOutputs).filter((device) => !!device?.deviceId)
+  ];
+
+  const availableMicrophoneOptions = [
+    { deviceId: 'default', label: 'Default Microphone' },
+    ...(microphoneDevices.length > 0 ? microphoneDevices : fallbackMicrophoneDevices).filter((device) => !!device?.deviceId)
   ];
 
   const formatDuration = (seconds) => {
@@ -169,7 +184,7 @@ const ModernStreamPanel = ({
   const applySettings = () => {
     onSettingsChange?.({
       quality: selectedQuality,
-      microphone: selectedMicrophone,
+      microphoneId: selectedMicrophone,
       cameraId: selectedCamera,
       audioOutput: selectedSpeaker,
       noiseSuppression,
@@ -304,17 +319,7 @@ const ModernStreamPanel = ({
                 animate={{ y: 0 }}
                 exit={{ y: 100 }}
               >
-                <div className="control-bar-left">
-                  <button className="stream-control-btn" onClick={() => setIsFullscreen(!isFullscreen)}>
-                    {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-                  </button>
-                  <button className="stream-control-btn" onClick={() => setLayout('cinema')}>
-                    <MonitorUp size={20} />
-                  </button>
-                  <button className="stream-control-btn" onClick={() => setLayout('compact')}>
-                    <ScreenShare size={20} />
-                  </button>
-                </div>
+                <div className="control-bar-left" />
 
                 <div className="control-bar-center">
                   {isHost && (
@@ -354,15 +359,6 @@ const ModernStreamPanel = ({
                     title={isSidebarOpen ? 'Hide Chat' : 'Show Chat'}
                   >
                     {isSidebarOpen ? <X size={20} /> : <MessageSquare size={20} />}
-                  </button>
-                  <button className="stream-control-btn" onClick={() => handleReaction('❤️')}>
-                    <Heart size={20} />
-                  </button>
-                  <button className="stream-control-btn" onClick={() => handleReaction('👍')}>
-                    <ThumbsUp size={20} />
-                  </button>
-                  <button className="stream-control-btn" onClick={() => handleReaction('🎉')}>
-                    <Sparkles size={20} />
                   </button>
                   <button className="stream-control-btn" onClick={() => setShowSettings(!showSettings)}>
                     <Settings size={20} />
@@ -510,8 +506,9 @@ const ModernStreamPanel = ({
                   <div className="setting-item">
                     <span>Microphone</span>
                     <select value={selectedMicrophone} onChange={(event) => setSelectedMicrophone(event.target.value)}>
-                      <option>Default</option>
-                      <option>External Mic</option>
+                      {availableMicrophoneOptions.map((microphone, index) => (
+                        <option key={`${microphone.deviceId}-${index}`} value={microphone.deviceId}>{microphone.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="setting-item">
