@@ -6050,7 +6050,7 @@ function AppContent() {
         {showDeleteConfirm && (
           <motion.div className="delete-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDeleteConfirm(false)}>
             <motion.div className="delete-modal" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} onClick={(e) => e.stopPropagation()}>
-              <div className="delete-modal-icon"><AlertCircle size={48} color="#f44336" /></div>
+              <div className="delete-modal-icon"><AlertCircle size={48} color="var(--error)" /></div>
               <h3>Delete Message?</h3>
               <p>This action cannot be undone.</p>
               <div className="delete-modal-footer"><button className="btn-cancel" onClick={() => setShowDeleteConfirm(false)}>Cancel</button><button className="btn-delete" onClick={confirmDelete}>Delete</button></div>
@@ -6308,7 +6308,7 @@ function AppContent() {
               <div className="delete-modal-icon"><LogOut size={48} color="var(--warning)" /></div>
               <h3>Logout?</h3>
               <p>You'll be signed out as <strong>{username}</strong>.</p>
-              <div className="delete-modal-footer"><button className="btn-cancel" onClick={() => setShowLogoutConfirm(false)}>Stay</button><button className="btn-delete" style={{ background: 'var(--warning)' }} onClick={performLogout}>Logout</button></div>
+              <div className="delete-modal-footer"><button className="btn-cancel" onClick={() => setShowLogoutConfirm(false)}>Stay</button><button className="btn-delete btn-logout-warning" onClick={performLogout}>Logout</button></div>
             </motion.div>
           </motion.div>
         )}

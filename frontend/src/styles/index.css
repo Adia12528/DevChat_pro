@@ -3279,6 +3279,16 @@
   color: #fff;
 }
 
+.delete-modal-footer .btn-logout-warning {
+  background: var(--warning);
+  color: var(--txt);
+  border: 1px solid var(--border);
+}
+
+.delete-modal-footer .btn-logout-warning:hover {
+  filter: brightness(0.96);
+}
+
 .stream-settings-modal .settings-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
