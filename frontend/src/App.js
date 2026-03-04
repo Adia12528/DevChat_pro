@@ -4204,6 +4204,22 @@ function AppContent() {
       }
       
       try {
+        const primaryStream = event.streams?.[0];
+        if (primaryStream && primaryStream.getTracks().length > 0) {
+          inboundRemoteStreamRef.current = primaryStream;
+          remoteStreamRef.current = primaryStream;
+          setRemoteStream(primaryStream);
+
+          if (event.track?.kind === 'video') {
+            event.track.onunmute = () => {
+              attachRemoteStreamToElement();
+            };
+          }
+
+          attachRemoteStreamToElement();
+          return;
+        }
+
         let stream = inboundRemoteStreamRef.current;
         if (!stream) {
           stream = new MediaStream();
@@ -4222,10 +4238,8 @@ function AppContent() {
           });
         }
 
-        // Use a fresh MediaStream instance so React notices track updates reliably.
-        const normalizedRemoteStream = new MediaStream(stream.getTracks());
-        setRemoteStream(normalizedRemoteStream);
-        remoteStreamRef.current = normalizedRemoteStream;
+        setRemoteStream(stream);
+        remoteStreamRef.current = stream;
 
         if (event.track?.kind === 'video') {
           event.track.onunmute = () => {
@@ -7017,8 +7031,8 @@ function AppContent() {
             onToggleScreenShare={toggleScreenShare}
             onEndCall={endCall}
             onToggleMinimize={toggleCallMinimize}
-            localVideoRef={localVideoRef}
-            remoteVideoRef={remoteVideoRef}
+            localVideoRef={setLocalVideoElement}
+            remoteVideoRef={setRemoteVideoElement}
             formatDuration={formatCallDuration}
             localStream={localStream}
             remoteStream={remoteStream}
