@@ -848,10 +848,19 @@ function AppContent() {
       setVideoInputDevices(cameras);
       setAudioInputDevices(microphones);
       setAudioOutputDevices(speakers);
+
+      if (selectedVideoInputId && !cameras.some(device => device.deviceId === selectedVideoInputId)) {
+        setSelectedVideoInputId('');
+      }
+
+      if (selectedAudioInputId && !microphones.some(device => device.deviceId === selectedAudioInputId)) {
+        setSelectedAudioInputId('');
+        setStreamPanelSettings(prev => ({ ...prev, microphoneId: 'default' }));
+      }
     } catch (err) {
       console.warn('Failed to enumerate cameras:', err);
     }
-  }, []);
+  }, [selectedAudioInputId, selectedVideoInputId]);
 
   useEffect(() => {
     navigator.mediaDevices?.addEventListener('devicechange', refreshVideoInputs);
@@ -881,7 +890,7 @@ function AppContent() {
       ...constraints,
       video: {
         ...(typeof constraints.video === 'object' ? constraints.video : {}),
-        deviceId: { exact: selectedVideoInputId }
+        deviceId: { ideal: selectedVideoInputId }
       }
     };
   }, [selectedVideoInputId]);
@@ -897,7 +906,7 @@ function AppContent() {
       echoCancellation: true,
       noiseSuppression: streamPanelSettings?.noiseSuppression ?? true,
       autoGainControl: true,
-      ...(hasPreferredDevice ? { deviceId: { exact: preferredId } } : {})
+      ...(hasPreferredDevice ? { deviceId: { ideal: preferredId } } : {})
     };
 
     return {
