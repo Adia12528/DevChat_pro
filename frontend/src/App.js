@@ -936,7 +936,21 @@ function AppContent() {
     }
 
     if (typeof enhancedCallSettings?.videoQuality === 'string') {
-      const nextStreamQuality = mapCallVideoQualityToStreamQuality(enhancedCallSettings.videoQuality);
+      const nextStreamQuality = (() => {
+        switch (enhancedCallSettings.videoQuality) {
+          case 'low':
+            return '480p';
+          case 'medium':
+            return '720p';
+          case 'high':
+            return '1080p';
+          case 'ultra':
+            return '4K';
+          case 'auto':
+          default:
+            return 'Auto';
+        }
+      })();
       if (nextStreamQuality) {
         setStreamPanelSettings((prev) => (
           prev.quality === nextStreamQuality ? prev : { ...prev, quality: nextStreamQuality }
@@ -949,7 +963,6 @@ function AppContent() {
     enhancedCallActiveDevices?.speaker,
     enhancedCallSettings?.noiseSuppression,
     enhancedCallSettings?.videoQuality,
-    mapCallVideoQualityToStreamQuality,
     normalizeDevicePreferenceId,
     selectedVideoInputId,
     selectedAudioInputId,
@@ -1201,22 +1214,6 @@ function AppContent() {
     };
 
     return qualityProfiles[quality] || null;
-  }, []);
-
-  const mapCallVideoQualityToStreamQuality = useCallback((quality) => {
-    switch (quality) {
-      case 'low':
-        return '480p';
-      case 'medium':
-        return '720p';
-      case 'high':
-        return '1080p';
-      case 'ultra':
-        return '4K';
-      case 'auto':
-      default:
-        return 'Auto';
-    }
   }, []);
 
   const mapStreamQualityToCallVideoQuality = useCallback((quality) => {
