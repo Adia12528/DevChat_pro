@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Mic, Volume2, Headphones, Speaker, RefreshCw } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 import { detectDevices } from '../../utils/settings';
@@ -105,9 +106,9 @@ const AudioSettings = ({ onClose, callHook }) => {
     onClose();
   };
 
-  return (
+  const content = (
     <div className="settings-panel-overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
+      <div className="settings-panel" style={{ zIndex: 26001 }} onClick={(event) => event.stopPropagation()}>
         <div className="settings-header">
           <h2>Audio Settings</h2>
           <button className="close-btn" onClick={onClose} type="button">
@@ -248,6 +249,12 @@ const AudioSettings = ({ onClose, callHook }) => {
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(content, document.body);
 };
 
 export default AudioSettings;

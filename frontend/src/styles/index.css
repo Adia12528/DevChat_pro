@@ -2958,12 +2958,14 @@
 .settings-panel-overlay {
   position: fixed;
   inset: 0;
-  z-index: 20000;
+  z-index: 26000 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   pointer-events: auto;
 }
 

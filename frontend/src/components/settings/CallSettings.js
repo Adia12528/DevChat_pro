@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Mic, Volume2, Wifi } from 'lucide-react';
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 
@@ -34,9 +35,9 @@ const CallSettings = ({ onClose, callHook }) => {
     };
   }, [onClose]);
 
-  return (
+  const content = (
     <div className="settings-panel-overlay" onClick={onClose}>
-      <div className="settings-panel" onClick={(event) => event.stopPropagation()}>
+      <div className="settings-panel" style={{ zIndex: 26001 }} onClick={(event) => event.stopPropagation()}>
         <div className="settings-header">
           <h2>Call Settings</h2>
           <button className="close-btn" onClick={onClose} type="button">
@@ -164,6 +165,12 @@ const CallSettings = ({ onClose, callHook }) => {
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  return createPortal(content, document.body);
 };
 
 export default CallSettings;
