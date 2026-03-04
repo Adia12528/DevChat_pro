@@ -225,8 +225,12 @@ const ModernStreamPanel = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onMouseMove={() => setShowControls(true)}
-      onMouseLeave={() => setShowControls(false)}
+      onMouseMove={() => {
+        if (!showSettings && !showControls) setShowControls(true);
+      }}
+      onMouseLeave={() => {
+        if (!showSettings && showControls) setShowControls(false);
+      }}
     >
       <div className="stream-background-gradient" />
 

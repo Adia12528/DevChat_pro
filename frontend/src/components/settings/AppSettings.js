@@ -88,7 +88,7 @@ const AppSettings = ({ onClose }) => {
       <div className="app-settings-panel" onClick={(event) => event.stopPropagation()}>
         <div className="app-settings-header">
           <h2>App Settings</h2>
-          <button className="app-settings-close-btn" onClick={onClose} aria-label="Close app settings">
+          <button className="app-settings-close-btn" onClick={onClose} aria-label="Close app settings" type="button">
             <X size={20} />
           </button>
         </div>
@@ -108,6 +108,7 @@ const AppSettings = ({ onClose }) => {
                     key={t.id}
                     className={`app-settings-theme-option ${theme === t.id ? 'active' : ''}`}
                     onClick={() => handleThemeChange(t.id)}
+                    type="button"
                   >
                     {t.icon}
                     <span>{t.name}</span>
@@ -124,6 +125,7 @@ const AppSettings = ({ onClose }) => {
                     key={f.id}
                     className={`app-settings-font-option ${fontSize === f.id ? 'active' : ''}`}
                     onClick={() => setFontSize(f.id)}
+                    type="button"
                   >
                     {f.name}
                   </button>
@@ -225,7 +227,7 @@ const AppSettings = ({ onClose }) => {
             </h3>
 
             <div className="app-settings-data-management">
-              <button className="app-settings-data-btn" onClick={handleExportSettings}>
+              <button className="app-settings-data-btn" onClick={handleExportSettings} type="button">
                 <Download size={16} />
                 Export Settings
               </button>
@@ -241,7 +243,7 @@ const AppSettings = ({ onClose }) => {
                 />
               </label>
 
-              <button className="app-settings-data-btn warning" onClick={handleResetSettings}>
+              <button className="app-settings-data-btn warning" onClick={handleResetSettings} type="button">
                 <RefreshCw size={16} />
                 Reset to Default
               </button>
@@ -249,8 +251,8 @@ const AppSettings = ({ onClose }) => {
           </div>
 
           <div className="app-settings-actions">
-            <button className="app-settings-btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="app-settings-btn-primary" onClick={handleSave}>Save Changes</button>
+            <button className="app-settings-btn-secondary" onClick={onClose} type="button">Cancel</button>
+            <button className="app-settings-btn-primary" onClick={handleSave} type="button">Save Changes</button>
           </div>
         </div>
       </div>

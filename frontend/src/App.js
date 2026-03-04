@@ -922,7 +922,33 @@ function AppContent() {
       connectionInfo: runtimeConnectionInfo
     })));
 
-    const preferredConstraints = enhancedCall.getCallConstraints?.(callKind);
+    const preferredConstraintsRaw = enhancedCall.getCallConstraints?.(callKind);
+    const sanitizeTrackConstraints = (trackConstraints) => {
+      if (!trackConstraints || typeof trackConstraints !== 'object') return trackConstraints;
+      const normalized = { ...trackConstraints };
+      const deviceId = normalized.deviceId;
+
+      if (deviceId === 'system' || deviceId === 'default') {
+        delete normalized.deviceId;
+      } else if (typeof deviceId === 'object' && deviceId) {
+        if (typeof deviceId.exact === 'string' && deviceId.exact.trim()) {
+          normalized.deviceId = { ideal: deviceId.exact };
+        }
+      } else if (typeof deviceId === 'string' && deviceId.trim()) {
+        normalized.deviceId = { ideal: deviceId };
+      }
+
+      return normalized;
+    };
+
+    const preferredConstraints = preferredConstraintsRaw
+      ? {
+          ...preferredConstraintsRaw,
+          audio: sanitizeTrackConstraints(preferredConstraintsRaw.audio),
+          video: sanitizeTrackConstraints(preferredConstraintsRaw.video)
+        }
+      : preferredConstraintsRaw;
+
     if (!preferredConstraints) {
       return adaptiveConstraints;
     }
@@ -948,6 +974,49 @@ function AppContent() {
       video: mergedVideo
     };
   }, [enhancedCall, runtimeConnectionInfo, withPreferredAudioDevice, withPreferredVideoDevice]);
+
+  const acquireCallMediaStream = useCallback(async (callKind) => {
+    const baseConstraints = getCallMediaConstraints(callKind);
+    const attempts = [baseConstraints];
+
+    if (callKind === 'video') {
+      const relaxedVideo = typeof baseConstraints.video === 'object'
+        ? (() => {
+            const next = { ...baseConstraints.video };
+            delete next.deviceId;
+            return next;
+          })()
+        : true;
+
+      attempts.push({
+        ...baseConstraints,
+        video: relaxedVideo
+      });
+
+      attempts.push({
+        audio: baseConstraints.audio === false ? true : (baseConstraints.audio || true),
+        video: true
+      });
+    }
+
+    attempts.push(withPreferredAudioDevice(withPreferredVideoDevice(getFallbackMediaConstraints(callKind))));
+    attempts.push(getFallbackMediaConstraints(callKind));
+
+    let lastError = null;
+    for (const constraints of attempts) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (callKind !== 'video' || stream.getVideoTracks().length > 0) {
+          return stream;
+        }
+        stream.getTracks().forEach(track => track.stop());
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error('Unable to access media devices');
+  }, [getCallMediaConstraints, withPreferredAudioDevice, withPreferredVideoDevice]);
 
   const getStreamQualityVideoConstraints = useCallback((quality) => {
     const qualityProfiles = {
@@ -4416,14 +4485,7 @@ function AppContent() {
       setCallState('calling');
       setCallError(null);
 
-      const constraints = getCallMediaConstraints(type);
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (mediaErr) {
-        const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints(type));
-        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-      }
+      stream = await acquireCallMediaStream(type);
       refreshVideoInputs();
 
       stream.getTracks().forEach(t => t.enabled = true);
@@ -4517,7 +4579,7 @@ function AppContent() {
       stopRingtone();
       clearCallTimeout();
     }
-  }, [username, createPeerConnection, playRingtone, stopRingtone, clearCallTimeout, waitForIceGatheringComplete, getCallMediaConstraints, refreshVideoInputs, withPreferredVideoDevice, logCallTiming, nowMs]);
+  }, [username, acquireCallMediaStream, createPeerConnection, playRingtone, stopRingtone, clearCallTimeout, waitForIceGatheringComplete, refreshVideoInputs, logCallTiming, nowMs]);
 
   const rejectCall = useCallback(() => {
     if (!incomingCall || !socketRef.current) return;
@@ -4580,14 +4642,7 @@ function AppContent() {
       setCallType(incomingCall.callType);
       setCallPeer({ username: callerUsername, userId: callerUsername });
 
-      const constraints = getCallMediaConstraints(incomingCall.callType);
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (mediaErr) {
-        const fallbackConstraints = withPreferredVideoDevice(getFallbackMediaConstraints(incomingCall.callType));
-        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-      }
+      stream = await acquireCallMediaStream(incomingCall.callType);
       refreshVideoInputs();
 
       stream.getTracks().forEach(t => t.enabled = true);
@@ -4703,7 +4758,7 @@ function AppContent() {
       callTimingRef.current = null;
       rejectCall();
     }
-  }, [incomingCall, username, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, getCallMediaConstraints, withPreferredVideoDevice, refreshVideoInputs, joinLivestreamAsViewer, logCallTiming, nowMs]);
+  }, [incomingCall, username, acquireCallMediaStream, createPeerConnection, startCallTimer, stopRingtone, rejectCall, clearCallTimeout, runtimeConnectionInfo, refreshVideoInputs, joinLivestreamAsViewer, logCallTiming, nowMs]);
 
   const endCall = useCallback((notifyPeer = true) => {
     console.log('Ending call');
