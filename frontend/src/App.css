@@ -492,68 +492,97 @@ input, textarea {
 
 .namaste-stage {
   margin: 24px auto 18px;
-  width: min(620px, 100%);
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  position: relative;
-}
-
-.greeter {
-  width: clamp(110px, 20vw, 142px);
-  height: 178px;
-  position: relative;
+  width: min(680px, 100%);
+  min-height: 220px;
   display: grid;
+  align-content: center;
   justify-items: center;
+  gap: 12px;
+  position: relative;
 }
 
-.greeter-head {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--txt) 88%, var(--primary));
-  box-shadow: inset 0 -4px 10px rgba(0, 0, 0, 0.2);
+.palm-meet-zone {
+  width: min(520px, 100%);
+  min-height: 150px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
 }
 
-.greeter-body {
-  margin-top: 10px;
-  width: 76px;
-  height: 94px;
-  border-radius: 42px 42px 26px 26px;
-  background: linear-gradient(165deg, color-mix(in srgb, var(--primary) 70%, #fff), color-mix(in srgb, var(--primary) 52%, #000));
-  box-shadow: inset 0 -10px 18px rgba(0, 0, 0, 0.16);
+.palm {
+  width: clamp(96px, 18vw, 124px);
+  height: clamp(120px, 20vw, 148px);
+  border-radius: 56px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(170deg, #f5c7a8, #e4a985);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.26), inset 0 -12px 16px rgba(115, 70, 44, 0.25);
+  position: relative;
+  animation: palmBreathe 1.85s ease-in-out infinite;
 }
 
-.greeter-hands {
+.palm-left {
+  transform-origin: 86% 50%;
+  margin-right: -10px;
+}
+
+.palm-right {
+  transform-origin: 14% 50%;
+  margin-left: -10px;
+}
+
+.palm-thumb {
   position: absolute;
-  top: 86px;
-  width: 34px;
-  height: 34px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--txt) 82%, var(--primary));
-  transform-origin: center;
-  animation: namasteHands 1.65s ease-in-out infinite;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.24);
+  top: 58px;
+  width: 42px;
+  height: 52px;
+  border-radius: 20px;
+  background: linear-gradient(170deg, #f0be9a, #d99873);
+  box-shadow: inset 0 -6px 8px rgba(120, 73, 44, 0.22);
 }
 
-.greeter-left .greeter-hands {
-  transform: rotate(14deg);
+.palm-left .palm-thumb {
+  left: -20px;
+  transform: rotate(-28deg);
 }
 
-.greeter-right .greeter-hands {
-  transform: rotate(-14deg);
+.palm-right .palm-thumb {
+  right: -20px;
+  transform: rotate(28deg);
+}
+
+.palm-fingers {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 28px;
+  border-radius: 18px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 12%, rgba(0, 0, 0, 0.06) 12% 18%);
+}
+
+.palm-contact-glow {
+  position: absolute;
+  width: 114px;
+  height: 114px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 205, 160, 0.8), rgba(255, 205, 160, 0.18) 50%, transparent 70%);
+  filter: blur(1px);
+  pointer-events: none;
 }
 
 .greeting-word {
   font-family: var(--font-heading);
-  font-size: clamp(1.5rem, 4vw, 2.4rem);
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.045em;
   color: var(--txt);
-  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
-  padding: 8px 12px;
+  text-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .startup-subtitle {
@@ -577,27 +606,13 @@ input, textarea {
   box-shadow: var(--accent-glow);
 }
 
-@keyframes namasteHands {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.06); }
-}
-
-.greeter-left .greeter-hands {
-  animation-name: namasteHandsLeft;
-}
-
-.greeter-right .greeter-hands {
-  animation-name: namasteHandsRight;
-}
-
-@keyframes namasteHandsLeft {
-  0%, 100% { transform: rotate(14deg) translateX(0); }
-  50% { transform: rotate(8deg) translateX(8px); }
-}
-
-@keyframes namasteHandsRight {
-  0%, 100% { transform: rotate(-14deg) translateX(0); }
-  50% { transform: rotate(-8deg) translateX(-8px); }
+@keyframes palmBreathe {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.015);
+  }
 }
 
 /* ==================== LOGIN SCREEN ==================== */
@@ -3440,23 +3455,23 @@ input, textarea {
     }
 
     .namaste-stage {
-      min-height: 170px;
-      gap: 8px;
+      min-height: 180px;
     }
 
-    .greeter {
-      height: 152px;
-      width: 96px;
+    .palm {
+      width: 90px;
+      height: 124px;
     }
 
-    .greeter-body {
-      width: 62px;
-      height: 80px;
+    .palm-thumb {
+      top: 48px;
+      width: 36px;
+      height: 44px;
     }
 
     .greeting-word {
       font-size: clamp(1.2rem, 6vw, 1.8rem);
-      padding: 4px 8px;
+      padding: 4px 10px;
     }
 
     .login-screen {

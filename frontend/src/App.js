@@ -6314,35 +6314,42 @@ function AppContent() {
           <h1 className="startup-title">DevChat Pro+</h1>
 
           <div className="namaste-stage" aria-hidden="true">
-            <motion.div
-              className="greeter greeter-left"
-              initial={{ x: -120, opacity: 0.4 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <div className="greeter-head" />
-              <div className="greeter-body" />
-              <div className="greeter-hands" />
-            </motion.div>
+            <div className="palm-meet-zone">
+              <motion.div
+                className="palm palm-left"
+                initial={{ x: -130, rotate: -24, opacity: 0.45 }}
+                animate={{ x: 0, rotate: -8, opacity: 1 }}
+                transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="palm-thumb" />
+                <div className="palm-fingers" />
+              </motion.div>
+
+              <motion.div
+                className="palm palm-right"
+                initial={{ x: 130, rotate: 24, opacity: 0.45 }}
+                animate={{ x: 0, rotate: 8, opacity: 1 }}
+                transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="palm-thumb" />
+                <div className="palm-fingers" />
+              </motion.div>
+
+              <motion.div
+                className="palm-contact-glow"
+                initial={{ opacity: 0, scale: 0.65 }}
+                animate={{ opacity: [0, 0.72, 0.28], scale: [0.65, 1.15, 1] }}
+                transition={{ delay: 0.7, duration: 1.3, ease: 'easeOut' }}
+              />
+            </div>
 
             <motion.div
               className="greeting-word"
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: [0, 1, 1, 0.85], y: [14, 0, 0, -2] }}
-              transition={{ delay: 1, duration: 1.5, ease: 'easeInOut' }}
+              initial={{ opacity: 0, y: 16, scale: 0.9 }}
+              animate={{ opacity: [0, 1, 1], y: [16, 0, 0], scale: [0.9, 1.04, 1] }}
+              transition={{ delay: 0.92, duration: 1.3, ease: 'easeOut' }}
             >
               Namaste
-            </motion.div>
-
-            <motion.div
-              className="greeter greeter-right"
-              initial={{ x: 120, opacity: 0.4 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <div className="greeter-head" />
-              <div className="greeter-body" />
-              <div className="greeter-hands" />
             </motion.div>
           </div>
 
