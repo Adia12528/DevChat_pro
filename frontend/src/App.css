@@ -468,6 +468,7 @@ input, textarea {
   top: 60px;
   left: 10px;
   width: 320px;
+  max-width: calc(100vw - 20px);
   max-height: calc(100vh - 80px);
   overflow-y: auto;
   background: var(--bg-secondary);
@@ -479,8 +480,12 @@ input, textarea {
 }
 
 .menu-dropdown-dm {
+  /* In DM mode, anchor to viewport so menu never escapes left edge of tiny menu container */
+  position: fixed;
+  top: 60px;
   left: auto;
-  right: 10px;
+  right: max(10px, env(safe-area-inset-right));
+  width: min(320px, calc(100vw - 20px));
 }
 
 .menu-header {

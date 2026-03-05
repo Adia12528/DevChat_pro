@@ -62,6 +62,7 @@ const ModernStreamPanel = ({
   const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
   const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
   const streamVideoRef = useRef(null);
+  const trayTouchStartYRef = useRef(null);
   const activePolicyBadges = [
     ...(slowMode ? ['Slow Mode'] : []),
     ...(subOnlyMode ? ['Sub-only'] : [])
@@ -256,6 +257,29 @@ const ModernStreamPanel = ({
       }
       return next;
     });
+  };
+
+  const closeSidebar = () => {
+    setIsSidebarOpen(false);
+  };
+
+  const handleTrayTouchStart = (event) => {
+    const touch = event.touches?.[0];
+    trayTouchStartYRef.current = touch ? touch.clientY : null;
+  };
+
+  const handleTrayTouchEnd = (event) => {
+    const startY = trayTouchStartYRef.current;
+    const touch = event.changedTouches?.[0];
+    const endY = touch ? touch.clientY : null;
+    trayTouchStartYRef.current = null;
+
+    if (startY == null || endY == null) return;
+
+    const delta = endY - startY;
+    if (delta > 50) {
+      closeSidebar();
+    }
   };
 
   useEffect(() => {
@@ -592,6 +616,8 @@ const ModernStreamPanel = ({
               type="button"
               className="stream-sidebar-resize-handle"
               onClick={cycleMobileTrayLevel}
+              onTouchStart={handleTrayTouchStart}
+              onTouchEnd={handleTrayTouchEnd}
               aria-label={`Expand chat tray (${mobileTrayLevel})`}
               title="Resize chat tray"
             >
@@ -608,6 +634,17 @@ const ModernStreamPanel = ({
             <Users size={16} />
             Viewers ({viewers.length})
           </button>
+          {isMobileLayout && isSidebarOpen && (
+            <button
+              type="button"
+              className="stream-sidebar-close-mobile"
+              onClick={closeSidebar}
+              aria-label="Close chat tray"
+              title="Close chat tray"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
         <AnimatePresence mode="wait">

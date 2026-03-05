@@ -4412,6 +4412,26 @@ body.keyboard-open .app-settings-content {
 
   .sidebar-tabs {
     flex: 0 0 56px;
+    align-items: center;
+  }
+
+  .stream-sidebar-close-mobile {
+    width: 34px;
+    height: 34px;
+    margin-right: 8px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .stream-sidebar-close-mobile:hover {
+    background: rgba(255, 255, 255, 0.24);
   }
 
   .chat-container,
@@ -4552,6 +4572,12 @@ body.keyboard-open .app-settings-content {
 
   .sidebar-tabs {
     flex-basis: 52px;
+  }
+
+  .stream-sidebar-close-mobile {
+    width: 32px;
+    height: 32px;
+    margin-right: 6px;
   }
 
   .chat-container,

@@ -167,6 +167,7 @@ function AppContent() {
   // ==================== UI STATES ====================
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+  const [menuDropdownStyle, setMenuDropdownStyle] = useState(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showRoomSidebar, setShowRoomSidebar] = useState(false);
   const [showStarredPanel, setShowStarredPanel] = useState(false);
@@ -528,6 +529,8 @@ function AppContent() {
   const cameraInputRef = useRef(null);
   const textareaRef = useRef(null);
   const menuContainerRef = useRef(null);
+  const menuToggleRef = useRef(null);
+  const menuDropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const contextMenuRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -2936,8 +2939,78 @@ function AppContent() {
   useEffect(() => {
     if (!showMenuDropdown) {
       setShowStreamingTab(false);
+      setMenuDropdownStyle(null);
     }
   }, [showMenuDropdown]);
+
+  const updateMenuDropdownPosition = useCallback(() => {
+    if (!showMenuDropdown || isMobileView) {
+      setMenuDropdownStyle(null);
+      return;
+    }
+
+    const triggerEl = menuToggleRef.current;
+    const dropdownEl = menuDropdownRef.current;
+    if (!triggerEl || !dropdownEl) return;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const edge = 8;
+    const triggerRect = triggerEl.getBoundingClientRect();
+
+    const preferredWidth = selectedUser ? 320 : 320;
+    const measuredWidth = dropdownEl.offsetWidth || preferredWidth;
+    const width = Math.min(measuredWidth, Math.max(240, viewportWidth - edge * 2));
+
+    let left = selectedUser
+      ? triggerRect.right - width
+      : triggerRect.left;
+    left = Math.max(edge, Math.min(left, viewportWidth - width - edge));
+
+    const gap = 8;
+    const minMenuHeight = 180;
+    const naturalHeight = dropdownEl.scrollHeight || 420;
+    const spaceBelow = viewportHeight - triggerRect.bottom - edge;
+    const spaceAbove = triggerRect.top - edge;
+
+    const preferUp = spaceBelow < minMenuHeight && spaceAbove > spaceBelow;
+    let top;
+    let maxHeight;
+
+    if (preferUp) {
+      maxHeight = Math.max(minMenuHeight, spaceAbove - gap);
+      const resolvedHeight = Math.min(naturalHeight, maxHeight);
+      top = Math.max(edge, triggerRect.top - resolvedHeight - gap);
+    } else {
+      top = Math.min(viewportHeight - edge - minMenuHeight, triggerRect.bottom + gap);
+      maxHeight = Math.max(minMenuHeight, viewportHeight - top - edge);
+    }
+
+    setMenuDropdownStyle({
+      position: 'fixed',
+      top: `${Math.round(top)}px`,
+      left: `${Math.round(left)}px`,
+      right: 'auto',
+      width: `${Math.round(width)}px`,
+      maxHeight: `${Math.round(maxHeight)}px`
+    });
+  }, [showMenuDropdown, isMobileView, selectedUser]);
+
+  useEffect(() => {
+    if (!showMenuDropdown || isMobileView) return undefined;
+
+    const frame = requestAnimationFrame(updateMenuDropdownPosition);
+    const handleViewportChange = () => updateMenuDropdownPosition();
+
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+    };
+  }, [showMenuDropdown, isMobileView, updateMenuDropdownPosition]);
 
   useEffect(() => {
     if (!(showCallSettings || showAudioSettings || showVideoSettings || showStreamSettings || showAppSettings)) {
@@ -6358,6 +6431,7 @@ function AppContent() {
       <div className="chat-header">
         <div className="menu-container" ref={menuContainerRef}>
           <button
+            ref={menuToggleRef}
             className={`menu-toggle ${unreadNotificationCount > 0 ? 'has-notification' : ''}`}
             onClick={() => {
               setShowMobileMenu(false);
@@ -6372,10 +6446,12 @@ function AppContent() {
               <>
                 <motion.div className="menu-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowMenuDropdown(false)} />
                 <motion.div
+                  ref={menuDropdownRef}
                   className={`menu-dropdown ${selectedUser ? 'menu-dropdown-dm' : ''} ${isMobileView ? 'mobile-menu-sheet' : ''}`}
                   initial={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
                   animate={isMobileView ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
                   exit={isMobileView ? { opacity: 0, y: 24 } : { opacity: 0, scale: 0.95, y: -10 }}
+                  style={!isMobileView ? menuDropdownStyle : undefined}
                 >
                   <div className="menu-header">Main Menu</div>
                   <button className="menu-item" onClick={() => { exportChat(); setShowMenuDropdown(false); }}><FileDown size={18}/><span>Export Chat</span></button>
