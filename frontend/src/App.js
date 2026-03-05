@@ -147,6 +147,7 @@ function AppContent() {
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 768);
   const [isIOS, setIsIOS] = useState(/iPhone|iPad|iPod/i.test(navigator.userAgent));
   const [isWindows, setIsWindows] = useState(/Windows/i.test(navigator.userAgent));
+  const [showStartupSplash, setShowStartupSplash] = useState(true);
 
   const showLastSeenEnabled = appSettings?.privacy?.showLastSeen !== false;
   const showReadReceiptsEnabled = appSettings?.privacy?.showReadReceipts !== false;
@@ -848,6 +849,11 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem('showDoubleTick', String(showDoubleTick));
   }, [showDoubleTick]);
+
+  useEffect(() => {
+    const splashTimer = setTimeout(() => setShowStartupSplash(false), 3300);
+    return () => clearTimeout(splashTimer);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('showBlueTick', String(showBlueTick));
@@ -6292,6 +6298,60 @@ function AppContent() {
     document.addEventListener('keydown', handleEsc);
     return () => document.removeEventListener('keydown', handleEsc);
   }, [handleBackNavigation]);
+
+  if (showStartupSplash) {
+    return (
+      <div className="startup-splash" role="dialog" aria-label="Welcome animation">
+        <motion.div
+          className="startup-splash-inner"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.55, ease: 'easeOut' }}
+        >
+          <div className="startup-topline">Welcome to</div>
+          <h1 className="startup-title">DevChat Pro+</h1>
+
+          <div className="namaste-stage" aria-hidden="true">
+            <motion.div
+              className="greeter greeter-left"
+              initial={{ x: -120, opacity: 0.4 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="greeter-head" />
+              <div className="greeter-body" />
+              <div className="greeter-hands" />
+            </motion.div>
+
+            <motion.div
+              className="greeting-word"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: [0, 1, 1, 0.85], y: [14, 0, 0, -2] }}
+              transition={{ delay: 1, duration: 1.5, ease: 'easeInOut' }}
+            >
+              Namaste
+            </motion.div>
+
+            <motion.div
+              className="greeter greeter-right"
+              initial={{ x: 120, opacity: 0.4 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="greeter-head" />
+              <div className="greeter-body" />
+              <div className="greeter-hands" />
+            </motion.div>
+          </div>
+
+          <p className="startup-subtitle">Respectful start. Better conversations.</p>
+          <button className="startup-skip-btn" onClick={() => setShowStartupSplash(false)}>
+            Skip Intro
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   // ==================== RENDER LOGIN SCREEN ====================
   if (!showChat) {
