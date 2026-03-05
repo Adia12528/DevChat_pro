@@ -20,6 +20,34 @@
   color: var(--txt);
 }
 
+.friends-home-page,
+.friends-settings-page {
+  margin: 0 auto;
+}
+
+.friends-home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.friends-home-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+  background: var(--bg-secondary);
+  color: var(--txt);
+  display: grid;
+  gap: 6px;
+}
+
+.friends-home-card span {
+  font-size: 0.86rem;
+  color: var(--txt-muted);
+}
+
 .friends-title {
   font-size: 1.2rem;
   margin: 0 0 8px;

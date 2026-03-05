@@ -167,7 +167,86 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   );
 };
 
-const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, socket }) => {
+const FriendsHomePage = ({ profile, onOpenChats, onOpenSettings, onLogout }) => {
+  return (
+    <div className="friends-login friends-home-page" aria-label="Friends home page">
+      <h3 className="friends-title">Welcome, {profile.displayName || 'Friend'}</h3>
+      <p className="friends-subtitle">You are logged in. Choose what to open next.</p>
+
+      <div className="friends-home-grid">
+        <button type="button" className="friends-home-card" onClick={onOpenChats}>
+          <strong>Open Chats</strong>
+          <span>Go to your contacts and conversations.</span>
+        </button>
+        <button type="button" className="friends-home-card secondary" onClick={onOpenSettings}>
+          <strong>Open Settings</strong>
+          <span>Update profile and preferences before chatting.</span>
+        </button>
+      </div>
+
+      <div className="friends-row">
+        <button type="button" className="secondary" onClick={onLogout}>Log out</button>
+      </div>
+    </div>
+  );
+};
+
+const FriendsSettingsPage = ({ profile, authToken, onProfileRefresh, onBackHome, onOpenChats, onLogout }) => {
+  const [nameDraft, setNameDraft] = useState(profile.displayName || '');
+  const [bioDraft, setBioDraft] = useState(profile.bio || '');
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState('');
+
+  useEffect(() => {
+    setNameDraft(profile.displayName || '');
+    setBioDraft(profile.bio || '');
+  }, [profile.displayName, profile.bio]);
+
+  const handleSave = async () => {
+    try {
+      setError('');
+      setSaved('');
+      await updateFriendsProfile(authToken, {
+        displayName: nameDraft,
+        bio: bioDraft
+      });
+      await onProfileRefresh();
+      setSaved('Profile saved successfully.');
+    } catch (e) {
+      setError(e.message || 'Failed to update profile');
+    }
+  };
+
+  return (
+    <div className="friends-login friends-settings-page" aria-label="Friends settings page">
+      <h3 className="friends-title">Friends Settings</h3>
+      <p className="friends-subtitle">Manage your profile before entering chats.</p>
+
+      <div className="friends-id-badge">ID: {profile.uniqueId}</div>
+
+      <div className="friends-row">
+        <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Display name" />
+      </div>
+      <div className="friends-row">
+        <textarea value={bioDraft} onChange={(e) => setBioDraft(e.target.value)} placeholder="Bio" rows={4} />
+      </div>
+
+      <div className="friends-row">
+        <button type="button" onClick={handleSave}>Save Profile</button>
+        <button type="button" className="secondary" onClick={onOpenChats}>Open Chats</button>
+      </div>
+      <div className="friends-row">
+        <button type="button" className="secondary" onClick={onBackHome}>Back</button>
+        <button type="button" className="secondary" onClick={onLogout}>Log out</button>
+      </div>
+
+      {saved ? <p className="friends-note">{saved}</p> : null}
+      {error ? <p className="friends-error">{error}</p> : null}
+    </div>
+  );
+};
+
+const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, socket, onOpenSettings, onBackHome }) => {
   const [nameDraft, setNameDraft] = useState(profile.displayName || '');
   const [bioDraft, setBioDraft] = useState(profile.bio || '');
   const [contacts, setContacts] = useState([]);
@@ -670,6 +749,10 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
         <header className="friends-chat-header">
           {selectedContact ? `Chat with ${selectedContact.displayName || selectedContact.uniqueId}` : 'Choose a friend to start chatting'}
           {contactTyping ? <div className="friends-typing-indicator">Typing...</div> : null}
+          <div className="friends-header-actions">
+            <button type="button" className="secondary" onClick={onBackHome}>Home</button>
+            <button type="button" className="secondary" onClick={onOpenSettings}>Settings</button>
+          </div>
           {selectedContact ? (
             <div className="friends-header-actions">
               <button type="button" className="secondary" onClick={handleToggleMute}>
@@ -787,6 +870,7 @@ function FriendsFeature() {
   const [phoneState, setPhoneState] = useState('idle');
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [postLoginView, setPostLoginView] = useState('home');
 
   const recaptchaRef = useRef(null);
 
@@ -805,6 +889,7 @@ function FriendsFeature() {
       if (!nextUser) {
         setAuthToken('');
         setProfile(null);
+        setPostLoginView('home');
         return;
       }
       try {
@@ -937,6 +1022,30 @@ function FriendsFeature() {
     );
   }
 
+  if (postLoginView === 'home') {
+    return (
+      <FriendsHomePage
+        profile={profile}
+        onOpenChats={() => setPostLoginView('chat')}
+        onOpenSettings={() => setPostLoginView('settings')}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  if (postLoginView === 'settings') {
+    return (
+      <FriendsSettingsPage
+        profile={profile}
+        authToken={authToken}
+        onProfileRefresh={async () => refreshProfile()}
+        onBackHome={() => setPostLoginView('home')}
+        onOpenChats={() => setPostLoginView('chat')}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   return (
     <FriendsWorkspace
       authToken={authToken}
@@ -944,6 +1053,8 @@ function FriendsFeature() {
       onProfileRefresh={async () => refreshProfile()}
       onLogout={handleLogout}
       socket={socket}
+      onOpenSettings={() => setPostLoginView('settings')}
+      onBackHome={() => setPostLoginView('home')}
     />
   );
 }
