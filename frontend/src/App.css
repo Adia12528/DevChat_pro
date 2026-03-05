@@ -609,6 +609,26 @@ input, textarea {
   pointer-events: none;
 }
 
+.namaste-hands-frame {
+  width: min(330px, 82vw);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  padding: 10px;
+  background: radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.06) 52%, transparent 74%);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  display: grid;
+  place-items: center;
+}
+
+.namaste-hands-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.26));
+  animation: namasteImageFloat 2.8s ease-in-out infinite;
+}
+
 .palm {
   width: clamp(96px, 18vw, 124px);
   height: clamp(120px, 20vw, 148px);
@@ -795,8 +815,18 @@ input, textarea {
   }
 }
 
+@keyframes namasteImageFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.01);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .palm,
+  .namaste-hands-image,
   .greeting-word {
     animation: none;
   }
@@ -3666,6 +3696,11 @@ input, textarea {
       height: 124px;
     }
 
+    .namaste-hands-frame {
+      width: min(280px, 84vw);
+      padding: 8px;
+    }
+
     .palm-thumb {
       top: 48px;
       width: 36px;
@@ -4284,5 +4319,259 @@ body.keyboard-open .voice-player-modal {
     left: max(6px, env(safe-area-inset-left)) !important;
     right: max(6px, env(safe-area-inset-right)) !important;
     max-height: calc(100dvh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* ==================== FINAL RESPONSIVE HARDENING ==================== */
+.chat-container,
+.login-screen,
+.startup-splash {
+  width: 100%;
+}
+
+.chat-header,
+.search-bar,
+.chat-body,
+.chat-footer,
+.replying-bar {
+  min-width: 0;
+}
+
+.whatsapp-input-wrapper,
+.meta,
+.search-input,
+.sidebar-input,
+.caption-input,
+.message-content,
+.msg-bubble {
+  min-width: 0;
+}
+
+.image-message-wrapper,
+.file-card,
+.voice-message-wrapper,
+.menu-dropdown,
+.menu-dropdown-dm,
+.modal,
+.voice-player-modal,
+.context-menu,
+.emoji-picker-container,
+.room-sidebar,
+.starred-panel,
+.pinned-panel {
+  max-width: min(calc(100vw - 16px), 560px);
+}
+
+@media (max-width: 1024px) {
+  .chat-header {
+    padding-inline: clamp(10px, 2.8vw, 16px);
+    gap: clamp(8px, 1.8vw, 12px);
+  }
+
+  .meta h3 {
+    font-size: clamp(15px, 2.2vw, 18px);
+  }
+
+  .call-buttons {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .chat-footer {
+    padding-inline: clamp(8px, 2.5vw, 16px);
+    gap: clamp(6px, 1.6vw, 10px);
+  }
+
+  .whatsapp-input-wrapper {
+    flex: 1 1 180px;
+  }
+}
+
+@media (max-width: 768px) {
+  .chat-header {
+    align-items: center;
+    row-gap: 8px;
+  }
+
+  .meta {
+    flex: 1 1 180px;
+  }
+
+  .users-info {
+    display: none;
+  }
+
+  .chat-footer {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .whatsapp-action-btn,
+  .whatsapp-send {
+    width: 38px;
+    height: 38px;
+  }
+
+  .emoji-btn-inline {
+    width: 34px;
+    height: 34px;
+  }
+
+  .whatsapp-input {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .replying-bar {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header {
+    padding-inline: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+
+  .chat-footer {
+    padding-inline: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+    gap: 6px;
+  }
+
+  .whatsapp-action-btn,
+  .whatsapp-send {
+    width: 36px;
+    height: 36px;
+  }
+
+  .msg-bubble {
+    max-width: min(92vw, 100%);
+  }
+
+  .startup-splash-inner,
+  .login-card {
+    width: min(100%, 420px);
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) and (max-width: 950px) {
+  .chat-container {
+    height: 100dvh;
+  }
+
+  .chat-header {
+    min-height: 46px !important;
+    padding: 4px 8px !important;
+    gap: 6px !important;
+  }
+
+  .meta h3 {
+    font-size: 14px;
+    margin-bottom: 0;
+  }
+
+  .room-info {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .room-info .message-count,
+  .room-info .last-activity,
+  .users-info,
+  .global-back-btn span {
+    display: none;
+  }
+
+  .call-buttons {
+    gap: 4px;
+  }
+
+  .call-btn,
+  .theme-toggle,
+  .sound-toggle,
+  .menu-toggle,
+  .clear-btn,
+  .whatsapp-action-btn,
+  .whatsapp-send {
+    width: 32px;
+    height: 32px;
+  }
+
+  .search-bar {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .search-input {
+    min-height: 30px;
+    font-size: 13px;
+  }
+
+  .chat-body {
+    padding: 8px;
+    scroll-padding-bottom: 82px;
+  }
+
+  .msg-bubble {
+    max-width: min(82vw, 92%);
+  }
+
+  .replying-bar {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .chat-footer {
+    padding: 6px 8px !important;
+    gap: 6px !important;
+    align-items: center;
+  }
+
+  .whatsapp-input-wrapper {
+    border-radius: 20px;
+    padding: 2px 6px;
+  }
+
+  .whatsapp-input {
+    padding: 7px 6px;
+    max-height: 68px;
+    font-size: 13px;
+  }
+
+  .emoji-btn-inline {
+    width: 30px;
+    height: 30px;
+  }
+
+  .emoji-picker-container,
+  .context-menu,
+  .modal,
+  .voice-player-modal,
+  .room-sidebar,
+  .menu-dropdown,
+  .menu-dropdown-dm,
+  .mobile-menu-sheet {
+    max-height: 74dvh !important;
+  }
+
+  .startup-splash-inner {
+    padding: 18px 14px 14px;
+  }
+
+  .namaste-stage {
+    min-height: 130px;
+    margin: 10px auto 8px;
+  }
+
+  .namaste-hands-frame {
+    width: min(200px, 34vw);
+  }
+
+  .startup-subtitle {
+    margin: 2px 0 10px;
+    font-size: 0.84rem;
   }
 }

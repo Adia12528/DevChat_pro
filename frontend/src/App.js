@@ -6327,23 +6327,12 @@ function AppContent() {
               transition={{ delay: 0.12, duration: 1.5, times: [0, 0.45, 0.72, 1], ease: 'easeOut' }}
             >
               <motion.div
-                className="palm palm-left"
-                initial={{ x: -130, rotate: -24, opacity: 0.45 }}
-                animate={{ x: 0, rotate: -8, opacity: 1 }}
-                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+                className="namaste-hands-frame"
+                initial={{ scale: 0.86, opacity: 0.2, y: 8 }}
+                animate={{ scale: [0.86, 1.04, 1], opacity: [0.2, 1, 1], y: [8, -1, 0] }}
+                transition={{ delay: 0.2, duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="palm-thumb" />
-                <div className="palm-fingers" />
-              </motion.div>
-
-              <motion.div
-                className="palm palm-right"
-                initial={{ x: 130, rotate: 24, opacity: 0.45 }}
-                animate={{ x: 0, rotate: 8, opacity: 1 }}
-                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <div className="palm-thumb" />
-                <div className="palm-fingers" />
+                <img className="namaste-hands-image" src="/namaste-hands.webp" alt="Hands joined in namaste" />
               </motion.div>
 
               <motion.div
