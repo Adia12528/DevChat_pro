@@ -80,6 +80,29 @@ const playNotificationTone = (kind = 'soft') => {
   }
 };
 
+const mapFirebaseAuthError = (error) => {
+  const code = error?.code || '';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this host';
+
+  if (code === 'auth/unauthorized-domain') {
+    return `This domain is not authorized in Firebase Auth: ${hostname}. Add it in Firebase Console -> Authentication -> Settings -> Authorized domains, then retry.`;
+  }
+  if (code === 'auth/invalid-phone-number') {
+    return 'Invalid phone number format. Use E.164 format (e.g. +911234567890).';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Please wait a few minutes and try again.';
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return 'Google sign-in popup was closed before completion.';
+  }
+  if (code === 'auth/captcha-check-failed') {
+    return 'reCAPTCHA verification failed. Refresh and try again.';
+  }
+
+  return error?.message || 'Authentication failed';
+};
+
 const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error }) => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -819,18 +842,24 @@ function FriendsFeature() {
   }, [authToken]);
 
   const handleGoogleLogin = async () => {
-    if (!friendsAuth) return;
+    if (!friendsAuth) {
+      setError('Firebase auth is not initialized. Restart frontend and check Firebase config.');
+      return;
+    }
     setError('');
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(friendsAuth, provider);
     } catch (e) {
-      setError(e.message || 'Google sign-in failed');
+      setError(mapFirebaseAuthError(e));
     }
   };
 
   const handlePhoneStart = async (phone) => {
-    if (!friendsAuth) return;
+    if (!friendsAuth) {
+      setError('Firebase auth is not initialized. Restart frontend and check Firebase config.');
+      return;
+    }
     setError('');
     try {
       setPhoneState('sending');
@@ -845,7 +874,7 @@ function FriendsFeature() {
       setPhoneState('code-sent');
     } catch (e) {
       setPhoneState('idle');
-      setError(e.message || 'Failed to send OTP');
+      setError(mapFirebaseAuthError(e));
     }
   };
 
@@ -859,7 +888,7 @@ function FriendsFeature() {
       await confirmationResult.confirm(code);
       setPhoneState('verified');
     } catch (e) {
-      setError(e.message || 'OTP verification failed');
+      setError(mapFirebaseAuthError(e));
     }
   };
 

@@ -216,6 +216,23 @@ function AppContent() {
   const [successMessage, setSuccessMessage] = useState('');
   const [inCallCameraToast, setInCallCameraToast] = useState(null);
   const [isRefreshingInCallCameras, setIsRefreshingInCallCameras] = useState(false);
+
+  useEffect(() => {
+    const onUnhandledRejection = (event) => {
+      const reason = event?.reason;
+      const message = reason?.message ? String(reason.message) : '';
+      const isPlayAbort =
+        reason?.name === 'AbortError' &&
+        message.includes('play() request was interrupted by a call to pause()');
+
+      if (isPlayAbort) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    return () => window.removeEventListener('unhandledrejection', onUnhandledRejection);
+  }, []);
   
   // ==================== ROOM MANAGEMENT ====================
   const [rooms, setRooms] = useState([]);
