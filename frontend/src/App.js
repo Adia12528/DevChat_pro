@@ -3615,6 +3615,11 @@ function AppContent() {
   }, [showMarkdown]);
 
   // ==================== VOICE MESSAGES ====================
+  const isExpectedPlayInterruption = useCallback((error) => {
+    const message = (error && error.message) ? String(error.message) : '';
+    return error?.name === 'AbortError' || message.includes('play() request was interrupted by a call to pause()');
+  }, []);
+
   const playVoiceMessage = useCallback(async (audioUrl, msgId) => {
     console.log(`🎵 Play voice: ${msgId}`);
     
@@ -3640,11 +3645,13 @@ function AppContent() {
         setPlayingVoiceId(msgId);
         await audio.play();
       } catch (error) {
-        console.error('Playback failed:', error);
+        if (!isExpectedPlayInterruption(error)) {
+          console.error('Playback failed:', error);
+        }
         setPlayingVoiceId(null);
       }
     }
-  }, [playingVoiceId]);
+  }, [isExpectedPlayInterruption, playingVoiceId]);
 
   const startVoiceRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
