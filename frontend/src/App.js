@@ -148,6 +148,7 @@ function AppContent() {
   const [isIOS, setIsIOS] = useState(/iPhone|iPad|iPod/i.test(navigator.userAgent));
   const [isWindows, setIsWindows] = useState(/Windows/i.test(navigator.userAgent));
   const [showStartupSplash, setShowStartupSplash] = useState(true);
+  const [showLogoutSplash, setShowLogoutSplash] = useState(false);
 
   const showLastSeenEnabled = appSettings?.privacy?.showLastSeen !== false;
   const showReadReceiptsEnabled = appSettings?.privacy?.showReadReceipts !== false;
@@ -854,6 +855,12 @@ function AppContent() {
     const splashTimer = setTimeout(() => setShowStartupSplash(false), 3300);
     return () => clearTimeout(splashTimer);
   }, []);
+
+  useEffect(() => {
+    if (!showLogoutSplash) return undefined;
+    const logoutSplashTimer = setTimeout(() => setShowLogoutSplash(false), 2800);
+    return () => clearTimeout(logoutSplashTimer);
+  }, [showLogoutSplash]);
 
   useEffect(() => {
     localStorage.setItem('showBlueTick', String(showBlueTick));
@@ -4076,6 +4083,7 @@ function AppContent() {
     setUsername('');
     setRoom('');
     setShowChat(false);
+    setShowLogoutSplash(true);
     setChat([]);
     setOnlineUsers([]);
     setRoomUserMap({});
@@ -6336,6 +6344,33 @@ function AppContent() {
           <button className="startup-skip-btn" onClick={() => setShowStartupSplash(false)}>
             Skip Intro
           </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (showLogoutSplash) {
+    return (
+      <div className="logout-splash" role="status" aria-live="polite" aria-label="Logout farewell animation">
+        <motion.div
+          className="logout-splash-inner"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        >
+          <div className="thankyou-container" aria-hidden="true">
+            <svg className="logout-hand-canvas" viewBox="0 0 200 200">
+              <path d="M 115 200 C 120 160, 125 130, 125 115 L 140 70 C 145 60, 135 55, 130 65 L 115 105 L 125 45 C 128 35, 115 35, 112 45 L 102 100 L 100 25 C 100 15, 85 15, 85 25 L 88 100 L 70 45 C 68 35, 52 40, 58 52 L 78 110 C 65 115, 55 125, 45 130 C 35 135, 45 150, 55 145 C 65 140, 75 160, 85 200 Z" />
+              <path d="M 85 200 C 90 150, 105 135, 78 110" fill="none" />
+              <path d="M 78 120 C 100 125, 110 120, 120 110" fill="none" />
+              <path d="M 82 140 C 105 145, 115 135, 125 120" fill="none" />
+            </svg>
+
+            <div className="logout-text-wrapper">
+              <div className="thankyou-text">THANK YOU</div>
+              <div className="thankyou-glow-line" />
+            </div>
+          </div>
         </motion.div>
       </div>
     );
