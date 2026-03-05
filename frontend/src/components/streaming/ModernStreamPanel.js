@@ -44,6 +44,9 @@ const ModernStreamPanel = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [mobileTrayLevel, setMobileTrayLevel] = useState('medium');
+  const [showTrayHint, setShowTrayHint] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [layout, setLayout] = useState('cinema');
   const [reactions, setReactions] = useState([]);
@@ -219,6 +222,71 @@ const ModernStreamPanel = ({
       document.removeEventListener('keydown', handleEsc);
     };
   }, [showSettings]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setIsMobileLayout(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const cycleMobileTrayLevel = () => {
+    setMobileTrayLevel((prev) => {
+      if (prev === 'mini') return 'medium';
+      if (prev === 'medium') return 'full';
+      return 'mini';
+    });
+
+    if (showTrayHint) {
+      setShowTrayHint(false);
+      try {
+        localStorage.setItem('devchatStreamTrayHintSeen', '1');
+      } catch {}
+    }
+  };
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setShowChat(true);
+        if (isMobileLayout) setMobileTrayLevel('medium');
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!isMobileLayout || !isSidebarOpen) return;
+
+    let hasSeenHint = false;
+    try {
+      hasSeenHint = localStorage.getItem('devchatStreamTrayHintSeen') === '1';
+    } catch {
+      hasSeenHint = false;
+    }
+
+    if (hasSeenHint) return;
+
+    setShowTrayHint(true);
+    const timer = setTimeout(() => {
+      setShowTrayHint(false);
+      try {
+        localStorage.setItem('devchatStreamTrayHintSeen', '1');
+      } catch {}
+    }, 7000);
+
+    return () => clearTimeout(timer);
+  }, [isMobileLayout, isSidebarOpen]);
+
+  const dismissTrayHint = () => {
+    setShowTrayHint(false);
+    try {
+      localStorage.setItem('devchatStreamTrayHintSeen', '1');
+    } catch {}
+  };
 
   useEffect(() => {
     if (!showSettings || typeof document === 'undefined') return undefined;
@@ -489,13 +557,7 @@ const ModernStreamPanel = ({
                 <div className="control-bar-right">
                   <button
                     className={`stream-control-btn ${isSidebarOpen ? 'active' : ''}`}
-                    onClick={() => {
-                      setIsSidebarOpen(prev => {
-                        const next = !prev;
-                        if (next) setShowChat(true);
-                        return next;
-                      });
-                    }}
+                    onClick={toggleSidebar}
                     title={isSidebarOpen ? 'Hide Chat' : 'Show Chat'}
                   >
                     {isSidebarOpen ? <X size={20} /> : <MessageSquare size={20} />}
@@ -515,7 +577,28 @@ const ModernStreamPanel = ({
         </div>
       </div>
 
-      <div className={`stream-sidebar ${isSidebarOpen ? 'open' : 'collapsed'}`}>
+      <div className={`stream-sidebar ${isSidebarOpen ? 'open' : 'collapsed'} tray-${mobileTrayLevel}`}>
+        {isMobileLayout && isSidebarOpen && (
+          <>
+            {showTrayHint && (
+              <div className="stream-tray-hint" role="status" aria-live="polite">
+                <span>Tip: tap this handle to resize chat tray</span>
+                <button type="button" onClick={dismissTrayHint} aria-label="Dismiss tray tip">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              className="stream-sidebar-resize-handle"
+              onClick={cycleMobileTrayLevel}
+              aria-label={`Expand chat tray (${mobileTrayLevel})`}
+              title="Resize chat tray"
+            >
+              <span />
+            </button>
+          </>
+        )}
         <div className="sidebar-tabs">
           <button className={`tab ${showChat ? 'active' : ''}`} onClick={() => setShowChat(true)}>
             <MessageSquare size={16} />
