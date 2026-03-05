@@ -6310,47 +6310,26 @@ function AppContent() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.55, ease: 'easeOut' }}
         >
-          <div className="startup-particles" aria-hidden="true">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <span key={i} className="startup-particle" />
-            ))}
-          </div>
-
           <div className="startup-topline">Welcome to</div>
           <h1 className="startup-title">DevChat Pro+</h1>
 
-          <div className="namaste-stage" aria-hidden="true">
-            <motion.div
-              className="palm-meet-zone"
-              initial={{ y: 6, scale: 0.97, opacity: 0.92 }}
-              animate={{ y: [6, 0, -1, 0], scale: [0.97, 1, 1.02, 1], opacity: [0.92, 1, 1, 1] }}
-              transition={{ delay: 0.12, duration: 1.5, times: [0, 0.45, 0.72, 1], ease: 'easeOut' }}
-            >
-              <motion.div
-                className="namaste-hands-frame"
-                initial={{ scale: 0.86, opacity: 0.2, y: 8 }}
-                animate={{ scale: [0.86, 1.04, 1], opacity: [0.2, 1, 1], y: [8, -1, 0] }}
-                transition={{ delay: 0.2, duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <img className="namaste-hands-image" src="/namaste-hands.webp" alt="Hands joined in namaste" />
-              </motion.div>
+          <div className="namaste-container" aria-hidden="true">
+            <svg className="hands-canvas" viewBox="0 0 200 200">
+              <g className="left-hand">
+                <path d="M 100 200 L 100 40 C 95 25, 85 30, 82 45 C 78 65, 72 90, 65 110 C 55 145, 40 180, 25 200 Z" />
+                <path d="M 100 125 C 85 120, 75 100, 78 85 C 80 75, 85 75, 90 90 C 94 100, 97 105, 100 110" />
+              </g>
 
-              <motion.div
-                className="palm-contact-glow"
-                initial={{ opacity: 0, scale: 0.65 }}
-                animate={{ opacity: [0, 0.72, 0.28], scale: [0.65, 1.15, 1] }}
-                transition={{ delay: 0.62, duration: 1.22, ease: 'easeOut' }}
-              />
-            </motion.div>
+              <g className="right-hand">
+                <path d="M 100 200 L 100 40 C 105 25, 115 30, 118 45 C 122 65, 128 90, 135 110 C 145 145, 160 180, 175 200 Z" />
+                <path d="M 100 125 C 115 120, 125 100, 122 85 C 120 75, 115 75, 110 90 C 106 100, 103 105, 100 110" />
+              </g>
+            </svg>
 
-            <motion.div
-              className="greeting-word"
-              initial={{ opacity: 0, y: 16, scale: 0.9 }}
-              animate={{ opacity: [0, 1, 1], y: [16, 0, 0], scale: [0.9, 1.04, 1] }}
-              transition={{ delay: 0.92, duration: 1.3, ease: 'easeOut' }}
-            >
-              Namaste
-            </motion.div>
+            <div className="text-wrapper">
+              <div className="namaste-text">NAMASTE</div>
+              <div className="glow-line" />
+            </div>
           </div>
 
           <p className="startup-subtitle">Respectful start. Better conversations.</p>
