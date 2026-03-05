@@ -2964,11 +2964,13 @@ function AppContent() {
     const edge = 8;
     const triggerRect = triggerEl.getBoundingClientRect();
 
-    const preferredWidth = selectedUser ? 320 : 320;
+    const currentRoomId = activeRoom || room;
+    const isDmContext = !!currentRoomId && currentRoomId.includes('_dm_');
+    const preferredWidth = 320;
     const measuredWidth = dropdownEl.offsetWidth || preferredWidth;
     const width = Math.min(measuredWidth, Math.max(240, viewportWidth - edge * 2));
 
-    let left = selectedUser
+    let left = isDmContext
       ? triggerRect.right - width
       : triggerRect.left;
     left = Math.max(edge, Math.min(left, viewportWidth - width - edge));
@@ -3000,7 +3002,7 @@ function AppContent() {
       width: `${Math.round(width)}px`,
       maxHeight: `${Math.round(maxHeight)}px`
     });
-  }, [showMenuDropdown, isMobileView, selectedUser]);
+  }, [showMenuDropdown, isMobileView, activeRoom, room]);
 
   useEffect(() => {
     if (!showMenuDropdown || isMobileView) return undefined;
