@@ -6310,16 +6310,27 @@ function AppContent() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.55, ease: 'easeOut' }}
         >
+          <div className="startup-particles" aria-hidden="true">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <span key={i} className="startup-particle" />
+            ))}
+          </div>
+
           <div className="startup-topline">Welcome to</div>
           <h1 className="startup-title">DevChat Pro+</h1>
 
           <div className="namaste-stage" aria-hidden="true">
-            <div className="palm-meet-zone">
+            <motion.div
+              className="palm-meet-zone"
+              initial={{ y: 6, scale: 0.97, opacity: 0.92 }}
+              animate={{ y: [6, 0, -1, 0], scale: [0.97, 1, 1.02, 1], opacity: [0.92, 1, 1, 1] }}
+              transition={{ delay: 0.12, duration: 1.5, times: [0, 0.45, 0.72, 1], ease: 'easeOut' }}
+            >
               <motion.div
                 className="palm palm-left"
                 initial={{ x: -130, rotate: -24, opacity: 0.45 }}
                 animate={{ x: 0, rotate: -8, opacity: 1 }}
-                transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="palm-thumb" />
                 <div className="palm-fingers" />
@@ -6329,7 +6340,7 @@ function AppContent() {
                 className="palm palm-right"
                 initial={{ x: 130, rotate: 24, opacity: 0.45 }}
                 animate={{ x: 0, rotate: 8, opacity: 1 }}
-                transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
               >
                 <div className="palm-thumb" />
                 <div className="palm-fingers" />
@@ -6339,9 +6350,9 @@ function AppContent() {
                 className="palm-contact-glow"
                 initial={{ opacity: 0, scale: 0.65 }}
                 animate={{ opacity: [0, 0.72, 0.28], scale: [0.65, 1.15, 1] }}
-                transition={{ delay: 0.7, duration: 1.3, ease: 'easeOut' }}
+                transition={{ delay: 0.62, duration: 1.22, ease: 'easeOut' }}
               />
-            </div>
+            </motion.div>
 
             <motion.div
               className="greeting-word"
