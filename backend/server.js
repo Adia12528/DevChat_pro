@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { AccessToken, WebhookReceiver } = require('livekit-server-sdk');
+const { setupFriendsFeature } = require('./friends');
 require('dotenv').config();
 
 // 1. INITIALIZE EXPRESS FIRST
@@ -211,6 +212,8 @@ const io = new Server(server, {
     pingTimeout: 60000,
     allowEIO3: true
 });
+
+setupFriendsFeature({ app, io, mongoose });
 
 const PORT = process.env.PORT || 5000;
 

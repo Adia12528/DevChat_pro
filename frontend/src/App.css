@@ -1,5 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap');
 
+.entry-mode-toggle {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.entry-mode-btn {
+  flex: 1;
+  border: 1px solid rgba(0, 168, 132, 0.22);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 168, 132, 0.05);
+  color: #0f5132;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.entry-mode-btn.active {
+  border-color: rgba(0, 168, 132, 0.7);
+  background: rgba(0, 168, 132, 0.15);
+}
+
 /* ==================== CSS VARIABLES ==================== */
 :root {
   --font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;

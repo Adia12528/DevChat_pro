@@ -57,6 +57,7 @@ import {
 // ==================== HOOK IMPORTS ====================
 import { useEnhancedCall } from './hooks/useEnhancedcall';
 import { useWebRTC } from './hooks/useWebRTC';
+import FriendsFeature from './features/friends/FriendsFeature';
 
 const ModernStreamPanel = React.lazy(() => import('./components/streaming/ModernStreamPanel'));
 const LiveKitStage = React.lazy(() => import('./components/streaming/LiveKitStage'));
@@ -126,6 +127,7 @@ function AppContent() {
   const [username, setUsername] = useState('');
   const [room, setRoom] = useState('');
   const [showChat, setShowChat] = useState(false);
+  const [entryMode, setEntryMode] = useState(() => sessionStorage.getItem('devchatEntryMode') || 'classic');
   const [message, setMessage] = useState('');
   const [chat, setChat] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -1235,6 +1237,10 @@ function AppContent() {
         return 'auto';
     }
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem('devchatEntryMode', entryMode);
+  }, [entryMode]);
 
   const applyStreamQualityToActiveTrack = useCallback(async (quality) => {
     const profile = getStreamQualityVideoConstraints(quality);
@@ -6369,11 +6375,38 @@ function AppContent() {
     return (
       <div className="login-screen">
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
-          <Zap color="#00a884" size={48} fill="#00a884" />
-          <h2 className="brand">DevChat <span>Pro+</span></h2>
-          <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} autoFocus /></div>
-          <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} /></div>
-          <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
+          <div className="entry-mode-toggle" role="tablist" aria-label="Choose chat mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={entryMode === 'classic'}
+              className={`entry-mode-btn ${entryMode === 'classic' ? 'active' : ''}`}
+              onClick={() => setEntryMode('classic')}
+            >
+              Username + Room
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={entryMode === 'friends'}
+              className={`entry-mode-btn ${entryMode === 'friends' ? 'active' : ''}`}
+              onClick={() => setEntryMode('friends')}
+            >
+              Friends Login
+            </button>
+          </div>
+
+          {entryMode === 'classic' ? (
+            <>
+              <Zap color="#00a884" size={48} fill="#00a884" />
+              <h2 className="brand">DevChat <span>Pro+</span></h2>
+              <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} autoFocus /></div>
+              <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} /></div>
+              <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
+            </>
+          ) : (
+            <FriendsFeature />
+          )}
         </motion.div>
       </div>
     );
