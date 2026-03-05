@@ -32,6 +32,18 @@ FIREBASE_CLIENT_EMAIL=...
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
+Alternative (recommended on hosted platforms):
+
+```bash
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+```
+
+Or base64 alternative:
+
+```bash
+FIREBASE_SERVICE_ACCOUNT_BASE64=base64_encoded_service_account_json
+```
+
 Important:
 - Keep `\n` escaped as shown in `.env`; backend converts them to real newlines.
 - Do not commit these secrets.
@@ -44,6 +56,7 @@ Important:
 
 2. Authorized domains:
 - Add your frontend host(s), e.g. `localhost`, your Vercel domain, and custom domain.
+- Example for your error: add `devchat-pro-frontend.vercel.app`.
 
 3. For local Phone OTP testing:
 - Optionally add test phone numbers in Firebase Auth settings.

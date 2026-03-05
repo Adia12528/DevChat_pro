@@ -60,25 +60,82 @@ const parseDisappearingPolicy = (policy = { mode: 'keep' }) => {
   return null;
 };
 
-const firebaseEnabled = () => {
-  return !!(
-    process.env.FIREBASE_PROJECT_ID &&
-    process.env.FIREBASE_CLIENT_EMAIL &&
-    process.env.FIREBASE_PRIVATE_KEY
-  );
+const normalizePrivateKey = (value) => {
+  if (!value) return '';
+  return String(value)
+    .replace(/^"|"$/g, '')
+    .replace(/\\n/g, '\n')
+    .trim();
 };
 
+const parseJsonCredential = (value) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const parseBase64JsonCredential = (value) => {
+  if (!value) return null;
+  try {
+    const decoded = Buffer.from(String(value), 'base64').toString('utf8');
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+};
+
+const getFirebaseServiceAccount = () => {
+  const jsonCredential =
+    parseJsonCredential(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) ||
+    parseJsonCredential(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) ||
+    parseBase64JsonCredential(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64);
+
+  if (jsonCredential?.project_id && jsonCredential?.client_email && jsonCredential?.private_key) {
+    return {
+      projectId: jsonCredential.project_id,
+      clientEmail: jsonCredential.client_email,
+      privateKey: normalizePrivateKey(jsonCredential.private_key)
+    };
+  }
+
+  const projectId = String(process.env.FIREBASE_PROJECT_ID || '').trim();
+  const clientEmail = String(process.env.FIREBASE_CLIENT_EMAIL || '').trim();
+  let privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+
+  if (!privateKey && process.env.FIREBASE_PRIVATE_KEY_BASE64) {
+    try {
+      privateKey = normalizePrivateKey(Buffer.from(String(process.env.FIREBASE_PRIVATE_KEY_BASE64), 'base64').toString('utf8'));
+    } catch {
+      privateKey = '';
+    }
+  }
+
+  if (projectId && clientEmail && privateKey) {
+    return { projectId, clientEmail, privateKey };
+  }
+
+  return null;
+};
+
+const firebaseEnabled = () => !!getFirebaseServiceAccount();
+
 const initializeFirebaseAdmin = () => {
-  if (!firebaseEnabled()) return false;
   if (admin.apps.length > 0) return true;
 
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    })
-  });
+  const serviceAccount = getFirebaseServiceAccount();
+  if (!serviceAccount) return false;
+
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+  } catch (error) {
+    console.error('❌ Firebase Admin init failed for friends feature:', error.message);
+    return false;
+  }
 
   return true;
 };
@@ -146,7 +203,7 @@ const toPublicProfile = (profile) => ({
 const friendsAuthMiddleware = (enabled) => async (req, res, next) => {
   if (!enabled) {
     return res.status(503).json({
-      error: 'Firebase auth is not configured on backend. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY.'
+      error: 'Firebase auth is not configured on backend. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY).'
     });
   }
 
