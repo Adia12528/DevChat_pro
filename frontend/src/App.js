@@ -744,18 +744,6 @@ function AppContent() {
   }, [appSettings?.ui?.compactMode]);
 
   useEffect(() => {
-    const contextTheme = appSettings?.ui?.theme || 'dark';
-    if (contextTheme !== theme) {
-      updateSettings({
-        ui: {
-          ...(appSettings?.ui || {}),
-          theme
-        }
-      });
-    }
-  }, [theme, appSettings?.ui, updateSettings]);
-
-  useEffect(() => {
     const contextSoundEnabled = appSettings?.notifications?.soundEnabled ?? true;
     if (contextSoundEnabled !== soundEnabled) {
       updateSettings({
@@ -6601,7 +6589,23 @@ function AppContent() {
         )}
         
         <div className="users-info" title={`${onlineUsers.length} online`}><Users size={16}/><span className="users-count">{onlineUsers.length}</span></div>
-        <button className="theme-toggle" type="button" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme">{theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={() => {
+            const nextTheme = theme === 'dark' ? 'light' : 'dark';
+            setTheme(nextTheme);
+            updateSettings({
+              ui: {
+                ...(appSettings?.ui || {}),
+                theme: nextTheme,
+              },
+            });
+          }}
+          title="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
+        </button>
         <button className={`sound-toggle ${soundEnabled ? 'enabled' : 'disabled'}`} type="button" onClick={toggleDashboardSound} title={soundEnabled ? "Mute" : "Unmute"}>{soundEnabled ? <Volume2 size={18}/> : <VolumeX size={18}/>}</button>
         <button className="clear-btn" onClick={() => setShowClearConfirm(true)} title="Clear all"><Trash2 size={18}/></button>
       </div>
