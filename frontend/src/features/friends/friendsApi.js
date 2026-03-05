@@ -2,7 +2,7 @@ const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
   (window.location.hostname.includes('localhost')
     ? 'http://localhost:5000'
-    : 'https://devchat-pro-backend.vercel.app');
+    : 'https://devchat-pro.onrender.com');
 
 const request = async (path, token, options = {}) => {
   const response = await fetch(`${BACKEND_URL}${path}`, {

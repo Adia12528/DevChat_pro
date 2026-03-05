@@ -103,6 +103,14 @@ const mapFirebaseAuthError = (error) => {
   return error?.message || 'Authentication failed';
 };
 
+const mapFriendsBackendError = (error) => {
+  const raw = error?.message || String(error || '');
+  if (raw.includes('Firebase auth is not configured on backend')) {
+    return 'Friends backend Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY) on the backend host and redeploy.';
+  }
+  return raw || 'Friends backend request failed';
+};
+
 const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error }) => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -812,7 +820,7 @@ function FriendsFeature() {
 
   useEffect(() => {
     if (!authToken) return;
-    refreshProfile(authToken).catch((e) => setError(e.message || 'Profile sync failed'));
+    refreshProfile(authToken).catch((e) => setError(mapFriendsBackendError(e) || 'Profile sync failed'));
   }, [authToken]);
 
   useEffect(() => {
