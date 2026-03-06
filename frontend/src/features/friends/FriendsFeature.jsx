@@ -246,7 +246,7 @@ const FriendsSettingsPage = ({ profile, authToken, onProfileRefresh, onBackHome,
   );
 };
 
-const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, socket, onOpenSettings, onBackHome }) => {
+const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, socket, onOpenSettings }) => {
   const [nameDraft, setNameDraft] = useState(profile.displayName || '');
   const [bioDraft, setBioDraft] = useState(profile.bio || '');
   const [contacts, setContacts] = useState([]);
@@ -259,6 +259,8 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
   const [customExpire, setCustomExpire] = useState('');
   const [error, setError] = useState('');
   const [typingByContact, setTypingByContact] = useState({});
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 960 : false));
+  const [mobilePane, setMobilePane] = useState('list');
 
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
@@ -456,6 +458,21 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
       pendingSendTimersRef.current = {};
     };
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileLayout(window.innerWidth <= 960);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      setMobilePane('list');
+    }
+  }, [isMobileLayout]);
 
   const handleSaveProfile = async () => {
     try {
@@ -689,69 +706,106 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
     socket.emit('friends:mark_unread', { withUniqueId: selectedContactId });
   };
 
+  const handleSelectContact = (contactUniqueId) => {
+    setSelectedContactId(contactUniqueId);
+    if (isMobileLayout) {
+      setMobilePane('chat');
+    }
+  };
+
   const contactTyping = selectedContactId ? !!typingByContact[selectedContactId] : false;
 
   return (
-    <div className="friends-shell">
+    <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
-        <div className="friends-profile-card">
-          <strong>{profile.displayName || 'Friend'}</strong>
-          <div className="friends-id-badge">ID: {profile.uniqueId}</div>
-          <div className="friends-row"><input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Display name" /></div>
-          <div className="friends-row"><textarea value={bioDraft} onChange={(e) => setBioDraft(e.target.value)} placeholder="Bio" rows={3} /></div>
-          <div className="friends-row">
-            <button type="button" onClick={handleSaveProfile}>Save Profile</button>
-            <button type="button" className="secondary" onClick={onLogout}>Log out</button>
+        <header className="friends-side-header">
+          <div className="friends-self-avatar" aria-hidden="true">
+            {(profile.displayName || profile.uniqueId || 'FR').slice(0, 2).toUpperCase()}
           </div>
+          <div className="friends-self-meta">
+            <strong>{profile.displayName || 'Friend'}</strong>
+            <span className="friends-id-badge">ID: {profile.uniqueId}</span>
+          </div>
+          <button type="button" className="secondary" onClick={onLogout}>Logout</button>
+        </header>
+
+        <div className="friends-search-wrap">
+          <input
+            placeholder="Search or start new chat by name / ID / email"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
         </div>
 
-        <div>
-          <div className="friends-row">
-            <input placeholder="Search by name / ID / email" value={query} onChange={(e) => handleSearch(e.target.value)} />
-          </div>
-          {searchResults.map((item) => (
-            <div key={item.uniqueId} className="friends-row">
-              <button type="button" className="secondary" onClick={() => handleAddContact(item.uniqueId)}>
+        {searchResults.length > 0 ? (
+          <div className="friends-search-results">
+            {searchResults.map((item) => (
+              <button
+                key={item.uniqueId}
+                type="button"
+                className="friends-search-result"
+                onClick={() => handleAddContact(item.uniqueId)}
+              >
                 Add {item.displayName || item.uniqueId}
               </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
 
-        <div className="friends-contacts">
+        <div className="friends-contacts" aria-label="Friends conversations">
           {contacts.map((contact) => (
             <button
               key={contact.uniqueId}
               className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
               type="button"
-              onClick={() => setSelectedContactId(contact.uniqueId)}
+              onClick={() => handleSelectContact(contact.uniqueId)}
             >
-              <div className="friends-contact-top">
-                <span className="friends-contact-name">
-                  {contact.displayName || contact.uniqueId}
-                  <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
-                </span>
-                {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
+              <div className="friends-contact-avatar" aria-hidden="true">
+                {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
               </div>
-              <small>
-                {contact.uniqueId}
-                {contact.online ? ' • online' : (contact.lastSeen ? ` • last seen ${new Date(contact.lastSeen).toLocaleTimeString()}` : '')}
-              </small>
-              <div className="friends-contact-preview">
-                {contact.lastMessage?.text ? contact.lastMessage.text : 'No messages yet'}
+              <div className="friends-contact-content">
+                <div className="friends-contact-top">
+                  <span className="friends-contact-name">
+                    {contact.displayName || contact.uniqueId}
+                    <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
+                  </span>
+                  {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
+                </div>
+                <small>
+                  {contact.online ? 'online now' : (contact.lastSeen ? `last seen ${new Date(contact.lastSeen).toLocaleTimeString()}` : contact.uniqueId)}
+                </small>
+                <div className="friends-contact-preview">
+                  {contact.lastMessage?.text ? contact.lastMessage.text : 'Tap to start chatting'}
+                </div>
               </div>
             </button>
           ))}
+        </div>
+
+        <div className="friends-profile-card compact">
+          <div className="friends-row"><input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Display name" /></div>
+          <div className="friends-row"><textarea value={bioDraft} onChange={(e) => setBioDraft(e.target.value)} placeholder="Bio" rows={2} /></div>
+          <div className="friends-row">
+            <button type="button" onClick={handleSaveProfile}>Save Profile</button>
+            <button type="button" className="secondary" onClick={onOpenSettings}>Full Settings</button>
+          </div>
         </div>
       </aside>
 
       <section className="friends-main">
         <header className="friends-chat-header">
-          {selectedContact ? `Chat with ${selectedContact.displayName || selectedContact.uniqueId}` : 'Choose a friend to start chatting'}
-          {contactTyping ? <div className="friends-typing-indicator">Typing...</div> : null}
-          <div className="friends-header-actions">
-            <button type="button" className="secondary" onClick={onBackHome}>Home</button>
-            <button type="button" className="secondary" onClick={onOpenSettings}>Settings</button>
+          <div className="friends-chat-header-main">
+            {isMobileLayout && mobilePane === 'chat' ? (
+              <button
+                type="button"
+                className="secondary friends-mobile-back"
+                onClick={() => setMobilePane('list')}
+              >
+                Back
+              </button>
+            ) : null}
+            {selectedContact ? `Chat with ${selectedContact.displayName || selectedContact.uniqueId}` : 'Choose a friend to start chatting'}
+            {contactTyping ? <div className="friends-typing-indicator">Typing...</div> : null}
           </div>
           {selectedContact ? (
             <div className="friends-header-actions">
@@ -870,7 +924,7 @@ function FriendsFeature() {
   const [phoneState, setPhoneState] = useState('idle');
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [socket, setSocket] = useState(null);
-  const [postLoginView, setPostLoginView] = useState('home');
+  const [postLoginView, setPostLoginView] = useState('chat');
 
   const recaptchaRef = useRef(null);
 
@@ -889,7 +943,7 @@ function FriendsFeature() {
       if (!nextUser) {
         setAuthToken('');
         setProfile(null);
-        setPostLoginView('home');
+        setPostLoginView('chat');
         return;
       }
       try {
@@ -1022,24 +1076,13 @@ function FriendsFeature() {
     );
   }
 
-  if (postLoginView === 'home') {
-    return (
-      <FriendsHomePage
-        profile={profile}
-        onOpenChats={() => setPostLoginView('chat')}
-        onOpenSettings={() => setPostLoginView('settings')}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
   if (postLoginView === 'settings') {
     return (
       <FriendsSettingsPage
         profile={profile}
         authToken={authToken}
         onProfileRefresh={async () => refreshProfile()}
-        onBackHome={() => setPostLoginView('home')}
+        onBackHome={() => setPostLoginView('chat')}
         onOpenChats={() => setPostLoginView('chat')}
         onLogout={handleLogout}
       />
@@ -1054,7 +1097,6 @@ function FriendsFeature() {
       onLogout={handleLogout}
       socket={socket}
       onOpenSettings={() => setPostLoginView('settings')}
-      onBackHome={() => setPostLoginView('home')}
     />
   );
 }
