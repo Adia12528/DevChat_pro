@@ -17,7 +17,6 @@ import {
   fetchFriendsProfile,
   getFriendsBackendUrl,
   searchUsers,
-  updateContactPreferences,
   updateFriendsProfile
 } from './friendsApi';
 
@@ -34,6 +33,25 @@ const getFriendlyRemaining = (expiresAt) => {
 };
 
 const makeTempMessageId = () => `temp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+
+const formatDayLabel = (input) => {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfToday - startOfDate) / 86400000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+};
 
 const getReceiptConfig = (msg) => {
   if (!msg?.isMine) return null;
@@ -246,26 +264,29 @@ const FriendsSettingsPage = ({ profile, authToken, onProfileRefresh, onBackHome,
   );
 };
 
-const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, socket, onOpenSettings }) => {
-  const [nameDraft, setNameDraft] = useState(profile.displayName || '');
-  const [bioDraft, setBioDraft] = useState(profile.bio || '');
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings }) => {
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [message, setMessage] = useState('');
-  const [disappearMode, setDisappearMode] = useState('__default__');
-  const [customExpire, setCustomExpire] = useState('');
   const [error, setError] = useState('');
   const [typingByContact, setTypingByContact] = useState({});
   const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 960 : false));
   const [mobilePane, setMobilePane] = useState('list');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
   const typingActiveRef = useRef(false);
   const pendingSendTimersRef = useRef({});
+  const menuRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const firstUnreadDividerRef = useRef(null);
+  const shouldAutoScrollUnreadRef = useRef(false);
+  const swipeStartRef = useRef(null);
 
   const selectedContact = useMemo(
     () => contacts.find((item) => item.uniqueId === selectedContactId) || null,
@@ -325,16 +346,12 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
   };
 
   useEffect(() => {
-    setNameDraft(profile.displayName || '');
-    setBioDraft(profile.bio || '');
-  }, [profile.displayName, profile.bio]);
-
-  useEffect(() => {
     loadContacts();
   }, []);
 
   useEffect(() => {
     if (!selectedContactId) return;
+    shouldAutoScrollUnreadRef.current = true;
     loadMessages(selectedContactId);
     socket?.emit('friends:join_conversation', { withUniqueId: selectedContactId });
     emitMarkRead(selectedContactId);
@@ -474,18 +491,28 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
     }
   }, [isMobileLayout]);
 
-  const handleSaveProfile = async () => {
-    try {
-      setError('');
-      await updateFriendsProfile(authToken, {
-        displayName: nameDraft,
-        bio: bioDraft
-      });
-      await onProfileRefresh();
-    } catch (e) {
-      setError(e.message || 'Failed to update profile');
-    }
-  };
+  useEffect(() => {
+    const handleDocClick = (event) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setIsMenuOpen(false);
+      setIsAddModalOpen(false);
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
 
   const handleSearch = async (value) => {
     setQuery(value);
@@ -510,6 +537,9 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
       setSearchResults([]);
       await loadContacts();
       setSelectedContactId(targetUniqueId);
+      if (isMobileLayout) {
+        setMobilePane('chat');
+      }
     } catch (e) {
       setError(e.message || 'Unable to add contact');
     }
@@ -518,18 +548,7 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
   const handleSendMessage = () => {
     if (!socket || !selectedContactId || !message.trim()) return;
 
-    const defaultPolicy = selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' };
-
-    const policy =
-      disappearMode === '__default__'
-        ? defaultPolicy
-        : disappearMode === 'keep'
-          ? { mode: 'keep' }
-          : disappearMode === 'immediate'
-            ? { mode: 'immediate' }
-            : disappearMode === 'custom'
-              ? { mode: 'custom', value: customExpire }
-              : { mode: 'preset', value: disappearMode };
+    const policy = selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' };
 
     const messageText = message;
     const tempId = makeTempMessageId();
@@ -593,69 +612,6 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
     typingActiveRef.current = false;
   };
 
-  const handleToggleMute = async () => {
-    if (!selectedContact) return;
-    try {
-      setError('');
-      await updateContactPreferences(authToken, selectedContact.uniqueId, {
-        muted: !(selectedContact.preferences?.muted),
-        notifications: selectedContact.preferences?.notifications !== false,
-        notificationSound: selectedContact.preferences?.notificationSound || 'soft',
-        defaultDisappearPolicy: selectedContact.preferences?.defaultDisappearPolicy || { mode: 'keep' }
-      });
-      await loadContacts();
-    } catch (e) {
-      setError(e.message || 'Failed to update mute preference');
-    }
-  };
-
-  const handleToggleNotifications = async () => {
-    if (!selectedContact) return;
-    try {
-      setError('');
-      await updateContactPreferences(authToken, selectedContact.uniqueId, {
-        muted: !!selectedContact.preferences?.muted,
-        notifications: !(selectedContact.preferences?.notifications !== false),
-        notificationSound: selectedContact.preferences?.notificationSound || 'soft',
-        defaultDisappearPolicy: selectedContact.preferences?.defaultDisappearPolicy || { mode: 'keep' }
-      });
-      await loadContacts();
-    } catch (e) {
-      setError(e.message || 'Failed to update notification preference');
-    }
-  };
-
-  const handleDefaultDisappearPolicyChange = async (value) => {
-    if (!selectedContact) return;
-
-    const nextDefault =
-      value === '__keep__'
-        ? { mode: 'keep' }
-        : value === '__immediate__'
-          ? { mode: 'immediate' }
-          : value === '__1h__'
-            ? { mode: 'preset', value: '1h' }
-            : value === '__24h__'
-              ? { mode: 'preset', value: '24h' }
-              : value === '__3d__'
-                ? { mode: 'preset', value: '3d' }
-                : value === '__7d__'
-                  ? { mode: 'preset', value: '7d' }
-                  : { mode: 'keep' };
-
-    try {
-      setError('');
-      await updateContactPreferences(authToken, selectedContact.uniqueId, {
-        muted: !!selectedContact.preferences?.muted,
-        notifications: selectedContact.preferences?.notifications !== false,
-        notificationSound: selectedContact.preferences?.notificationSound || 'soft',
-        defaultDisappearPolicy: nextDefault
-      });
-      await loadContacts();
-    } catch (e) {
-      setError(e.message || 'Failed to update default disappearing policy');
-    }
-  };
 
   const handleMessageInputChange = (value) => {
     setMessage(value);
@@ -684,28 +640,6 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
     }, 1600);
   };
 
-  const handleNotificationSoundChange = async (sound) => {
-    if (!selectedContact) return;
-    try {
-      setError('');
-      await updateContactPreferences(authToken, selectedContact.uniqueId, {
-        muted: !!selectedContact.preferences?.muted,
-        notifications: selectedContact.preferences?.notifications !== false,
-        notificationSound: sound,
-        defaultDisappearPolicy: selectedContact.preferences?.defaultDisappearPolicy || { mode: 'keep' }
-      });
-      await loadContacts();
-      playNotificationTone(sound);
-    } catch (e) {
-      setError(e.message || 'Failed to update notification sound');
-    }
-  };
-
-  const handleMarkConversationUnread = () => {
-    if (!socket || !selectedContactId) return;
-    socket.emit('friends:mark_unread', { withUniqueId: selectedContactId });
-  };
-
   const handleSelectContact = (contactUniqueId) => {
     setSelectedContactId(contactUniqueId);
     if (isMobileLayout) {
@@ -713,46 +647,145 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
     }
   };
 
+  const handleOpenAddModal = () => {
+    setQuery('');
+    setSearchResults([]);
+    setIsAddModalOpen(true);
+  };
+
   const contactTyping = selectedContactId ? !!typingByContact[selectedContactId] : false;
+
+  const timelineItems = useMemo(() => {
+    const items = [];
+    let lastDayKey = '';
+    let unreadInserted = false;
+
+    for (const msg of activeMessages) {
+      const createdAtDate = new Date(msg.createdAt);
+      const dayKey = Number.isNaN(createdAtDate.getTime())
+        ? ''
+        : `${createdAtDate.getFullYear()}-${createdAtDate.getMonth()}-${createdAtDate.getDate()}`;
+
+      if (dayKey && dayKey !== lastDayKey) {
+        items.push({
+          type: 'date',
+          id: `date-${dayKey}`,
+          label: formatDayLabel(msg.createdAt)
+        });
+        lastDayKey = dayKey;
+      }
+
+      if (!unreadInserted && !msg.isMine && !msg.readAt) {
+        items.push({
+          type: 'unread',
+          id: `unread-${msg.id}`,
+          label: 'Unread messages'
+        });
+        unreadInserted = true;
+      }
+
+      items.push({ type: 'message', id: msg.id, message: msg });
+    }
+
+    return items;
+  }, [activeMessages]);
+
+  useEffect(() => {
+    if (!selectedContactId || !shouldAutoScrollUnreadRef.current) return;
+
+    const rafId = window.requestAnimationFrame(() => {
+      if (firstUnreadDividerRef.current) {
+        firstUnreadDividerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      shouldAutoScrollUnreadRef.current = false;
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [selectedContactId, timelineItems]);
+
+  const handleChatTouchStart = (event) => {
+    if (!isMobileLayout || mobilePane !== 'chat') return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    swipeStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      at: Date.now()
+    };
+  };
+
+  const handleChatTouchEnd = (event) => {
+    if (!isMobileLayout || mobilePane !== 'chat') return;
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const elapsed = Date.now() - start.at;
+    const startedFromEdge = start.x <= 48;
+
+    if (startedFromEdge && dx > 70 && Math.abs(dy) < 64 && elapsed < 700) {
+      setMobilePane('list');
+    }
+  };
 
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
         <header className="friends-side-header">
-          <div className="friends-self-avatar" aria-hidden="true">
-            {(profile.displayName || profile.uniqueId || 'FR').slice(0, 2).toUpperCase()}
+          <div className="friends-menu-wrap" ref={menuRef}>
+            <button
+              type="button"
+              className="friends-menu-button"
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              aria-expanded={isMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Open friends menu"
+            >
+              ☰
+            </button>
+            {isMenuOpen ? (
+              <div className="friends-menu-dropdown" role="menu" aria-label="Friends menu">
+                <button
+                  type="button"
+                  className="friends-menu-item"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setMobilePane('list');
+                    onOpenSettings();
+                  }}
+                >
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  className="friends-menu-item"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    onLogout();
+                  }}
+                >
+                  Log out
+                </button>
+              </div>
+            ) : null}
           </div>
           <div className="friends-self-meta">
-            <strong>{profile.displayName || 'Friend'}</strong>
-            <span className="friends-id-badge">ID: {profile.uniqueId}</span>
+            <strong>Chats</strong>
+            <span className="friends-id-badge">{profile.displayName || profile.uniqueId}</span>
           </div>
-          <button type="button" className="secondary" onClick={onLogout}>Logout</button>
         </header>
 
-        <div className="friends-search-wrap">
-          <input
-            placeholder="Search or start new chat by name / ID / email"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-        </div>
-
-        {searchResults.length > 0 ? (
-          <div className="friends-search-results">
-            {searchResults.map((item) => (
-              <button
-                key={item.uniqueId}
-                type="button"
-                className="friends-search-result"
-                onClick={() => handleAddContact(item.uniqueId)}
-              >
-                Add {item.displayName || item.uniqueId}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
         <div className="friends-contacts" aria-label="Friends conversations">
+          {contacts.length === 0 ? (
+            <div className="friends-empty-list">No chats yet. Tap + to add people.</div>
+          ) : null}
           {contacts.map((contact) => (
             <button
               key={contact.uniqueId}
@@ -781,18 +814,13 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
             </button>
           ))}
         </div>
-
-        <div className="friends-profile-card compact">
-          <div className="friends-row"><input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Display name" /></div>
-          <div className="friends-row"><textarea value={bioDraft} onChange={(e) => setBioDraft(e.target.value)} placeholder="Bio" rows={2} /></div>
-          <div className="friends-row">
-            <button type="button" onClick={handleSaveProfile}>Save Profile</button>
-            <button type="button" className="secondary" onClick={onOpenSettings}>Full Settings</button>
-          </div>
-        </div>
       </aside>
 
-      <section className="friends-main">
+      <section
+        className="friends-main"
+        onTouchStart={handleChatTouchStart}
+        onTouchEnd={handleChatTouchEnd}
+      >
         <header className="friends-chat-header">
           <div className="friends-chat-header-main">
             {isMobileLayout && mobilePane === 'chat' ? (
@@ -807,91 +835,56 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
             {selectedContact ? `Chat with ${selectedContact.displayName || selectedContact.uniqueId}` : 'Choose a friend to start chatting'}
             {contactTyping ? <div className="friends-typing-indicator">Typing...</div> : null}
           </div>
-          {selectedContact ? (
-            <div className="friends-header-actions">
-              <button type="button" className="secondary" onClick={handleToggleMute}>
-                {selectedContact.preferences?.muted ? 'Unmute' : 'Mute'}
-              </button>
-              <button type="button" className="secondary" onClick={handleToggleNotifications}>
-                {selectedContact.preferences?.notifications === false ? 'Enable Notifications' : 'Disable Notifications'}
-              </button>
-              <button type="button" className="secondary" onClick={handleMarkConversationUnread}>
-                Mark unread
-              </button>
-              <select
-                className="friends-default-disappear"
-                value={selectedContact.preferences?.notificationSound || 'soft'}
-                onChange={(e) => handleNotificationSoundChange(e.target.value)}
-                title="Notification sound"
-              >
-                <option value="soft">Sound: Soft</option>
-                <option value="chime">Sound: Chime</option>
-                <option value="pop">Sound: Pop</option>
-                <option value="none">Sound: None</option>
-              </select>
-              <select
-                className="friends-default-disappear"
-                value={(() => {
-                  const p = selectedContact.preferences?.defaultDisappearPolicy;
-                  if (!p || p.mode === 'keep') return '__keep__';
-                  if (p.mode === 'immediate') return '__immediate__';
-                  if (p.mode === 'preset' && p.value === '1h') return '__1h__';
-                  if (p.mode === 'preset' && p.value === '24h') return '__24h__';
-                  if (p.mode === 'preset' && p.value === '3d') return '__3d__';
-                  if (p.mode === 'preset' && p.value === '7d') return '__7d__';
-                  return '__keep__';
-                })()}
-                onChange={(e) => handleDefaultDisappearPolicyChange(e.target.value)}
-                title="Default disappearing policy for this contact"
-              >
-                <option value="__keep__">Default keep</option>
-                <option value="__immediate__">Default immediate</option>
-                <option value="__1h__">Default 1 hour</option>
-                <option value="__24h__">Default 24 hours</option>
-                <option value="__3d__">Default 3 days</option>
-                <option value="__7d__">Default 7 days</option>
-              </select>
-            </div>
-          ) : null}
         </header>
 
-        <div className="friends-messages">
-          {activeMessages.map((msg) => (
-            <article key={msg.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
-              <div>{msg.text}</div>
-              <div className="friends-msg-meta">
-                <span>{new Date(msg.createdAt).toLocaleString()} • {getFriendlyRemaining(msg.expiresAt)}</span>
-                {msg.isMine ? (() => {
-                  const receipt = getReceiptConfig(msg);
-                  if (!receipt) return null;
-                  return (
-                    <span className={`friends-receipt ${receipt.className}`} title={receipt.title} aria-label={receipt.title}>
-                      <span key={`${msg.id}-${receipt.className}`} className="friends-receipt-text">{receipt.text}</span>
-                    </span>
-                  );
-                })() : null}
-              </div>
-            </article>
-          ))}
+        <div className="friends-messages" ref={messagesContainerRef}>
+          {!selectedContact ? (
+            <div className="friends-chat-empty">Select a friend from chats to start messaging.</div>
+          ) : null}
+          {timelineItems.map((item) => {
+            if (item.type === 'date') {
+              return (
+                <div key={item.id} className="friends-date-divider" aria-label={`Date: ${item.label}`}>
+                  <span>{item.label}</span>
+                </div>
+              );
+            }
+
+            if (item.type === 'unread') {
+              return (
+                <div
+                  key={item.id}
+                  className="friends-unread-divider"
+                  aria-label="Unread messages"
+                  ref={firstUnreadDividerRef}
+                >
+                  <span>{item.label}</span>
+                </div>
+              );
+            }
+
+            const msg = item.message;
+            return (
+              <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
+                <div>{msg.text}</div>
+                <div className="friends-msg-meta">
+                  <span>{new Date(msg.createdAt).toLocaleString()} • {getFriendlyRemaining(msg.expiresAt)}</span>
+                  {msg.isMine ? (() => {
+                    const receipt = getReceiptConfig(msg);
+                    if (!receipt) return null;
+                    return (
+                      <span className={`friends-receipt ${receipt.className}`} title={receipt.title} aria-label={receipt.title}>
+                        <span key={`${msg.id}-${receipt.className}`} className="friends-receipt-text">{receipt.text}</span>
+                      </span>
+                    );
+                  })() : null}
+                </div>
+              </article>
+            );
+          })}
         </div>
 
         <div className="friends-input-wrap">
-          <div className="friends-row">
-            <select value={disappearMode} onChange={(e) => setDisappearMode(e.target.value)}>
-              <option value="__default__">Use contact default</option>
-              <option value="keep">Keep chat</option>
-              <option value="immediate">Disappear immediately</option>
-              <option value="1h">1 hour</option>
-              <option value="24h">24 hours</option>
-              <option value="3d">3 days</option>
-              <option value="7d">7 days (max)</option>
-              <option value="custom">Custom date/time (max 7 days)</option>
-            </select>
-            {disappearMode === 'custom' ? (
-              <input type="datetime-local" value={customExpire} onChange={(e) => setCustomExpire(e.target.value)} />
-            ) : null}
-          </div>
-
           <div className="friends-row">
             <input
               placeholder={selectedContact ? 'Type a message...' : 'Add/select a friend to start'}
@@ -912,6 +905,66 @@ const FriendsWorkspace = ({ authToken, profile, onProfileRefresh, onLogout, sock
           {error ? <p className="friends-error">{error}</p> : null}
         </div>
       </section>
+
+      <button
+        type="button"
+        className="friends-fab"
+        onClick={handleOpenAddModal}
+        aria-label="Add people"
+      >
+        +
+      </button>
+
+      {isAddModalOpen ? (
+        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsAddModalOpen(false)}>
+          <div
+            className="friends-add-modal"
+            role="dialog"
+            aria-label="Add people"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4>Add people</h4>
+            <p>Search by email, phone number, name, or unique ID.</p>
+            <input
+              placeholder="example@email.com or +911234567890"
+              value={query}
+              onChange={(e) => handleSearch(e.target.value)}
+              autoFocus
+            />
+            <div className="friends-add-results">
+              {searchResults.length === 0 && query.trim() ? <div className="friends-empty">No users found.</div> : null}
+              {searchResults.map((item) => (
+                <button
+                  key={item.uniqueId}
+                  type="button"
+                  className="friends-search-result"
+                  onClick={() => {
+                    handleAddContact(item.uniqueId);
+                    setIsAddModalOpen(false);
+                  }}
+                >
+                  Add {item.displayName || item.uniqueId}
+                </button>
+              ))}
+            </div>
+            <div className="friends-add-modal-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!query.trim()) return;
+                  const first = searchResults?.[0];
+                  if (!first?.uniqueId) return;
+                  handleAddContact(first.uniqueId);
+                  setIsAddModalOpen(false);
+                }}
+              >
+                Add First Match
+              </button>
+              <button type="button" className="secondary" onClick={() => setIsAddModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -1093,7 +1146,6 @@ function FriendsFeature() {
     <FriendsWorkspace
       authToken={authToken}
       profile={profile}
-      onProfileRefresh={async () => refreshProfile()}
       onLogout={handleLogout}
       socket={socket}
       onOpenSettings={() => setPostLoginView('settings')}
