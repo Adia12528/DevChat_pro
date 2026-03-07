@@ -1,261 +1,894 @@
-      // Forward message handler
-      const handleForwardMessage = async (targetUniqueId) => {
-        if (!socket || !forwardMsg || !targetUniqueId) return;
-        const tempId = makeTempMessageId();
-        const policy = { mode: 'keep' };
-        const optimisticMessage = {
-          id: tempId,
-          text: forwardMsg.text,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          disappearPolicy: policy,
-          isMine: true,
-          deliveryStatus: 'pending',
-          forwarded: true,
-          ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
-        };
-        setMessagesByContact((prev) => {
-          const current = prev[targetUniqueId] || [];
-          return {
-            ...prev,
-            [targetUniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-          };
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
+// --- LoginPanel: must be defined before FriendsFeature uses it ---
+const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+
+  return (
+    <div className="friends-login" aria-label="Friends auth login">
+      <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
+        <button
+          type="button"
+          role="tab"
+          className="friends-mode-btn"
+          onClick={onSwitchToClassic}
+          disabled={!onSwitchToClassic}
+        >
+          Username + Room
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          className="friends-mode-btn active"
+          disabled
+        >
+          Friends Login
+        </button>
+      </div>
+
+      <h3 className="friends-title">Friends Login</h3>
+      <p className="friends-subtitle">Use Firebase auth. Your chats sync through backend + socket namespace.</p>
+
+      <div className="friends-row">
+        <button type="button" onClick={onGoogleLogin}>Continue with Google</button>
+      </div>
+      <p className="friends-note">If popups are blocked, sign-in will continue with a secure redirect.</p>
+
+      <div className="friends-row">
+        <input
+          placeholder="Phone number (E.164, e.g. +911234567890)"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          disabled={phoneState === 'sending'}
+        />
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onPhoneStart(phone)}
+          disabled={!phone.trim() || phoneState === 'sending'}
+        >
+          {phoneState === 'sending' ? 'Sending...' : 'Send OTP'}
+        </button>
+      </div>
+
+      <div className="friends-row">
+        <input
+          placeholder="Enter OTP"
+          value={otp}
+          onChange={(e) => setOtp(e.target.value)}
+          disabled={phoneState !== 'code-sent'}
+        />
+        <button
+          type="button"
+          onClick={() => onPhoneConfirm(otp)}
+          disabled={phoneState !== 'code-sent' || !otp.trim()}
+        >
+          Verify OTP
+        </button>
+      </div>
+
+      <div id="friends-recaptcha-container" />
+
+      {!isFirebaseConfigured ? (
+        <p className="friends-error">Firebase client config is missing. Add REACT_APP_FIREBASE_* vars.</p>
+      ) : null}
+      {error ? <p className="friends-error">{error}</p> : null}
+    </div>
+  );
+};
+import {
+  getRedirectResult,
+  GoogleAuthProvider,
+  RecaptchaVerifier,
+  onAuthStateChanged,
+  signInWithPhoneNumber,
+  signInWithRedirect,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import './friends.css';
+import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
+import {
+  addContact,
+  fetchContacts,
+  fetchFriendRequests,
+  fetchConversationMessages,
+  fetchFriendsProfile,
+  getFriendsBackendUrl,
+  saveUserSettings,
+  searchUsers,
+  sendMessage,
+  updateFriendsProfile
+} from './friendsApi';
+
+// --- FriendsWorkspace: Move all friend request logic here ---
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+    // Notify user of incoming message (sound + desktop notification)
+    const notifyIncomingMessage = (contact, message) => {
+      // Play notification sound
+      playNotificationTone('chime');
+
+      // Show desktop notification if enabled and supported
+      if (window.Notification && Notification.permission === 'granted') {
+        const title = contact?.displayName || contact?.username || 'New message';
+        const body = message?.text || '[New message]';
+        new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: contact?.uniqueId || undefined
         });
-        setIsForwardModalOpen(false);
-        setForwardMsg(null);
-        const payload = {
-          receiverId: targetUniqueId,
-          message: forwardMsg.text,
-          disappearPolicy: policy,
-          clientTempId: tempId,
-          forwarded: true,
-          ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
-        };
+      } else if (window.Notification && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    };
+  // Remove a queued message by tempId
+  const removeQueuedMessage = (tempId) => {
+    if (!tempId) return;
+    const queue = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
+    offlineQueueRef.current = queue;
+    persistQueue(queue);
+    setOfflineQueueCount(queue.length);
+  };
+
+  // Add or update a queued message by tempId
+  const upsertQueuedMessage = (queuedItem) => {
+    if (!queuedItem?.tempId) return;
+    let queue = offlineQueueRef.current.filter((item) => item.tempId !== queuedItem.tempId);
+    queue.push(queuedItem);
+    offlineQueueRef.current = queue;
+    persistQueue(queue);
+    setOfflineQueueCount(queue.length);
+  };
+      // Load messages for a contact
+      const loadMessages = async (contactId, { reset } = {}) => {
+        if (!contactId) return;
         try {
-          await sendWithRetry({ token: authToken, payload, attempts: 2 });
+          const data = await fetchConversationMessages(authToken, contactId, { limit: 40 });
+          const messages = data.messages || [];
+          setMessagesByContact((prev) => ({
+            ...prev,
+            [contactId]: reset ? messages : mergeMessagesById(prev[contactId] || [], messages)
+          }));
+          if (messages[0]?.createdAt) {
+            setOldestCursorByContact((prev) => ({ ...prev, [contactId]: messages[0].createdAt }));
+          }
+          setHasMoreByContact((prev) => ({ ...prev, [contactId]: messages.length >= 40 }));
         } catch (e) {
-          // Optionally handle error, e.g. show notification
+          setError(e.message || 'Failed to load messages.');
         }
       };
-    // Add to imports if not present
-    import React, { useState, useRef, useEffect } from 'react';
+    // Load contacts from backend
+    const loadContacts = async () => {
+      try {
+        const data = await fetchContacts(authToken);
+        setContacts(data.contacts || []);
+      } catch (e) {
+        // Optionally handle error, e.g., set an error state
+      }
+    };
+  // Friend requests state
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequests, setOutgoingRequests] = useState([]);
+  const [requestsError, setRequestsError] = useState('');
+  // ...existing useState hooks...
+  const [contacts, setContacts] = useState([]);
+  const [selectedContactId, setSelectedContactId] = useState('');
+  // ...other useState hooks...
 
-    // Add forward modal state near other useState hooks
-    const [forwardMsg, setForwardMsg] = useState(null);
-    const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  // Fix: selectedContact must be defined after contacts and selectedContactId useState
+  const selectedContact = useMemo(
+    () => contacts.find((c) => c.uniqueId === selectedContactId) || null,
+    [contacts, selectedContactId]
+  );
 
+  // Load friend requests
+  const loadRequests = async () => {
+    try {
+      setRequestsError('');
+      const data = await fetchFriendRequests(authToken);
+      setIncomingRequests(data.incoming || []);
+      setOutgoingRequests(data.outgoing || []);
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to load requests');
+    }
+  };
+
+  // Accept/reject request handlers
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await acceptFriendRequest(authToken, requestId);
+      await loadRequests();
+      await loadContacts();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to accept request');
+    }
+  };
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await rejectFriendRequest(authToken, requestId);
+      await loadRequests();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to reject request');
+    }
+  };
+  const handleRemoveFriend = async (targetUniqueId) => {
+    try {
+      await removeFriend(authToken, targetUniqueId);
+      await loadContacts();
+      setSelectedContactId('');
+    } catch (e) {
+      setError(e.message || 'Failed to remove friend');
+    }
+  };
+
+  // Real-time socket events for requests
+  useEffect(() => {
+    if (!socket) return;
+    const onNewRequest = () => loadRequests();
+    const onRequestAccepted = () => {
+      loadRequests();
+      loadContacts();
+    };
+    const onRequestRejected = () => loadRequests();
+    socket.on('friends:new_request', onNewRequest);
+    socket.on('friends:request_accepted', onRequestAccepted);
+    socket.on('friends:request_rejected', onRequestRejected);
+    return () => {
+      socket.off('friends:new_request', onNewRequest);
+      socket.off('friends:request_accepted', onRequestAccepted);
+      socket.off('friends:request_rejected', onRequestRejected);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    loadRequests();
+  }, [authToken]);
+
+  // ...existing FriendsWorkspace code (rest of the component)...
+  // (No need to change the rest, as it already exists below)
+
+const getFriendlyRemaining = (expiresAt) => {
+  if (!expiresAt) return 'kept';
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return 'expires now';
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `${mins}m left`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h left`;
+  const days = Math.round(hours / 24);
+  return `${days}d left`;
+};
+
+const makeTempMessageId = () => `temp_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+
+const formatDayLabel = (input) => {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfToday - startOfDate) / 86400000);
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+};
+
+const formatChatTime = (input) => {
+  if (!input) return '';
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const sameDay =
+    now.getFullYear() === date.getFullYear() &&
+    now.getMonth() === date.getMonth() &&
+    now.getDate() === date.getDate();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+const isEmailOrPhone = (value) => {
+  const cleaned = value.trim();
+  if (!cleaned) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^\+?[0-9]{8,15}$/;
+  return emailRegex.test(cleaned) || phoneRegex.test(cleaned);
+};
+
+const getReceiptConfig = (msg) => {
+  if (!msg?.isMine) return null;
+  if (msg.deliveryStatus === 'queued') {
+    return { text: 'Q', className: 'queued', title: 'Queued (offline)' };
+  }
+  if (msg.deliveryStatus === 'pending') {
+    return { text: '...', className: 'sent', title: 'Sending' };
+  }
+  if (msg.deliveryStatus === 'read') {
+    const seenAt = msg.readAt ? ` at ${new Date(msg.readAt).toLocaleString()}` : '';
+    return { text: '✓✓', className: 'read', title: `Read${seenAt}` };
+  }
+  if (msg.deliveryStatus === 'delivered') {
+    return { text: '✓✓', className: 'delivered', title: 'Delivered' };
+  }
+  return { text: '✓', className: 'sent', title: 'Sent' };
+};
+
+const getListReceipt = (msg) => {
+  if (!msg) return null;
+  if (msg.deliveryStatus === 'queued') return 'Q';
+  if (msg.deliveryStatus === 'pending') return '...';
+  if (msg.deliveryStatus === 'read') return '✓✓';
+  if (msg.deliveryStatus === 'delivered') return '✓✓';
+  return '✓';
+};
+
+const mergeMessagesById = (existing = [], incoming = []) => {
+  const byId = new Map();
+  [...existing, ...incoming].forEach((item) => {
+    if (!item?.id) return;
+    byId.set(item.id, item);
+  });
+  return Array.from(byId.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+};
+
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const sendWithRetry = async ({ token, payload, attempts = 2 }) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await sendMessage(token, payload);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await wait(220 * attempt);
+      }
+    }
+  }
+  throw lastError || new Error('Unable to send message');
+};
+
+const playNotificationTone = (kind = 'soft') => {
+  if (kind === 'none') return;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return;
+
+  const ctx = new AudioCtx();
+  const makeBeep = (frequency, startOffset, duration, gainValue) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
     osc.type = 'sine';
     osc.frequency.value = frequency;
     gain.gain.setValueAtTime(gainValue, ctx.currentTime + startOffset);
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startOffset + duration);
-          {timelineItems.map((item) => {
-            if (item.type === 'date') {
-              return (
-                <div key={item.id} className="friends-date-divider" aria-label={`Date: ${item.label}`}>
-                  <span>{item.label}</span>
-                </div>
-              );
-            }
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime + startOffset);
+    osc.stop(ctx.currentTime + startOffset + duration);
+  };
 
-            if (item.type === 'unread') {
-              return (
-                <div
-                  key={item.id}
-                  className="friends-unread-divider"
-                  aria-label="Unread messages"
-                  ref={firstUnreadDividerRef}
-                >
-                  <span>{item.label}</span>
-                </div>
-              );
-            }
+  if (kind === 'chime') {
+    makeBeep(880, 0, 0.2, 0.04);
+    makeBeep(1175, 0.18, 0.26, 0.035);
+  } else if (kind === 'pop') {
+    makeBeep(640, 0, 0.08, 0.045);
+  } else {
+    makeBeep(720, 0, 0.12, 0.03);
+    makeBeep(820, 0.12, 0.1, 0.022);
+  }
+};
 
-            const msg = item.message;
-            // Render image, file, link, or text message
-            let content = null;
-            if (msg.type === 'image' && msg.attachmentUrl) {
-              content = (
-                <div className="friends-msg-image">
-                  <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                    <img src={msg.attachmentUrl} alt={msg.name || 'image'} style={{ maxWidth: 180, maxHeight: 180, borderRadius: 8 }} />
-                  </a>
-                  <div className="friends-msg-meta-small">{msg.name || 'Image'}</div>
-                </div>
-              );
-            } else if (msg.type === 'file' && msg.attachmentUrl) {
-              content = (
-                <div className="friends-msg-file">
-                  <span className="friends-msg-file-icon">📎</span>
-                  <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">{msg.name || 'File'}</a>
-                </div>
-              );
-            } else if (msg.type === 'link' && msg.url) {
-              content = (
-                <div className="friends-msg-link">
-                  <a href={msg.url} target="_blank" rel="noopener noreferrer">{msg.url}</a>
-                </div>
-              );
-            } else {
-              // Detect links in text
-              const urlRegex = /(https?:\/\/[^\s]+)/g;
-              const text = msg.text || '';
-              const parts = [];
-              let lastIndex = 0;
-              let match;
-              while ((match = urlRegex.exec(text)) !== null) {
-                if (match.index > lastIndex) {
-                  parts.push({ text: text.slice(lastIndex, match.index), isLink: false });
-                }
-                parts.push({ text: match[0], isLink: true });
-                lastIndex = match.index + match[0].length;
-              }
-              if (lastIndex < text.length) {
-                parts.push({ text: text.slice(lastIndex), isLink: false });
-              }
-              content = (
-                <div>
-                  {parts.map((part, i) =>
-                    part.isLink ? (
-                      <a key={i} href={part.text} target="_blank" rel="noopener noreferrer">{part.text}</a>
-                    ) : (
-                      <span key={i}>{part.text}</span>
-                    )
-                  )}
-                </div>
-              );
-            }
-            // --- Emoji reactions UI ---
-            const reactions = msg.reactions || [];
-            return (
-              <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}
-                style={{ position: 'relative' }}>
-                {/* Reply context above message if present */}
-                {msg.replyTo && (
-                  <div className="friends-msg-reply-context" style={{ background: '#f1f3f4', borderLeft: '3px solid #4a5a64', padding: '4px 8px', marginBottom: 4, borderRadius: 6, fontSize: '0.95em' }}>
-                    <span style={{ fontWeight: 500, color: '#4a5a64' }}>
-                      Replying to: {msg.replyTo.text ? msg.replyTo.text.slice(0, 40) : 'Message'}
-                    </span>
-                  </div>
-                )}
-                {content}
-                {/* Reactions display */}
-                {reactions.length > 0 && (
-                  <div className="friends-msg-reactions">
-                    {reactions.map((r, i) => (
-                      <span key={i} className="friends-msg-reaction-emoji">{r.emoji} {r.count > 1 ? r.count : ''}</span>
-                    ))}
-                  </div>
-                )}
-                {/* Reaction, Reply, and Forward buttons */}
-                <button
-                  className="friends-msg-reaction-btn"
-                  title="React to message"
-                  style={{ marginLeft: 8, fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={() => setReactionPickerFor(msg.id)}
-                  aria-label="React to message"
-                >
-                  😊
-                </button>
-                <button
-                  className="friends-msg-reply-btn"
-                  title="Reply to message"
-                  style={{ marginLeft: 4, fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={() => setReplyTo(msg)}
-                  aria-label="Reply to message"
-                >
-                  ↩️
-                </button>
-                <button
-                  className="friends-msg-forward-btn"
-                  title="Forward message"
-                  style={{ marginLeft: 4, fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={() => { setForwardMsg(msg); setIsForwardModalOpen(true); }}
-                  aria-label="Forward message"
-                >
-                  📤
-                </button>
-                      {/* Forward message modal */}
-                      {isForwardModalOpen && forwardMsg && (
-                        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsForwardModalOpen(false)}>
-                          <div className="friends-add-modal" role="dialog" aria-label="Forward message" onClick={e => e.stopPropagation()}>
-                            <h4>Forward Message</h4>
-                            <div style={{ marginBottom: 12 }}>
-                              <div style={{ background: '#f1f3f4', padding: 8, borderRadius: 6, marginBottom: 8 }}>
-                                <span style={{ color: '#4a5a64' }}>{forwardMsg.text ? forwardMsg.text.slice(0, 80) : 'Message'}</span>
-                              </div>
-                              <div style={{ fontWeight: 500, marginBottom: 6 }}>Select a contact to forward to:</div>
-                              <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-                                {contacts.filter(c => c.uniqueId !== selectedContactId).map(contact => (
-                                  <button
-                                    key={contact.uniqueId}
-                                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: 8, marginBottom: 4, borderRadius: 4, border: '1px solid #eee', background: '#fff', cursor: 'pointer' }}
-                                    onClick={() => handleForwardMessage(contact.uniqueId)}
-                                  >
-                                    {contact.displayName || contact.uniqueId}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="friends-add-modal-actions">
-                              <button type="button" className="secondary" onClick={() => setIsForwardModalOpen(false)}>Cancel</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                {/* Reaction picker popup */}
-                {reactionPickerFor === msg.id && (
-                  <div className="friends-reaction-picker" style={{ position: 'absolute', zIndex: 10, top: 32, left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: 6, boxShadow: '0 2px 8px #0001' }}>
-                    {quickEmojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        className="friends-emoji-chip"
-                        style={{ fontSize: 20, margin: 2, padding: 2, border: 'none', background: 'none', cursor: 'pointer' }}
-                        onClick={() => {
-                          setMessagesByContact((prev) => {
-                            const contactMsgs = prev[selectedContactId] || [];
-                            return {
-                              ...prev,
-                              [selectedContactId]: contactMsgs.map((m) => {
-                                if (m.id !== msg.id) return m;
-                                // Add or update reaction
-                                let newReactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
-                                const idx = newReactions.findIndex(r => r.emoji === emoji);
-                                if (idx >= 0) {
-                                  newReactions[idx] = { ...newReactions[idx], count: (newReactions[idx].count || 1) + 1 };
-                                } else {
-                                  newReactions.push({ emoji, count: 1 });
-                                }
-                                return { ...m, reactions: newReactions };
-                              })
-                            };
-                          });
-                          setReactionPickerFor(null);
-                        }}
-                        aria-label={`React with ${emoji}`}
-                      >{emoji}</button>
-                    ))}
-                    <button type="button" className="secondary" style={{ marginLeft: 6 }} onClick={() => setReactionPickerFor(null)}>Cancel</button>
-                  </div>
-                )}
-                <div className="friends-msg-meta">
-                  <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
-                  {msg.isMine ? (() => {
-                    const receipt = getReceiptConfig(msg);
-                    if (!receipt) return null;
-                    return (
-                      <span className={`friends-receipt ${receipt.className}`} title={receipt.title} aria-label={receipt.title}>
-                        <span key={`${msg.id}-${receipt.className}`} className="friends-receipt-text">{receipt.text}</span>
-                      </span>
-                    );
-                  })() : null}
-                </div>
-              </article>
-            );
-          })}
-        {/* Close .friends-messages div here */}
-        
+const mapFirebaseAuthError = (error) => {
+  const code = error?.code || '';
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this host';
 
+  if (code === 'auth/unauthorized-domain') {
+    return `This domain is not authorized in Firebase Auth: ${hostname}. Add it in Firebase Console -> Authentication -> Settings -> Authorized domains, then retry.`;
+  }
+  if (code === 'auth/invalid-phone-number') {
+    return 'Invalid phone number format. Use E.164 format (e.g. +911234567890).';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Please wait a few minutes and try again.';
+  }
+  if (code === 'auth/popup-closed-by-user') {
+    return 'Google sign-in popup was closed before completion.';
+  }
+  if (code === 'auth/captcha-check-failed') {
+    return 'reCAPTCHA verification failed. Refresh and try again.';
+  }
+
+  return error?.message || 'Authentication failed';
+};
+
+const mapFriendsBackendError = (error) => {
+  const raw = error?.message || String(error || '');
+  if (raw.includes('Firebase auth is not configured on backend')) {
+    return 'Friends backend Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY) on the backend host and redeploy.';
+  }
+  return raw || 'Friends backend request failed';
+};
+
+const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+
+  return (
+    <div className="friends-login" aria-label="Friends auth login">
+      <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
+        <button
+          type="button"
+          role="tab"
+          className="friends-mode-btn"
+          onClick={onSwitchToClassic}
+          disabled={!onSwitchToClassic}
+        >
+          Username + Room
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          className="friends-mode-btn active"
+          disabled
+        >
+          Friends Login
+        </button>
+      </div>
+
+      <h3 className="friends-title">Friends Login</h3>
+      <p className="friends-subtitle">Use Firebase auth. Your chats sync through backend + socket namespace.</p>
+
+      <div className="friends-row">
+        <button type="button" onClick={onGoogleLogin}>Continue with Google</button>
+      </div>
+      <p className="friends-note">If popups are blocked, sign-in will continue with a secure redirect.</p>
+
+      <div className="friends-row">
+        <input
+          placeholder="Phone number (E.164, e.g. +911234567890)"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          disabled={phoneState === 'sending'}
+        />
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onPhoneStart(phone)}
+          disabled={!phone.trim() || phoneState === 'sending'}
+        >
+          {phoneState === 'sending' ? 'Sending...' : 'Send OTP'}
+        </button>
+      </div>
+
+      <div className="friends-row">
+        <input
+          placeholder="Enter OTP"
+          value={otp}
+          onChange={(e) => setOtp(e.target.value)}
+          disabled={phoneState !== 'code-sent'}
+        />
+        <button
+          type="button"
+          onClick={() => onPhoneConfirm(otp)}
+          disabled={phoneState !== 'code-sent' || !otp.trim()}
+        >
+          Verify OTP
+        </button>
+      </div>
+
+      <div id="friends-recaptcha-container" />
+
+      {!isFirebaseConfigured ? (
+        <p className="friends-error">Firebase client config is missing. Add REACT_APP_FIREBASE_* vars.</p>
+      ) : null}
+      {error ? <p className="friends-error">{error}</p> : null}
+    </div>
+  );
+};
+
+// (FriendsWorkspace definition is now above, with friend request logic included)
+      // Real-time: listen for friend list updates
+      useEffect(() => {
+        if (!socket) return;
+        const onFriendListUpdate = () => {
+          loadContacts();
+        };
+        socket.on('friends:refresh', onFriendListUpdate);
+        return () => socket.off('friends:refresh', onFriendListUpdate);
+      }, [socket]);
+    // Add state for addBy (tab: 'email' or 'id')
+    const [addBy, setAddBy] = useState('email');
+
+    // Handler for searching by unique ID
+    const handleSearchById = async () => {
+      setHasSearchedAddFriend(true);
+      setAddFriendSearchError('');
+      setSearchResults([]);
+      setIsSearchingAddFriend(true);
+
+      const value = addFriendQuery.trim();
+      if (!value) {
+        setAddFriendSearchError('Enter a unique ID.');
+        setIsSearchingAddFriend(false);
+        return;
+      }
+
+      try {
+        // Use searchUsers if it supports uniqueId, else filter manually
+        const data = await searchUsers(authToken, value);
+        let users = data.users || [];
+        // If not found, try to match uniqueId directly
+        if (!users.length) {
+          users = data.users?.filter(u => u.uniqueId === value) || [];
+        }
+        // If still not found, try a direct API call if available (pseudo-code)
+        // Optionally, you can add a new API endpoint for lookup by uniqueId
+        setSearchResults(users);
+        if (users.length === 0) {
+          setAddFriendSearchError('User not found with this unique ID');
+        }
+      } catch (e) {
+        setAddFriendSearchError(e.message || 'Search failed');
+      } finally {
+        setIsSearchingAddFriend(false);
+      }
+    };
+  // (removed duplicate contacts and selectedContactId useState)
+  const [messagesByContact, setMessagesByContact] = useState({});
+  const [chatSearchInput, setChatSearchInput] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
+  const [addFriendQuery, setAddFriendQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingAddFriend, setIsSearchingAddFriend] = useState(false);
+  const [hasSearchedAddFriend, setHasSearchedAddFriend] = useState(false);
+  const [addFriendSearchError, setAddFriendSearchError] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [typingByContact, setTypingByContact] = useState({});
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [mobilePane, setMobilePane] = useState('list');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsNameDraft, setSettingsNameDraft] = useState(profile.displayName || '');
+  const [settingsBioDraft, setSettingsBioDraft] = useState(profile.bio || '');
+  const [settingsThemeDraft, setSettingsThemeDraft] = useState('light');
+  const [settingsNotificationsDraft, setSettingsNotificationsDraft] = useState(true);
+  const [settingsSavedMessage, setSettingsSavedMessage] = useState('');
+  const [settingsError, setSettingsError] = useState('');
+  const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
+  const [loadingOlderByContact, setLoadingOlderByContact] = useState({});
+  const [hasMoreByContact, setHasMoreByContact] = useState({});
+  const [oldestCursorByContact, setOldestCursorByContact] = useState({});
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+
+  const typingStopTimerRef = useRef(null);
+  const lastNotifyAtRef = useRef({});
+  const typingActiveRef = useRef(false);
+  const pendingSendTimersRef = useRef({});
+  const offlineQueueRef = useRef([]);
+  const queueFlushInProgressRef = useRef(false);
+  const menuRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const firstUnreadDividerRef = useRef(null);
+  const shouldAutoScrollUnreadRef = useRef(false);
+  const swipeStartRef = useRef(null);
+
+  const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
+
+  const queueStorageKey = useMemo(
+    () => `friends_pending_queue_${profile.uniqueId || 'anonymous'}`,
+    [profile.uniqueId]
+  );
+
+  const persistQueue = (queue) => {
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+    } catch {
+      // Ignore storage quota/private mode issues; queue remains in memory.
+    }
+  };
+
+  const loadQueueFromStorage = () => {
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item?.tempId && item?.toUniqueId && item?.text);
+    } catch {
+      return [];
+    }
+  };
+
+  const emitMarkRead = (contactUniqueId) => {
+    if (!socket || !contactUniqueId) return;
+    socket.emit('friends:mark_read', { withUniqueId: contactUniqueId });
+  };
+
+  const sendQueuedItem = async (queuedItem) => {
+    const response = await sendWithRetry({
+      token: authToken,
+      payload: {
+        receiverId: queuedItem.toUniqueId,
+        message: queuedItem.text,
+        disappearPolicy: queuedItem.disappearPolicy,
+        clientTempId: queuedItem.tempId
+      },
+      attempts: 2
+    });
+
+    if (response?.message?.id) {
+      const confirmed = {
+        ...response.message,
+        isMine: true,
+        deliveryStatus: response.message.deliveryStatus || 'sent'
+      };
+      setMessagesByContact((prev) => {
+        const current = prev[queuedItem.toUniqueId] || [];
+        const withoutTemp = current.filter((m) => m.id !== queuedItem.tempId);
+        return {
+          ...prev,
+          [queuedItem.toUniqueId]: mergeMessagesById(withoutTemp, [confirmed])
+        };
+      });
+    } else {
+      updateOptimisticDeliveryStatus(queuedItem.toUniqueId, queuedItem.tempId, 'sent');
+    }
+
+    removeQueuedMessage(queuedItem.tempId);
+  };
+
+  const flushQueuedMessages = async () => {
+    if (queueFlushInProgressRef.current) return;
+    if (!navigator.onLine) return;
+    if (!authToken) return;
+
+    const queue = [...offlineQueueRef.current];
+    if (queue.length === 0) return;
+
+    queueFlushInProgressRef.current = true;
+    try {
+      for (const item of queue) {
+        try {
+          updateOptimisticDeliveryStatus(item.toUniqueId, item.tempId, 'pending');
+          await sendQueuedItem(item);
+        } catch {
+          updateOptimisticDeliveryStatus(item.toUniqueId, item.tempId, 'queued');
+        }
+      }
+      await loadContacts();
+    } finally {
+      queueFlushInProgressRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    loadContacts();
+  }, []);
+
+  useEffect(() => {
+    const loaded = loadQueueFromStorage();
+    offlineQueueRef.current = loaded;
+    setOfflineQueueCount(loaded.length);
+  }, [queueStorageKey]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      flushQueuedMessages().catch(() => {});
+    };
+
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [authToken, queueStorageKey]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onConnect = () => {
+      flushQueuedMessages().catch(() => {});
+    };
+    socket.on('connect', onConnect);
+    return () => {
+      socket.off('connect', onConnect);
+    };
+  }, [socket, authToken]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    flushQueuedMessages().catch(() => {});
+  }, [authToken, selectedContactId]);
+
+  useEffect(() => {
+    setSettingsNameDraft(profile.displayName || '');
+    setSettingsBioDraft(profile.bio || '');
+    setSettingsThemeDraft(profile.settings?.theme || 'light');
+    setSettingsNotificationsDraft(profile.settings?.notifications !== false);
+  }, [profile.displayName, profile.bio]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setChatSearch(chatSearchInput);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [chatSearchInput]);
+
+  useEffect(() => {
+    if (!selectedContactId) return;
+    shouldAutoScrollUnreadRef.current = true;
+    loadMessages(selectedContactId, { reset: true });
+    socket?.emit('friends:join_conversation', { withUniqueId: selectedContactId });
+    emitMarkRead(selectedContactId);
+  }, [selectedContactId, socket]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const onHistory = ({ withUniqueId, messages }) => {
+      const incoming = messages || [];
+      setMessagesByContact((prev) => ({
+        ...prev,
+        [withUniqueId]: mergeMessagesById(prev[withUniqueId] || [], incoming)
+      }));
+      if (incoming[0]?.createdAt) {
+        setOldestCursorByContact((prev) => ({ ...prev, [withUniqueId]: incoming[0].createdAt }));
+      }
+      if (selectedContactId === withUniqueId) {
+        emitMarkRead(withUniqueId);
+      }
+    };
+
+    const onNewMessage = ({ withUniqueId, message: incoming, clientTempId }) => {
+      setMessagesByContact((prev) => {
+        const existing = prev[withUniqueId] || [];
+        let nextExisting = existing;
+        if (clientTempId) {
+          nextExisting = existing.filter((m) => m.id !== clientTempId);
+          if (pendingSendTimersRef.current[clientTempId]) {
+            window.clearTimeout(pendingSendTimersRef.current[clientTempId]);
+            delete pendingSendTimersRef.current[clientTempId];
+          }
+        }
+        const deduped = nextExisting.some((m) => m.id === incoming.id)
+          ? nextExisting
+          : [...nextExisting, incoming].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        return { ...prev, [withUniqueId]: deduped };
+      });
+
+      if (clientTempId) {
+        removeQueuedMessage(clientTempId);
+      }
+
+      if (selectedContactId === withUniqueId && !incoming?.isMine) {
+        emitMarkRead(withUniqueId);
+      }
+      const contact = contacts.find((c) => c.uniqueId === withUniqueId);
+      notifyIncomingMessage(contact, incoming);
+      loadContacts();
+    };
+
+    const onReadUpdate = ({ withUniqueId, messageIds, readAt }) => {
+      if (!withUniqueId || !Array.isArray(messageIds) || messageIds.length === 0) return;
+      const ids = new Set(messageIds);
+      setMessagesByContact((prev) => {
+        const existing = prev[withUniqueId] || [];
+        if (existing.length === 0) return prev;
+        const next = existing.map((msg) => {
+          if (!ids.has(msg.id)) return msg;
+          return {
+            ...msg,
+            readAt,
+            deliveredAt: msg.deliveredAt || readAt,
+            deliveryStatus: 'read'
+          };
+        });
+        return { ...prev, [withUniqueId]: next };
+      });
+      loadContacts();
+    };
+
+    const onTyping = ({ fromUniqueId, isTyping }) => {
+      if (!fromUniqueId) return;
+      setTypingByContact((prev) => ({ ...prev, [fromUniqueId]: !!isTyping }));
+    };
+
+    const onStopTyping = ({ fromUniqueId }) => {
+      if (!fromUniqueId) return;
+      setTypingByContact((prev) => ({ ...prev, [fromUniqueId]: false }));
+    };
+
+    const onPresence = ({ uniqueId, online, lastSeen }) => {
+      if (!uniqueId) return;
+      setContacts((prev) => prev.map((contact) => {
+        if (contact.uniqueId !== uniqueId) return contact;
+        return {
+          ...contact,
+          online: !!online,
+          lastSeen: lastSeen || contact.lastSeen || null
+        };
+      }));
+    };
+
+    const onUserOnline = ({ uniqueId, lastSeen }) => onPresence({ uniqueId, online: true, lastSeen });
+    const onUserOffline = ({ uniqueId, lastSeen }) => onPresence({ uniqueId, online: false, lastSeen });
+
+    const onSocketError = (payload) => {
+      setError(payload?.message || 'Friends socket error');
+    };
+
+    const onUnreadUpdate = ({ withUniqueId, messageId }) => {
+      if (!withUniqueId || !messageId) return;
+      setMessagesByContact((prev) => {
+        const list = prev[withUniqueId] || [];
+        return {
+          ...prev,
+          [withUniqueId]: list.map((msg) => (msg.id === messageId ? { ...msg, readAt: null, deliveryStatus: msg.isMine ? 'delivered' : 'received' } : msg))
+        };
+      });
+      loadContacts();
+    };
+
+    socket.on('friends:history', onHistory);
+    socket.on('friends:new_message', onNewMessage);
+    socket.on('friends:read_update', onReadUpdate);
+    socket.on('friends:typing', onTyping);
+    socket.on('friends:stop_typing', onStopTyping);
+    socket.on('friends:presence', onPresence);
+    socket.on('friends:unread_update', onUnreadUpdate);
+    socket.on('friends:error', onSocketError);
+
+    socket.on('new_message', onNewMessage);
+    socket.on('read_receipt', onReadUpdate);
+    socket.on('typing', onTyping);
+    socket.on('stop_typing', onStopTyping);
+    socket.on('user_online', onUserOnline);
+    socket.on('user_offline', onUserOffline);
+
+    return () => {
+      socket.off('friends:history', onHistory);
+      socket.off('friends:new_message', onNewMessage);
+      socket.off('friends:read_update', onReadUpdate);
+      socket.off('friends:typing', onTyping);
+      socket.off('friends:stop_typing', onStopTyping);
+      socket.off('friends:presence', onPresence);
+      socket.off('friends:unread_update', onUnreadUpdate);
+      socket.off('friends:error', onSocketError);
+
+      socket.off('new_message', onNewMessage);
+      socket.off('read_receipt', onReadUpdate);
+      socket.off('typing', onTyping);
+      socket.off('stop_typing', onStopTyping);
+      socket.off('user_online', onUserOnline);
+      socket.off('user_offline', onUserOffline);
+    };
+  }, [socket, selectedContactId, contacts]);
+
+  useEffect(() => {
+    return () => {
+      if (typingStopTimerRef.current) {
+        window.clearTimeout(typingStopTimerRef.current);
+      }
+      Object.values(pendingSendTimersRef.current).forEach((timerId) => {
+        window.clearTimeout(timerId);
+      });
+      pendingSendTimersRef.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -387,8 +1020,7 @@
       expiresAt: null,
       disappearPolicy: policy,
       isMine: true,
-      deliveryStatus: 'pending',
-      ...(replyTo ? { replyTo: { id: replyTo.id, text: replyTo.text } } : {})
+      deliveryStatus: 'pending'
     };
 
     setMessagesByContact((prev) => {
@@ -401,7 +1033,6 @@
 
     setMessage('');
     setIsEmojiTrayOpen(false);
-    setReplyTo(null);
     socket.emit('friends:typing', { toUniqueId: targetUniqueId, isTyping: false });
     socket.emit('stop_typing', { toUniqueId: targetUniqueId });
     typingActiveRef.current = false;
@@ -411,8 +1042,7 @@
       toUniqueId: targetUniqueId,
       text: messageText,
       disappearPolicy: policy,
-      createdAt: new Date().toISOString(),
-      ...(replyTo ? { replyTo: { id: replyTo.id, text: replyTo.text } } : {})
+      createdAt: new Date().toISOString()
     };
 
     if (!navigator.onLine) {
@@ -436,8 +1066,7 @@
           receiverId: targetUniqueId,
           message: messageText,
           disappearPolicy: policy,
-          clientTempId: tempId,
-          ...(replyTo ? { replyTo: { id: replyTo.id, text: replyTo.text } } : {})
+          clientTempId: tempId
         },
         attempts: 2
       });
@@ -663,30 +1292,6 @@
     );
   }, [contacts, chatSearch]);
 
-  // Chat menu state and handlers (must be before return)
-  const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
-  const [isClearChatModalOpen, setIsClearChatModalOpen] = useState(false);
-  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
-  const [isDisappearModalOpen, setIsDisappearModalOpen] = useState(false);
-  const [isMuteModalOpen, setIsMuteModalOpen] = useState(false);
-
-  const handleOpenClearChatModal = () => {
-    setIsChatMenuOpen(false);
-    setIsClearChatModalOpen(true);
-  };
-  const handleOpenMediaModal = () => {
-    setIsChatMenuOpen(false);
-    setIsMediaModalOpen(true);
-  };
-  const handleOpenDisappearModal = () => {
-    setIsChatMenuOpen(false);
-    setIsDisappearModalOpen(true);
-  };
-  const handleOpenMuteModal = () => {
-    setIsChatMenuOpen(false);
-    setIsMuteModalOpen(true);
-  };
-
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
@@ -793,6 +1398,7 @@
               {contacts.length === 0 ? 'No chats yet. Tap + to add people.' : 'No chats match your search.'}
             </div>
           ) : null}
+
           {filteredContacts.map((contact) => {
             const listReceipt = getListReceipt(contact.lastMessage);
             const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
@@ -872,9 +1478,6 @@
                 </div>
                 <div className="friends-chat-header-copy">
                   <strong>{selectedContact.displayName || selectedContact.uniqueId}</strong>
-                  {selectedContact?.preferences?.muted && (
-                    <span title="Muted" style={{ color: '#b85c5c', marginLeft: 6, fontSize: '1.1em' }}>🔕</span>
-                  )}
                   {/* Badge for requests */}
                   {incomingRequests.some((req) => req.fromUid === selectedContact.uid) ? (
                     <span className="friends-request-badge">!</span>
@@ -887,25 +1490,6 @@
                         : (selectedContact.lastSeen ? `last seen ${formatChatTime(selectedContact.lastSeen)}` : selectedContact.uniqueId)}
                   </small>
                 </div>
-                {/* Three-dot menu */}
-                <div className="friends-chat-menu-wrap" style={{ marginLeft: 'auto', position: 'relative' }}>
-                  <button
-                    type="button"
-                    className="friends-chat-menu-btn"
-                    aria-label="Open chat menu"
-                    onClick={() => setIsChatMenuOpen((prev) => !prev)}
-                  >
-                    ⋮
-                  </button>
-                  {isChatMenuOpen && (
-                    <div className="friends-chat-menu-dropdown" role="menu" aria-label="Chat menu">
-                      <button type="button" className="friends-chat-menu-item" onClick={handleOpenClearChatModal}>Clear Chat</button>
-                      <button type="button" className="friends-chat-menu-item" onClick={handleOpenMediaModal}>Media, Links, and Documents</button>
-                      <button type="button" className="friends-chat-menu-item" onClick={handleOpenDisappearModal}>Disappearing Messages</button>
-                      <button type="button" className="friends-chat-menu-item" onClick={handleOpenMuteModal}>Mute Notifications</button>
-                    </div>
-                  )}
-                </div>
               </>
             ) : (
               <div className="friends-chat-header-copy">
@@ -914,10 +1498,7 @@
               </div>
             )}
           </div>
-
         </header>
-
-
 
         <div className="friends-messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
           {!selectedContact ? (
@@ -947,119 +1528,9 @@
             }
 
             const msg = item.message;
-            // Render image, file, link, or text message
-            let content = null;
-            if (msg.type === 'image' && msg.attachmentUrl) {
-              content = (
-                <div className="friends-msg-image">
-                  <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                    <img src={msg.attachmentUrl} alt={msg.name || 'image'} style={{ maxWidth: 180, maxHeight: 180, borderRadius: 8 }} />
-                  </a>
-                  <div className="friends-msg-meta-small">{msg.name || 'Image'}</div>
-                </div>
-              );
-            } else if (msg.type === 'file' && msg.attachmentUrl) {
-              content = (
-                <div className="friends-msg-file">
-                  <span className="friends-msg-file-icon">📎</span>
-                  <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">{msg.name || 'File'}</a>
-                </div>
-              );
-            } else if (msg.type === 'link' && msg.url) {
-              content = (
-                <div className="friends-msg-link">
-                  <a href={msg.url} target="_blank" rel="noopener noreferrer">{msg.url}</a>
-                </div>
-              );
-            } else {
-              // Detect links in text
-                const urlRegex = /(https?:\/\/[^\s]+)/g;
-                const text = msg.text || '';
-                const parts = [];
-                let lastIndex = 0;
-                let match;
-                while ((match = urlRegex.exec(text)) !== null) {
-                  if (match.index > lastIndex) {
-                    parts.push({ text: text.slice(lastIndex, match.index), isLink: false });
-                  }
-                  parts.push({ text: match[0], isLink: true });
-                  lastIndex = match.index + match[0].length;
-                }
-                if (lastIndex < text.length) {
-                  parts.push({ text: text.slice(lastIndex), isLink: false });
-                }
-                content = (
-                  <div>
-                    {parts.map((part, i) =>
-                      part.isLink ? (
-                        <a key={i} href={part.text} target="_blank" rel="noopener noreferrer">{part.text}</a>
-                      ) : (
-                        <span key={i}>{part.text}</span>
-                      )
-                    )}
-                  </div>
-                );
-            }
-            // --- Emoji reactions UI ---
-            const reactions = msg.reactions || [];
             return (
-              <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}
-                style={{ position: 'relative' }}>
-                {content}
-                {/* Reactions display */}
-                {reactions.length > 0 && (
-                  <div className="friends-msg-reactions">
-                    {reactions.map((r, i) => (
-                      <span key={i} className="friends-msg-reaction-emoji">{r.emoji} {r.count > 1 ? r.count : ''}</span>
-                    ))}
-                  </div>
-                )}
-                {/* Reaction button */}
-                <button
-                  className="friends-msg-reaction-btn"
-                  title="React to message"
-                  style={{ marginLeft: 8, fontSize: 18, background: 'none', border: 'none', cursor: 'pointer' }}
-                  onClick={() => setReactionPickerFor(msg.id)}
-                  aria-label="React to message"
-                >
-                  😊
-                </button>
-                {/* Reaction picker popup */}
-                {reactionPickerFor === msg.id && (
-                  <div className="friends-reaction-picker" style={{ position: 'absolute', zIndex: 10, top: 32, left: 0, background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: 6, boxShadow: '0 2px 8px #0001' }}>
-                    {quickEmojis.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        className="friends-emoji-chip"
-                        style={{ fontSize: 20, margin: 2, padding: 2, border: 'none', background: 'none', cursor: 'pointer' }}
-                        onClick={() => {
-                          setMessagesByContact((prev) => {
-                            const contactMsgs = prev[selectedContactId] || [];
-                            return {
-                              ...prev,
-                              [selectedContactId]: contactMsgs.map((m) => {
-                                if (m.id !== msg.id) return m;
-                                // Add or update reaction
-                                let newReactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
-                                const idx = newReactions.findIndex(r => r.emoji === emoji);
-                                if (idx >= 0) {
-                                  newReactions[idx] = { ...newReactions[idx], count: (newReactions[idx].count || 1) + 1 };
-                                } else {
-                                  newReactions.push({ emoji, count: 1 });
-                                }
-                                return { ...m, reactions: newReactions };
-                              })
-                            };
-                          });
-                          setReactionPickerFor(null);
-                        }}
-                        aria-label={`React with ${emoji}`}
-                      >{emoji}</button>
-                    ))}
-                    <button type="button" className="secondary" style={{ marginLeft: 6 }} onClick={() => setReactionPickerFor(null)}>Cancel</button>
-                  </div>
-                )}
+              <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
+                <div>{msg.text}</div>
                 <div className="friends-msg-meta">
                   <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
                   {msg.isMine ? (() => {
@@ -1075,149 +1546,52 @@
               </article>
             );
           })}
+        </div>
 
-        {/* End of .friends-messages */}
+        <div className="friends-input-wrap">
+          {isEmojiTrayOpen ? (
+            <div className="friends-emoji-tray" aria-label="Emoji picker">
+              {quickEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="friends-emoji-chip"
+                  onClick={() => handleMessageInputChange(`${message}${emoji}`)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
-        {/* Reply preview above input if replying */}
-        {replyTo && (
-          <div className="friends-reply-preview" style={{ background: '#f1f3f4', borderLeft: '3px solid #4a5a64', padding: '6px 10px', marginBottom: 4, borderRadius: 6, display: 'flex', alignItems: 'center' }}>
-            <span style={{ fontWeight: 500, color: '#4a5a64', marginRight: 8 }}>Replying to:</span>
-            <span style={{ flex: 1, color: '#333' }}>{replyTo.text ? replyTo.text.slice(0, 60) : 'Message'}</span>
-            <button type="button" style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#b85c5c', fontSize: 18 }} onClick={() => setReplyTo(null)} aria-label="Cancel reply">✕</button>
-          </div>
-        )}
-        <div className="friends-input-row" style={{ position: 'relative' }}>
+          <div className="friends-input-row">
             <button
               type="button"
-              className="friends-action-toggle"
-              onClick={() => setIsActionTrayOpen((prev) => !prev)}
-              aria-label="Open actions"
+              className="friends-emoji-toggle"
+              onClick={() => setIsEmojiTrayOpen((prev) => !prev)}
+              aria-label="Toggle emoji picker"
               disabled={!selectedContact}
             >
-              +
+              🙂
             </button>
 
             <input
               placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
               value={message}
               onChange={(e) => handleMessageInputChange(e.target.value)}
-              disabled={!selectedContact || isRecording || !!voicePreview}
+              disabled={!selectedContact}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   handleSendMessage();
                 }
               }}
-              style={isRecording || voicePreview ? { opacity: 0.5 } : {}}
             />
 
-            {/* Microphone button for voice messages */}
-            <button
-              type="button"
-              className={`friends-action-toggle${isRecording ? ' recording' : ''}`}
-              aria-label={isRecording ? 'Recording...' : 'Record voice message'}
-              disabled={!selectedContact || isRecording || !!voicePreview}
-              onMouseDown={handleStartRecording}
-              onMouseUp={handleStopRecording}
-              onTouchStart={handleStartRecording}
-              onTouchEnd={handleStopRecording}
-              style={{ marginLeft: 4, background: isRecording ? '#ffe5e5' : undefined }}
-            >
-              <span role="img" aria-label="mic">🎤</span>
-            </button>
-
-            <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim() || isRecording || !!voicePreview}>
+            <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
               Send
             </button>
           </div>
-
-          {/* Voice recording indicator and preview modal */}
-          {isRecording && (
-            <div className="friends-voice-recording-indicator">
-              <span role="img" aria-label="recording">🔴</span> Recording... {recordingTime}s
-            </div>
-          )}
-
-          {/* Image preview modal with caption */}
-          {pendingImage && (
-            <div className="friends-modal-backdrop" role="presentation" onClick={() => setPendingImage(null)}>
-              <div className="friends-add-modal" role="dialog" aria-label="Image preview" onClick={e => e.stopPropagation()}>
-                <h4>Send Image</h4>
-                <img src={pendingImage.url} alt={pendingImage.name || 'preview'} style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 8, marginBottom: 12 }} />
-                <input
-                  type="text"
-                  placeholder="Add a caption (optional)"
-                  value={imageCaption}
-                  onChange={e => {
-                    setImageCaption(e.target.value);
-                    setPendingImage(img => img ? { ...img, caption: e.target.value } : img);
-                  }}
-                  style={{ width: '100%', marginBottom: 12 }}
-                  maxLength={200}
-                  autoFocus
-                />
-                <div className="friends-add-modal-actions">
-                  <button type="button" onClick={handleSendImage}>Send</button>
-                  <button type="button" className="secondary" onClick={() => setPendingImage(null)}>Cancel</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {isActionTrayOpen && selectedContact && (
-            <div className="friends-action-tray" aria-label="Action menu">
-              <button
-                type="button"
-                className="friends-action-item"
-                onClick={() => {
-                  setIsEmojiTrayOpen((prev) => !prev);
-                  setIsActionTrayOpen(false);
-                }}
-              >
-                😀 Emoji
-              </button>
-              <button
-                type="button"
-                className="friends-action-item"
-                onClick={() => {
-                  imageInputRef.current?.click();
-                  setIsActionTrayOpen(false);
-                }}
-              >
-                🖼️ Image
-              </button>
-              <button
-                type="button"
-                className="friends-action-item"
-                onClick={() => {
-                  fileInputRef.current?.click();
-                  setIsActionTrayOpen(false);
-                }}
-              >
-                📎 File
-              </button>
-              <button
-                type="button"
-                className="friends-action-item close"
-                onClick={() => setIsActionTrayOpen(false)}
-              >
-                ✕ Close
-              </button>
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: 'none' }}
-                ref={imageInputRef}
-                onChange={handleImageUpload}
-              />
-              <input
-                type="file"
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-              />
-            </div>
-          )}
 
           {error ? <p className="friends-error">{error}</p> : null}
           {offlineQueueCount > 0 ? (
@@ -1354,146 +1728,6 @@
         </div>
       ) : null}
 
-      {isMediaModalOpen ? (
-        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsMediaModalOpen(false)}>
-          <div className="friends-add-modal friends-media-modal" role="dialog" aria-label="Media, Links, and Documents" onClick={e => e.stopPropagation()}>
-            <h4>Media, Links, and Documents</h4>
-            <div className="friends-media-gallery">
-              {/* Gallery: show images, files, and links from this chat */}
-              {(() => {
-                const messages = messagesByContact[selectedContactId] || [];
-                const images = messages.filter(m => m.type === 'image');
-                const files = messages.filter(m => m.type === 'file');
-                const links = messages.filter(m => m.type === 'link');
-                if (images.length === 0 && files.length === 0 && links.length === 0) {
-                  return <div className="friends-empty">No media, files, or links found in this chat.</div>;
-                }
-                return <>
-                  {images.length > 0 && <>
-                    <div className="friends-media-section"><strong>Images</strong></div>
-                    <div className="friends-media-list images">
-                      {images.map(img => (
-                        <div key={img.id} className="friends-media-thumb">
-                          <img src={img.url || img.attachmentUrl} alt={img.name || 'image'} style={{ maxWidth: 80, maxHeight: 80, borderRadius: 8 }} />
-                          <div className="friends-media-meta">{img.name || 'Image'}</div>
-                          <a href={img.url || img.attachmentUrl} target="_blank" rel="noopener noreferrer" className="friends-media-download">Open</a>
-                        </div>
-                      ))}
-                    </div>
-                  </>}
-                  {files.length > 0 && <>
-                    <div className="friends-media-section"><strong>Files</strong></div>
-                    <div className="friends-media-list files">
-                      {files.map(file => (
-                        <div key={file.id} className="friends-media-thumb">
-                          <div className="friends-media-icon">📎</div>
-                          <div className="friends-media-meta">{file.name || 'File'}</div>
-                          <a href={file.url || file.attachmentUrl} target="_blank" rel="noopener noreferrer" className="friends-media-download">Download</a>
-                        </div>
-                      ))}
-                    </div>
-                  </>}
-                  {links.length > 0 && <>
-                    <div className="friends-media-section"><strong>Links</strong></div>
-                    <div className="friends-media-list links">
-                      {links.map(link => (
-                        <div key={link.id} className="friends-media-thumb">
-                          <a href={link.url} target="_blank" rel="noopener noreferrer" className="friends-media-link">{link.url}</a>
-                        </div>
-                      ))}
-                    </div>
-                  </>}
-                </>;
-              })()}
-            </div>
-            <div className="friends-add-modal-actions">
-              <button type="button" className="secondary" onClick={() => setIsMediaModalOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isDisappearModalOpen ? (
-        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsDisappearModalOpen(false)}>
-          <div className="friends-add-modal" role="dialog" aria-label="Disappearing Messages" onClick={e => e.stopPropagation()}>
-            <h4>Disappearing Messages</h4>
-            <div style={{ margin: '16px 0' }}>
-              <p>Set how long messages in this chat are kept before disappearing for both users.</p>
-              <select
-                value={selectedContact?.preferences?.defaultDisappearPolicy?.mode || 'keep'}
-                onChange={async (e) => {
-                  const mode = e.target.value;
-                  let policy = { mode };
-                  if (mode === 'custom') {
-                    const customDate = prompt('Enter expiry date/time (YYYY-MM-DD HH:mm):');
-                    if (customDate) policy = { mode: 'custom', until: customDate };
-                  }
-                  try {
-                    await updateContactPreferences(authToken, selectedContactId, { defaultDisappearPolicy: policy });
-                    setIsDisappearModalOpen(false);
-                    await loadContacts();
-                  } catch (err) {
-                    setError(err.message || 'Failed to update disappear policy');
-                  }
-                }}
-                style={{ width: '100%', margin: '10px 0' }}
-              >
-                <option value="keep">Keep (never disappear)</option>
-                <option value="1h">1 hour</option>
-                <option value="24h">24 hours</option>
-                <option value="3d">3 days</option>
-                <option value="7d">7 days</option>
-                <option value="custom">Custom date/time</option>
-              </select>
-              <div style={{ fontSize: '0.97em', color: '#4a5a64' }}>
-                Current: {(() => {
-                  const p = selectedContact?.preferences?.defaultDisappearPolicy;
-                  if (!p || p.mode === 'keep') return 'Keep';
-                  if (p.mode === 'custom') return `Until ${p.until}`;
-                  return p.mode;
-                })()}
-              </div>
-            </div>
-            <div className="friends-add-modal-actions">
-              <button type="button" className="secondary" onClick={() => setIsDisappearModalOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isMuteModalOpen ? (
-        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsMuteModalOpen(false)}>
-          <div className="friends-add-modal" role="dialog" aria-label="Mute Notifications" onClick={e => e.stopPropagation()}>
-            <h4>Mute Notifications</h4>
-            <div style={{ margin: '16px 0' }}>
-              <p>Mute or unmute notifications for this chat. Muted chats will not trigger sound or desktop notifications.</p>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={!!selectedContact?.preferences?.muted}
-                  onChange={async (e) => {
-                    try {
-                      await updateContactPreferences(authToken, selectedContactId, { muted: e.target.checked });
-                      setIsMuteModalOpen(false);
-                      await loadContacts();
-                    } catch (err) {
-                      setError(err.message || 'Failed to update mute state');
-                    }
-                  }}
-                />
-                Muted
-              </label>
-              <div style={{ fontSize: '0.97em', color: '#4a5a64', marginTop: 6 }}>
-                Current: {selectedContact?.preferences?.muted ? 'Muted' : 'Unmuted'}
-              </div>
-            </div>
-            <div className="friends-add-modal-actions">
-              <button type="button" className="secondary" onClick={() => setIsMuteModalOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {isProfileModalOpen ? (
         <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsProfileModalOpen(false)}>
           <div className="friends-profile-modal" role="dialog" aria-label="Profile" onClick={(e) => e.stopPropagation()}>
@@ -1566,13 +1800,9 @@
           </div>
         </div>
       ) : null}
-
-
-
-
-
     </div>
   );
+};
 
 function FriendsFeature({ onSwitchToClassic }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1636,57 +1866,13 @@ function FriendsFeature({ onSwitchToClassic }) {
       setError(err?.message || 'Friends socket connection failed');
     });
 
-    // --- Real-time event listeners ---
-    // New message (including replies/forwards)
-    nextSocket.on('friends:new_message', (payload) => {
-      const { message, fromUniqueId, toUniqueId } = payload;
-      // Determine which contact this message belongs to
-      const contactId = fromUniqueId === profile?.uniqueId ? toUniqueId : fromUniqueId;
-      setMessagesByContact((prev) => {
-        const current = prev[contactId] || [];
-        // Avoid duplicate by id
-        if (current.some((m) => m.id === message.id)) return prev;
-        return {
-          ...prev,
-          [contactId]: [...current, { ...message, isMine: fromUniqueId === profile?.uniqueId }].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        };
-      });
-    });
-
-    // Message reaction (emoji)
-    nextSocket.on('friends:reaction', (payload) => {
-      const { messageId, emoji, count, contactId } = payload;
-      setMessagesByContact((prev) => {
-        const msgs = prev[contactId] || [];
-        return {
-          ...prev,
-          [contactId]: msgs.map((m) => {
-            if (m.id !== messageId) return m;
-            let newReactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
-            const idx = newReactions.findIndex((r) => r.emoji === emoji);
-            if (idx >= 0) {
-              newReactions[idx] = { ...newReactions[idx], count };
-            } else {
-              newReactions.push({ emoji, count });
-            }
-            return { ...m, reactions: newReactions };
-          })
-        };
-      });
-    });
-
-    // Forwarded message (handled as new_message, but can add extra logic if needed)
-    // If you want to distinguish, add a separate event or check message.forwarded
-
-    // Optionally: message deleted/edited events can be handled here
-
     setSocket(nextSocket);
 
     return () => {
       nextSocket.disconnect();
       setSocket(null);
     };
-  }, [authToken, profile?.uniqueId]);
+  }, [authToken]);
 
   const handleGoogleLogin = async () => {
     if (!friendsAuth) {
