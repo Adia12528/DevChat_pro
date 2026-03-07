@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+// For emoji picker, you may use a library like emoji-mart or keep the existing logic
 import { io } from 'socket.io-client';
 // --- LoginPanel: must be defined before FriendsFeature uses it ---
 const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
@@ -573,6 +574,58 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   const [settingsSavedMessage, setSettingsSavedMessage] = useState('');
   const [settingsError, setSettingsError] = useState('');
   const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
+  const [isInputMenuOpen, setIsInputMenuOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [isMute, setIsMute] = useState(false);
+  const [isDisappearing, setIsDisappearing] = useState(false);
+  const [showMediaModal, setShowMediaModal] = useState(false);
+    // File/image upload handlers
+    const fileInputRef = useRef(null);
+    const imageInputRef = useRef(null);
+
+    const handleUploadFile = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file && selectedContact) {
+        // TODO: Implement file upload logic here
+        alert(`File upload: ${file.name}`);
+      }
+      setIsInputMenuOpen(false);
+      e.target.value = '';
+    };
+
+    const handleUploadImage = (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file && selectedContact) {
+        // TODO: Implement image upload logic here
+        alert(`Image upload: ${file.name}`);
+      }
+      setIsInputMenuOpen(false);
+      e.target.value = '';
+    };
+
+    const handleClearChat = () => {
+      if (window.confirm('Clear all messages in this chat?')) {
+        setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
+      }
+      setIsHeaderMenuOpen(false);
+    };
+
+    const handleToggleMute = () => {
+      setIsMute((prev) => !prev);
+      setIsHeaderMenuOpen(false);
+    };
+
+    const handleToggleDisappearing = () => {
+      setIsDisappearing((prev) => !prev);
+      setIsHeaderMenuOpen(false);
+    };
+
+    const handleShowMedia = () => {
+      setShowMediaModal(true);
+      setIsHeaderMenuOpen(false);
+    };
+
+    const handleCloseMediaModal = () => setShowMediaModal(false);
   const [loadingOlderByContact, setLoadingOlderByContact] = useState({});
   const [hasMoreByContact, setHasMoreByContact] = useState({});
   const [oldestCursorByContact, setOldestCursorByContact] = useState({});
@@ -1478,7 +1531,6 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                 </div>
                 <div className="friends-chat-header-copy">
                   <strong>{selectedContact.displayName || selectedContact.uniqueId}</strong>
-                  {/* Badge for requests */}
                   {incomingRequests.some((req) => req.fromUid === selectedContact.uid) ? (
                     <span className="friends-request-badge">!</span>
                   ) : null}
@@ -1489,6 +1541,25 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                         ? 'online'
                         : (selectedContact.lastSeen ? `last seen ${formatChatTime(selectedContact.lastSeen)}` : selectedContact.uniqueId)}
                   </small>
+                </div>
+                {/* Header menu (three dots) */}
+                <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                  <button
+                    type="button"
+                    className="friends-header-menu-btn"
+                    aria-label="Chat options"
+                    onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
+                  >
+                    &#8942;
+                  </button>
+                  {isHeaderMenuOpen && (
+                    <div className="friends-header-menu-dropdown" role="menu">
+                      <button type="button" onClick={handleClearChat}>Clear Chat</button>
+                      <button type="button" onClick={handleShowMedia}>Media, Links, Docs</button>
+                      <button type="button" onClick={handleToggleDisappearing}>{isDisappearing ? 'Disable' : 'Enable'} Disappearing Messages</button>
+                      <button type="button" onClick={handleToggleMute}>{isMute ? 'Unmute' : 'Mute'} Notifications</button>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -1549,6 +1620,15 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
         </div>
 
         <div className="friends-input-wrap">
+          {/* Multi-purpose input menu */}
+          {isInputMenuOpen && (
+            <div className="friends-input-menu-dropdown" role="menu">
+              <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>Emoji Picker</button>
+              <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>Upload Image</button>
+              <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>Upload File</button>
+              <button type="button" disabled>More (coming soon)</button>
+            </div>
+          )}
           {isEmojiTrayOpen ? (
             <div className="friends-emoji-tray" aria-label="Emoji picker">
               {quickEmojis.map((emoji) => (
@@ -1563,18 +1643,16 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
               ))}
             </div>
           ) : null}
-
           <div className="friends-input-row">
             <button
               type="button"
-              className="friends-emoji-toggle"
-              onClick={() => setIsEmojiTrayOpen((prev) => !prev)}
-              aria-label="Toggle emoji picker"
+              className="friends-input-menu-btn"
+              aria-label="Open input menu"
+              onClick={() => setIsInputMenuOpen((prev) => !prev)}
               disabled={!selectedContact}
             >
-              🙂
+              +
             </button>
-
             <input
               placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
               value={message}
@@ -1587,12 +1665,13 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                 }
               }}
             />
-
             <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
               Send
             </button>
+            {/* Hidden file/image inputs */}
+            <input type="file" accept="image/*" style={{ display: 'none' }} ref={imageInputRef} onChange={handleUploadImage} />
+            <input type="file" style={{ display: 'none' }} ref={fileInputRef} onChange={handleUploadFile} />
           </div>
-
           {error ? <p className="friends-error">{error}</p> : null}
           {offlineQueueCount > 0 ? (
             <p className="friends-note" aria-live="polite">
@@ -1600,6 +1679,19 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             </p>
           ) : null}
         </div>
+
+        {/* Media/Links/Docs Modal */}
+        {showMediaModal && (
+          <div className="friends-modal-backdrop" role="presentation" onClick={handleCloseMediaModal}>
+            <div className="friends-profile-modal" role="dialog" aria-label="Media, Links, Docs" onClick={e => e.stopPropagation()}>
+              <h4>Media, Links, Docs</h4>
+              <p>Show shared media, links, and documents here. (To implement: filter messages for attachments/links.)</p>
+              <div className="friends-add-modal-actions">
+                <button type="button" className="secondary" onClick={handleCloseMediaModal}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       <button
