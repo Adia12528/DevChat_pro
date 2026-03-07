@@ -108,6 +108,16 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [requestsError, setRequestsError] = useState('');
+  // ...existing useState hooks...
+  const [contacts, setContacts] = useState([]);
+  const [selectedContactId, setSelectedContactId] = useState('');
+  // ...other useState hooks...
+
+  // Fix: selectedContact must be defined after contacts and selectedContactId useState
+  const selectedContact = useMemo(
+    () => contacts.find((c) => c.uniqueId === selectedContactId) || null,
+    [contacts, selectedContactId]
+  );
 
   // Load friend requests
   const loadRequests = async () => {
@@ -474,8 +484,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
         setIsSearchingAddFriend(false);
       }
     };
-  const [contacts, setContacts] = useState([]);
-  const [selectedContactId, setSelectedContactId] = useState('');
+  // (removed duplicate contacts and selectedContactId useState)
   const [messagesByContact, setMessagesByContact] = useState({});
   const [chatSearchInput, setChatSearchInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
