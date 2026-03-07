@@ -18,10 +18,13 @@
   grid-template-columns: minmax(280px, 30%) minmax(0, 70%);
   min-height: 100vh;
   background: radial-gradient(circle at 20% 20%, rgba(89, 184, 146, 0.1) 0, transparent 50%), var(--wa-bg);
-  position: relative;
+  position: fixed;
+  inset: 0;
+  margin: 0;
   overflow: hidden;
   overflow-x: hidden;
   box-sizing: border-box;
+  z-index: 5;
 }
 
 @supports (height: 100svh) {
