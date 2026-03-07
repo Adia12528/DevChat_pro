@@ -1624,10 +1624,30 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             {/* Multi-purpose input menu */}
             {isInputMenuOpen && (
               <div className="friends-input-menu-dropdown" role="menu">
-                <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>Emoji Picker</button>
-                <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>Upload Image</button>
-                <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>Upload File</button>
-                <button type="button" disabled>More (coming soon)</button>
+                <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>
+                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#fffbe7" stroke="#ffd600" strokeWidth="1.2"/><text x="6" y="16" fontSize="13" fill="#ffd600">😊</text></svg>
+                  </span>
+                  Emoji Picker
+                </button>
+                <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>
+                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2.5" y="4.5" width="17" height="13" rx="2.5" fill="#e3f2fd" stroke="#1976d2" strokeWidth="1.2"/><circle cx="7.5" cy="9" r="2" fill="#90caf9"/><rect x="10" y="11" width="6" height="4" rx="1.5" fill="#1976d2" opacity=".3"/></svg>
+                  </span>
+                  Upload Image
+                </button>
+                <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="3" width="14" height="16" rx="2" fill="#e8f5e9" stroke="#43a047" strokeWidth="1.2"/><rect x="7" y="7" width="8" height="2" rx="1" fill="#43a047"/><rect x="7" y="11" width="5" height="2" rx="1" fill="#43a047" opacity=".5"/></svg>
+                  </span>
+                  Upload File
+                </button>
+                <button type="button" disabled>
+                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><rect x="7" y="10" width="8" height="2" rx="1" fill="#8e24aa"/><rect x="10" y="7" width="2" height="8" rx="1" fill="#8e24aa"/></svg>
+                  </span>
+                  More (coming soon)
+                </button>
               </div>
             )}
             {isEmojiTrayOpen ? (
