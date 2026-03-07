@@ -166,6 +166,10 @@ const getModels = (mongoose) => {
           { _id: false }
         ),
         default: {}
+      },
+      settings: {
+        theme: { type: String, default: 'light' },
+        notifications: { type: Boolean, default: true }
       }
     },
     { timestamps: true }
@@ -176,6 +180,7 @@ const getModels = (mongoose) => {
       conversationId: { type: String, index: true },
       fromUid: { type: String, index: true },
       toUid: { type: String, index: true },
+      clientTempId: { type: String, default: null, index: true },
       text: { type: String, required: true },
       disappearPolicy: { type: Object, default: { mode: 'keep' } },
       expiresAt: { type: Date, default: null },
@@ -183,6 +188,12 @@ const getModels = (mongoose) => {
       readAt: { type: Date, default: null }
     },
     { timestamps: true }
+  );
+
+  // Idempotency key for client retries: same sender->recipient with same temp id resolves to one message.
+  FriendMessageSchema.index(
+    { fromUid: 1, toUid: 1, clientTempId: 1 },
+    { unique: true, sparse: true, name: 'friends_unique_temp_send' }
   );
 
   const FriendProfile = mongoose.models.FriendProfile || mongoose.model('FriendProfile', FriendProfileSchema);
@@ -197,7 +208,11 @@ const toPublicProfile = (profile) => ({
   bio: profile.bio || '',
   photoURL: profile.photoURL || '',
   email: profile.email || '',
-  phoneNumber: profile.phoneNumber || ''
+  phoneNumber: profile.phoneNumber || '',
+  settings: {
+    theme: profile.settings?.theme || 'light',
+    notifications: profile.settings?.notifications !== false
+  }
 });
 
 const friendsAuthMiddleware = (enabled) => async (req, res, next) => {
@@ -266,6 +281,7 @@ const mapMessageForClient = async (FriendProfile, message, viewerUid) => {
   return {
     id: String(message._id),
     text: message.text,
+    clientTempId: message.clientTempId || null,
     createdAt: message.createdAt,
     expiresAt: message.expiresAt,
     disappearPolicy: message.disappearPolicy || { mode: 'keep' },
@@ -279,6 +295,16 @@ const mapMessageForClient = async (FriendProfile, message, viewerUid) => {
         ? (message.readAt ? 'read' : (message.deliveredAt ? 'delivered' : 'sent'))
         : 'received'
   };
+};
+
+const findExistingByClientTempId = async (FriendMessage, { fromUid, toUid, clientTempId }) => {
+  const tempId = String(clientTempId || '').trim();
+  if (!tempId) return null;
+  return FriendMessage.findOne({
+    fromUid,
+    toUid,
+    clientTempId: tempId
+  });
 };
 
 const pruneExpired = async (FriendMessage, conversationId) => {
@@ -371,7 +397,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
     }
   });
 
-  router.get('/contacts', authRequired, async (req, res) => {
+  const listContactsHandler = async (req, res) => {
     try {
       const profile = await ensureProfile(FriendProfile, req.firebaseUser);
       const contacts = await FriendProfile.find({ uniqueId: { $in: profile.contacts || [] } }).lean();
@@ -405,12 +431,15 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       console.error('friends contacts error', error);
       return res.status(500).json({ error: 'Failed to load contacts.' });
     }
-  });
+  };
 
-  router.get('/search', authRequired, async (req, res) => {
+  router.get('/contacts', authRequired, listContactsHandler);
+  router.get('/list', authRequired, listContactsHandler);
+
+  const searchHandler = async (req, res) => {
     try {
       const me = await ensureProfile(FriendProfile, req.firebaseUser);
-      const q = String(req.query?.query || '').trim();
+      const q = String(req.body?.query || req.query?.query || '').trim();
       if (!q) return res.json({ users: [] });
 
       const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -435,12 +464,15 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       console.error('friends search error', error);
       return res.status(500).json({ error: 'Failed to search users.' });
     }
-  });
+  };
 
-  router.post('/contacts', authRequired, async (req, res) => {
+  router.get('/search', authRequired, searchHandler);
+  router.post('/search', authRequired, searchHandler);
+
+  const addContactHandler = async (req, res) => {
     try {
       const me = await ensureProfile(FriendProfile, req.firebaseUser);
-      const targetUniqueId = String(req.body?.targetUniqueId || '').trim();
+      const targetUniqueId = String(req.body?.targetUniqueId || req.body?.friendId || '').trim();
       if (!targetUniqueId) return res.status(400).json({ error: 'targetUniqueId required.' });
 
       if (targetUniqueId === me.uniqueId) {
@@ -460,7 +492,10 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       console.error('friends add contact error', error);
       return res.status(500).json({ error: 'Failed to add contact.' });
     }
-  });
+  };
+
+  router.post('/contacts', authRequired, addContactHandler);
+  router.post('/add', authRequired, addContactHandler);
 
   router.put('/contacts/:targetUniqueId/preferences', authRequired, async (req, res) => {
     try {
@@ -498,24 +533,138 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
     }
   });
 
-  router.get('/conversations/:contactUniqueId/messages', authRequired, async (req, res) => {
+  const getMessagesHandler = async (req, res) => {
     try {
       const me = await ensureProfile(FriendProfile, req.firebaseUser);
-      const contact = await FriendProfile.findOne({ uniqueId: req.params.contactUniqueId });
+      const contactUniqueId = req.params.contactUniqueId || req.params.friendId;
+      const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId });
       if (!contact) return res.status(404).json({ error: 'Contact not found.' });
 
       const conversationId = conversationIdFor(me.uid, contact.uid);
       await pruneExpired(FriendMessage, conversationId);
 
-      const rawMessages = await FriendMessage.find({ conversationId }).sort({ createdAt: 1 }).lean();
+      const before = req.query?.before ? new Date(req.query.before) : null;
+      const hasBefore = before && !Number.isNaN(before.getTime());
+      const limitValue = Number.parseInt(String(req.query?.limit || '40'), 10);
+      const limit = Number.isFinite(limitValue) ? Math.min(Math.max(limitValue, 1), 100) : 40;
+
+      const query = {
+        conversationId,
+        ...getActiveMessageFilter(),
+        ...(hasBefore ? { createdAt: { $lt: before } } : {})
+      };
+
+      const rawMessages = await FriendMessage.find(query)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
       const mapped = await Promise.all(rawMessages.map((msg) => mapMessageForClient(FriendProfile, msg, me.uid)));
 
-      return res.json({ messages: mapped });
+      return res.json({ messages: mapped.reverse() });
     } catch (error) {
       console.error('friends messages error', error);
       return res.status(500).json({ error: 'Failed to load conversation.' });
     }
+  };
+
+  router.get('/conversations/:contactUniqueId/messages', authRequired, getMessagesHandler);
+  router.get('/messages/:friendId', authRequired, getMessagesHandler);
+
+  router.post('/send', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const receiverId = String(req.body?.receiverId || req.body?.toUniqueId || '').trim();
+      const text = sanitizeMessageText(req.body?.message || req.body?.text || '');
+      const disappearPolicy = req.body?.disappearPolicy || { mode: 'keep' };
+      const clientTempId = String(req.body?.clientTempId || '').trim() || null;
+
+      if (!receiverId) return res.status(400).json({ error: 'receiverId required.' });
+      if (!text) return res.status(400).json({ error: 'Message cannot be empty.' });
+
+      const recipient = await FriendProfile.findOne({ uniqueId: receiverId });
+      if (!recipient) return res.status(404).json({ error: 'Recipient not found.' });
+
+      const existing = await findExistingByClientTempId(FriendMessage, {
+        fromUid: me.uid,
+        toUid: recipient.uid,
+        clientTempId
+      });
+      if (existing) {
+        const payloadForSenderExisting = await mapMessageForClient(FriendProfile, existing, me.uid);
+        return res.json({ ok: true, duplicate: true, message: payloadForSenderExisting });
+      }
+
+      const conversationId = conversationIdFor(me.uid, recipient.uid);
+      const expiresAt = parseDisappearingPolicy(disappearPolicy);
+      const recipientRoom = friendsNsp.adapter.rooms.get(`user:${recipient.uid}`);
+      const deliveredAt = recipientRoom && recipientRoom.size > 0 ? new Date() : null;
+
+      const saved = await FriendMessage.create({
+        conversationId,
+        fromUid: me.uid,
+        toUid: recipient.uid,
+        clientTempId,
+        text,
+        disappearPolicy,
+        expiresAt,
+        deliveredAt
+      });
+
+      const payloadForSender = await mapMessageForClient(FriendProfile, saved, me.uid);
+      const payloadForRecipient = await mapMessageForClient(FriendProfile, saved, recipient.uid);
+
+      const senderPacket = {
+        withUniqueId: recipient.uniqueId,
+        message: payloadForSender,
+        clientTempId
+      };
+      const recipientPacket = {
+        withUniqueId: me.uniqueId,
+        message: payloadForRecipient,
+        clientTempId
+      };
+
+      friendsNsp.to(`user:${me.uid}`).emit('friends:new_message', senderPacket);
+      friendsNsp.to(`user:${me.uid}`).emit('new_message', senderPacket);
+      friendsNsp.to(`conversation:${conversationId}`).emit('friends:new_message', recipientPacket);
+      friendsNsp.to(`conversation:${conversationId}`).emit('new_message', recipientPacket);
+      friendsNsp.to(`user:${recipient.uid}`).emit('friends:new_message', recipientPacket);
+      friendsNsp.to(`user:${recipient.uid}`).emit('new_message', recipientPacket);
+
+      return res.json({
+        ok: true,
+        message: payloadForSender
+      });
+    } catch (error) {
+      console.error('friends send error', error);
+      return res.status(500).json({ error: 'Failed to send message.' });
+    }
   });
+
+  const userRouter = express.Router();
+  userRouter.post('/settings', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const requestedTheme = String(req.body?.theme || 'light').toLowerCase();
+      const theme = requestedTheme === 'dark' ? 'dark' : 'light';
+      const notifications = req.body?.notifications !== false;
+
+      me.settings = {
+        ...(me.settings || {}),
+        theme,
+        notifications
+      };
+      me.markModified('settings');
+      await me.save();
+
+      return res.json({ ok: true, settings: me.settings });
+    } catch (error) {
+      console.error('friends settings update error', error);
+      return res.status(500).json({ error: 'Failed to save settings.' });
+    }
+  });
+
+  app.use('/api/user', userRouter);
 
   app.use('/api/friends', router);
 
@@ -551,11 +700,13 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       for (const contactUniqueId of me.contacts || []) {
         const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId }).lean();
         if (!contact) continue;
-        friendsNsp.to(`user:${contact.uid}`).emit('friends:presence', {
+        const presencePayload = {
           uniqueId: me.uniqueId,
           online: true,
           lastSeen: lastSeenByUid.get(me.uid) || null
-        });
+        };
+        friendsNsp.to(`user:${contact.uid}`).emit('friends:presence', presencePayload);
+        friendsNsp.to(`user:${contact.uid}`).emit('user_online', presencePayload);
       }
 
       socket.on('friends:join_conversation', async ({ withUniqueId }) => {
@@ -582,7 +733,41 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
         }
       });
 
-      socket.on('friends:send_message', async ({ toUniqueId, text, disappearPolicy, clientTempId }, ack) => {
+      const emitTypingState = async ({ toUniqueId, isTyping }) => {
+        if (!allowTypingEvent()) return;
+        const recipient = await FriendProfile.findOne({ uniqueId: toUniqueId }).lean();
+        if (!recipient) return;
+        const typingPayload = {
+          fromUniqueId: me.uniqueId,
+          isTyping: !!isTyping
+        };
+        friendsNsp.to(`user:${recipient.uid}`).emit('friends:typing', typingPayload);
+        friendsNsp.to(`user:${recipient.uid}`).emit(typingPayload.isTyping ? 'typing' : 'stop_typing', typingPayload);
+      };
+
+      const emitMessagePackets = ({ conversationId, recipientUid, senderUniqueId, recipientUniqueId, payloadForSender, payloadForRecipient, clientTempId }) => {
+        const senderPacket = {
+          withUniqueId: recipientUniqueId,
+          message: payloadForSender,
+          clientTempId: clientTempId || null
+        };
+        const recipientPacket = {
+          withUniqueId: senderUniqueId,
+          message: payloadForRecipient,
+          clientTempId: clientTempId || null
+        };
+
+        socket.emit('friends:new_message', senderPacket);
+        socket.emit('new_message', senderPacket);
+
+        friendsNsp.to(`conversation:${conversationId}`).emit('friends:new_message', recipientPacket);
+        friendsNsp.to(`conversation:${conversationId}`).emit('new_message', recipientPacket);
+
+        friendsNsp.to(`user:${recipientUid}`).emit('friends:new_message', recipientPacket);
+        friendsNsp.to(`user:${recipientUid}`).emit('new_message', recipientPacket);
+      };
+
+      const sendMessageCore = async ({ toUniqueId, text, disappearPolicy, clientTempId }, ack) => {
         try {
           if (!allowSendEvent()) {
             if (typeof ack === 'function') ack({ ok: false, error: 'Rate limit exceeded. Please slow down.' });
@@ -602,64 +787,123 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
             return;
           }
 
+          const normalizedTempId = String(clientTempId || '').trim() || null;
+          const existing = await findExistingByClientTempId(FriendMessage, {
+            fromUid: me.uid,
+            toUid: recipient.uid,
+            clientTempId: normalizedTempId
+          });
+          if (existing) {
+            const payloadForSenderExisting = await mapMessageForClient(FriendProfile, existing, me.uid);
+            const payloadForRecipientExisting = await mapMessageForClient(FriendProfile, existing, recipient.uid);
+            const existingConversationId = conversationIdFor(me.uid, recipient.uid);
+
+            emitMessagePackets({
+              conversationId: existingConversationId,
+              recipientUid: recipient.uid,
+              senderUniqueId: me.uniqueId,
+              recipientUniqueId: recipient.uniqueId,
+              payloadForSender: payloadForSenderExisting,
+              payloadForRecipient: payloadForRecipientExisting,
+              clientTempId: normalizedTempId
+            });
+
+            if (typeof ack === 'function') {
+              ack({ ok: true, duplicate: true, messageId: String(existing._id), clientTempId: normalizedTempId });
+            }
+            return;
+          }
+
           const conversationId = conversationIdFor(me.uid, recipient.uid);
           const expiresAt = parseDisappearingPolicy(disappearPolicy);
 
           const recipientRoom = friendsNsp.adapter.rooms.get(`user:${recipient.uid}`);
           const deliveredAt = recipientRoom && recipientRoom.size > 0 ? new Date() : null;
 
-          const saved = await FriendMessage.create({
-            conversationId,
-            fromUid: me.uid,
-            toUid: recipient.uid,
-            text: cleanText,
-            disappearPolicy: disappearPolicy || { mode: 'keep' },
-            expiresAt,
-            deliveredAt
-          });
+          let saved;
+          try {
+            saved = await FriendMessage.create({
+              conversationId,
+              fromUid: me.uid,
+              toUid: recipient.uid,
+              clientTempId: normalizedTempId,
+              text: cleanText,
+              disappearPolicy: disappearPolicy || { mode: 'keep' },
+              expiresAt,
+              deliveredAt
+            });
+          } catch (createError) {
+            if (createError?.code === 11000 && normalizedTempId) {
+              saved = await findExistingByClientTempId(FriendMessage, {
+                fromUid: me.uid,
+                toUid: recipient.uid,
+                clientTempId: normalizedTempId
+              });
+            } else {
+              throw createError;
+            }
+          }
+
+          if (!saved) {
+            throw new Error('Unable to persist message');
+          }
 
           const payloadForSender = await mapMessageForClient(FriendProfile, saved, me.uid);
           const payloadForRecipient = await mapMessageForClient(FriendProfile, saved, recipient.uid);
 
-          friendsNsp.to(`conversation:${conversationId}`).emit('friends:new_message', {
-            withUniqueId: me.uniqueId,
-            message: payloadForRecipient,
-            clientTempId: clientTempId || null
-          });
-
-          socket.emit('friends:new_message', {
-            withUniqueId: recipient.uniqueId,
-            message: payloadForSender,
-            clientTempId: clientTempId || null
-          });
-
-          friendsNsp.to(`user:${recipient.uid}`).emit('friends:new_message', {
-            withUniqueId: me.uniqueId,
-            message: payloadForRecipient,
-            clientTempId: clientTempId || null
+          emitMessagePackets({
+            conversationId,
+            recipientUid: recipient.uid,
+            senderUniqueId: me.uniqueId,
+            recipientUniqueId: recipient.uniqueId,
+            payloadForSender,
+            payloadForRecipient,
+            clientTempId: normalizedTempId
           });
 
           if (typeof ack === 'function') {
-            ack({ ok: true, messageId: String(saved._id), clientTempId: clientTempId || null });
+            ack({ ok: true, messageId: String(saved._id), clientTempId: normalizedTempId });
           }
         } catch (error) {
           console.error('friends:send_message failed', error);
           socket.emit('friends:error', { message: 'Failed to send message.' });
           if (typeof ack === 'function') ack({ ok: false, error: 'Failed to send message.' });
         }
+      };
+
+      socket.on('friends:send_message', async (payload, ack) => {
+        await sendMessageCore(payload || {}, ack);
+      });
+
+      socket.on('send_message', async (payload, ack) => {
+        if (payload?.text) {
+          await sendMessageCore(payload, ack);
+          return;
+        }
+        if (typeof ack === 'function') ack({ ok: true });
       });
 
       socket.on('friends:typing', async ({ toUniqueId, isTyping }) => {
         try {
-          if (!allowTypingEvent()) return;
-          const recipient = await FriendProfile.findOne({ uniqueId: toUniqueId }).lean();
-          if (!recipient) return;
-          friendsNsp.to(`user:${recipient.uid}`).emit('friends:typing', {
-            fromUniqueId: me.uniqueId,
-            isTyping: !!isTyping
-          });
+          await emitTypingState({ toUniqueId, isTyping });
         } catch (error) {
           console.error('friends:typing failed', error);
+        }
+      });
+
+      socket.on('typing', async ({ toUniqueId }) => {
+        try {
+          await emitTypingState({ toUniqueId, isTyping: true });
+        } catch (error) {
+          console.error('typing failed', error);
+        }
+      });
+
+      socket.on('stop_typing', async ({ toUniqueId }) => {
+        try {
+          await emitTypingState({ toUniqueId, isTyping: false });
+        } catch (error) {
+          console.error('stop_typing failed', error);
         }
       });
 
@@ -697,8 +941,18 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
             messageIds,
             readAt: now.toISOString()
           });
+          socket.emit('read_receipt', {
+            withUniqueId: other.uniqueId,
+            messageIds,
+            readAt: now.toISOString()
+          });
 
           friendsNsp.to(`user:${other.uid}`).emit('friends:read_update', {
+            withUniqueId: me.uniqueId,
+            messageIds,
+            readAt: now.toISOString()
+          });
+          friendsNsp.to(`user:${other.uid}`).emit('read_receipt', {
             withUniqueId: me.uniqueId,
             messageIds,
             readAt: now.toISOString()
@@ -745,11 +999,13 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
           for (const contactUniqueId of me.contacts || []) {
             const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId }).lean();
             if (!contact) continue;
-            friendsNsp.to(`user:${contact.uid}`).emit('friends:presence', {
+            const presencePayload = {
               uniqueId: me.uniqueId,
               online: isOnline,
               lastSeen
-            });
+            };
+            friendsNsp.to(`user:${contact.uid}`).emit('friends:presence', presencePayload);
+            friendsNsp.to(`user:${contact.uid}`).emit(isOnline ? 'user_online' : 'user_offline', presencePayload);
           }
         } catch (disconnectError) {
           console.error('friends disconnect presence error', disconnectError);
@@ -764,4 +1020,10 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   console.log(`✅ Friends module mounted (firebase ${enabled ? 'enabled' : 'disabled'})`);
 };
 
-module.exports = { setupFriendsFeature };
+module.exports = {
+  setupFriendsFeature,
+  __testables: {
+    getModels,
+    findExistingByClientTempId
+  }
+};

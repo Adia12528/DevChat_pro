@@ -18,7 +18,9 @@ import {
   fetchConversationMessages,
   fetchFriendsProfile,
   getFriendsBackendUrl,
+  saveUserSettings,
   searchUsers,
+  sendMessage,
   updateFriendsProfile
 } from './friendsApi';
 
@@ -83,6 +85,9 @@ const isEmailOrPhone = (value) => {
 
 const getReceiptConfig = (msg) => {
   if (!msg?.isMine) return null;
+  if (msg.deliveryStatus === 'queued') {
+    return { text: 'Q', className: 'queued', title: 'Queued (offline)' };
+  }
   if (msg.deliveryStatus === 'pending') {
     return { text: '...', className: 'sent', title: 'Sending' };
   }
@@ -98,10 +103,37 @@ const getReceiptConfig = (msg) => {
 
 const getListReceipt = (msg) => {
   if (!msg) return null;
+  if (msg.deliveryStatus === 'queued') return 'Q';
   if (msg.deliveryStatus === 'pending') return '...';
   if (msg.deliveryStatus === 'read') return '✓✓';
   if (msg.deliveryStatus === 'delivered') return '✓✓';
   return '✓';
+};
+
+const mergeMessagesById = (existing = [], incoming = []) => {
+  const byId = new Map();
+  [...existing, ...incoming].forEach((item) => {
+    if (!item?.id) return;
+    byId.set(item.id, item);
+  });
+  return Array.from(byId.values()).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+};
+
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const sendWithRetry = async ({ token, payload, attempts = 2 }) => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await sendMessage(token, payload);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await wait(220 * attempt);
+      }
+    }
+  }
+  throw lastError || new Error('Unable to send message');
 };
 
 const playNotificationTone = (kind = 'soft') => {
@@ -226,13 +258,17 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
+  const [chatSearchInput, setChatSearchInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
   const [addFriendQuery, setAddFriendQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [isSearchingAddFriend, setIsSearchingAddFriend] = useState(false);
+  const [hasSearchedAddFriend, setHasSearchedAddFriend] = useState(false);
+  const [addFriendSearchError, setAddFriendSearchError] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [typingByContact, setTypingByContact] = useState({});
-  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 960 : false));
+  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [mobilePane, setMobilePane] = useState('list');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -240,14 +276,22 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsNameDraft, setSettingsNameDraft] = useState(profile.displayName || '');
   const [settingsBioDraft, setSettingsBioDraft] = useState(profile.bio || '');
+  const [settingsThemeDraft, setSettingsThemeDraft] = useState('light');
+  const [settingsNotificationsDraft, setSettingsNotificationsDraft] = useState(true);
   const [settingsSavedMessage, setSettingsSavedMessage] = useState('');
   const [settingsError, setSettingsError] = useState('');
   const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
+  const [loadingOlderByContact, setLoadingOlderByContact] = useState({});
+  const [hasMoreByContact, setHasMoreByContact] = useState({});
+  const [oldestCursorByContact, setOldestCursorByContact] = useState({});
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
   const typingActiveRef = useRef(false);
   const pendingSendTimersRef = useRef({});
+  const offlineQueueRef = useRef([]);
+  const queueFlushInProgressRef = useRef(false);
   const menuRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const firstUnreadDividerRef = useRef(null);
@@ -255,6 +299,59 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const swipeStartRef = useRef(null);
 
   const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
+
+  const queueStorageKey = useMemo(
+    () => `friends_pending_queue_${profile.uniqueId || 'anonymous'}`,
+    [profile.uniqueId]
+  );
+
+  const persistQueue = (queue) => {
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+    } catch {
+      // Ignore storage quota/private mode issues; queue remains in memory.
+    }
+  };
+
+  const loadQueueFromStorage = () => {
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item?.tempId && item?.toUniqueId && item?.text);
+    } catch {
+      return [];
+    }
+  };
+
+  const upsertQueuedMessage = (queuedItem) => {
+    const next = offlineQueueRef.current.some((item) => item.tempId === queuedItem.tempId)
+      ? offlineQueueRef.current.map((item) => (item.tempId === queuedItem.tempId ? queuedItem : item))
+      : [...offlineQueueRef.current, queuedItem];
+    offlineQueueRef.current = next;
+    setOfflineQueueCount(next.length);
+    persistQueue(next);
+  };
+
+  const removeQueuedMessage = (tempId) => {
+    if (!tempId) return;
+    const next = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
+    offlineQueueRef.current = next;
+    setOfflineQueueCount(next.length);
+    persistQueue(next);
+  };
+
+  const updateOptimisticDeliveryStatus = (contactUniqueId, tempId, nextStatus) => {
+    if (!contactUniqueId || !tempId) return;
+    setMessagesByContact((prev) => {
+      const current = prev[contactUniqueId] || [];
+      return {
+        ...prev,
+        [contactUniqueId]: current.map((msg) => (msg.id === tempId ? { ...msg, deliveryStatus: nextStatus } : msg))
+      };
+    });
+  };
 
   const selectedContact = useMemo(
     () => contacts.find((item) => item.uniqueId === selectedContactId) || null,
@@ -307,11 +404,25 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     }
   };
 
-  const loadMessages = async (contactUniqueId) => {
+  const loadMessages = async (contactUniqueId, options = {}) => {
     if (!contactUniqueId) return;
+    const { before, reset = false } = options;
     try {
-      const data = await fetchConversationMessages(authToken, contactUniqueId);
-      setMessagesByContact((prev) => ({ ...prev, [contactUniqueId]: data.messages || [] }));
+      const data = await fetchConversationMessages(authToken, contactUniqueId, {
+        before,
+        limit: 40
+      });
+      const incoming = data.messages || [];
+      setMessagesByContact((prev) => {
+        const existing = reset ? [] : (prev[contactUniqueId] || []);
+        return {
+          ...prev,
+          [contactUniqueId]: mergeMessagesById(existing, incoming)
+        };
+      });
+      const oldest = incoming[0]?.createdAt || before || null;
+      setOldestCursorByContact((prev) => ({ ...prev, [contactUniqueId]: oldest }));
+      setHasMoreByContact((prev) => ({ ...prev, [contactUniqueId]: incoming.length >= 40 }));
     } catch (e) {
       setError(e.message || 'Failed to load messages');
     }
@@ -322,19 +433,116 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     socket.emit('friends:mark_read', { withUniqueId: contactUniqueId });
   };
 
+  const sendQueuedItem = async (queuedItem) => {
+    const response = await sendWithRetry({
+      token: authToken,
+      payload: {
+        receiverId: queuedItem.toUniqueId,
+        message: queuedItem.text,
+        disappearPolicy: queuedItem.disappearPolicy,
+        clientTempId: queuedItem.tempId
+      },
+      attempts: 2
+    });
+
+    if (response?.message?.id) {
+      const confirmed = {
+        ...response.message,
+        isMine: true,
+        deliveryStatus: response.message.deliveryStatus || 'sent'
+      };
+      setMessagesByContact((prev) => {
+        const current = prev[queuedItem.toUniqueId] || [];
+        const withoutTemp = current.filter((m) => m.id !== queuedItem.tempId);
+        return {
+          ...prev,
+          [queuedItem.toUniqueId]: mergeMessagesById(withoutTemp, [confirmed])
+        };
+      });
+    } else {
+      updateOptimisticDeliveryStatus(queuedItem.toUniqueId, queuedItem.tempId, 'sent');
+    }
+
+    removeQueuedMessage(queuedItem.tempId);
+  };
+
+  const flushQueuedMessages = async () => {
+    if (queueFlushInProgressRef.current) return;
+    if (!navigator.onLine) return;
+    if (!authToken) return;
+
+    const queue = [...offlineQueueRef.current];
+    if (queue.length === 0) return;
+
+    queueFlushInProgressRef.current = true;
+    try {
+      for (const item of queue) {
+        try {
+          updateOptimisticDeliveryStatus(item.toUniqueId, item.tempId, 'pending');
+          await sendQueuedItem(item);
+        } catch {
+          updateOptimisticDeliveryStatus(item.toUniqueId, item.tempId, 'queued');
+        }
+      }
+      await loadContacts();
+    } finally {
+      queueFlushInProgressRef.current = false;
+    }
+  };
+
   useEffect(() => {
     loadContacts();
   }, []);
 
   useEffect(() => {
+    const loaded = loadQueueFromStorage();
+    offlineQueueRef.current = loaded;
+    setOfflineQueueCount(loaded.length);
+  }, [queueStorageKey]);
+
+  useEffect(() => {
+    const onOnline = () => {
+      flushQueuedMessages().catch(() => {});
+    };
+
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [authToken, queueStorageKey]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onConnect = () => {
+      flushQueuedMessages().catch(() => {});
+    };
+    socket.on('connect', onConnect);
+    return () => {
+      socket.off('connect', onConnect);
+    };
+  }, [socket, authToken]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    flushQueuedMessages().catch(() => {});
+  }, [authToken, selectedContactId]);
+
+  useEffect(() => {
     setSettingsNameDraft(profile.displayName || '');
     setSettingsBioDraft(profile.bio || '');
+    setSettingsThemeDraft(profile.settings?.theme || 'light');
+    setSettingsNotificationsDraft(profile.settings?.notifications !== false);
   }, [profile.displayName, profile.bio]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setChatSearch(chatSearchInput);
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [chatSearchInput]);
 
   useEffect(() => {
     if (!selectedContactId) return;
     shouldAutoScrollUnreadRef.current = true;
-    loadMessages(selectedContactId);
+    loadMessages(selectedContactId, { reset: true });
     socket?.emit('friends:join_conversation', { withUniqueId: selectedContactId });
     emitMarkRead(selectedContactId);
   }, [selectedContactId, socket]);
@@ -343,7 +551,14 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     if (!socket) return undefined;
 
     const onHistory = ({ withUniqueId, messages }) => {
-      setMessagesByContact((prev) => ({ ...prev, [withUniqueId]: messages || [] }));
+      const incoming = messages || [];
+      setMessagesByContact((prev) => ({
+        ...prev,
+        [withUniqueId]: mergeMessagesById(prev[withUniqueId] || [], incoming)
+      }));
+      if (incoming[0]?.createdAt) {
+        setOldestCursorByContact((prev) => ({ ...prev, [withUniqueId]: incoming[0].createdAt }));
+      }
       if (selectedContactId === withUniqueId) {
         emitMarkRead(withUniqueId);
       }
@@ -365,6 +580,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           : [...nextExisting, incoming].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
         return { ...prev, [withUniqueId]: deduped };
       });
+
+      if (clientTempId) {
+        removeQueuedMessage(clientTempId);
+      }
 
       if (selectedContactId === withUniqueId && !incoming?.isMine) {
         emitMarkRead(withUniqueId);
@@ -399,6 +618,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
       setTypingByContact((prev) => ({ ...prev, [fromUniqueId]: !!isTyping }));
     };
 
+    const onStopTyping = ({ fromUniqueId }) => {
+      if (!fromUniqueId) return;
+      setTypingByContact((prev) => ({ ...prev, [fromUniqueId]: false }));
+    };
+
     const onPresence = ({ uniqueId, online, lastSeen }) => {
       if (!uniqueId) return;
       setContacts((prev) => prev.map((contact) => {
@@ -410,6 +634,9 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
         };
       }));
     };
+
+    const onUserOnline = ({ uniqueId, lastSeen }) => onPresence({ uniqueId, online: true, lastSeen });
+    const onUserOffline = ({ uniqueId, lastSeen }) => onPresence({ uniqueId, online: false, lastSeen });
 
     const onSocketError = (payload) => {
       setError(payload?.message || 'Friends socket error');
@@ -431,18 +658,34 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     socket.on('friends:new_message', onNewMessage);
     socket.on('friends:read_update', onReadUpdate);
     socket.on('friends:typing', onTyping);
+    socket.on('friends:stop_typing', onStopTyping);
     socket.on('friends:presence', onPresence);
     socket.on('friends:unread_update', onUnreadUpdate);
     socket.on('friends:error', onSocketError);
+
+    socket.on('new_message', onNewMessage);
+    socket.on('read_receipt', onReadUpdate);
+    socket.on('typing', onTyping);
+    socket.on('stop_typing', onStopTyping);
+    socket.on('user_online', onUserOnline);
+    socket.on('user_offline', onUserOffline);
 
     return () => {
       socket.off('friends:history', onHistory);
       socket.off('friends:new_message', onNewMessage);
       socket.off('friends:read_update', onReadUpdate);
       socket.off('friends:typing', onTyping);
+      socket.off('friends:stop_typing', onStopTyping);
       socket.off('friends:presence', onPresence);
       socket.off('friends:unread_update', onUnreadUpdate);
       socket.off('friends:error', onSocketError);
+
+      socket.off('new_message', onNewMessage);
+      socket.off('read_receipt', onReadUpdate);
+      socket.off('typing', onTyping);
+      socket.off('stop_typing', onStopTyping);
+      socket.off('user_online', onUserOnline);
+      socket.off('user_offline', onUserOffline);
     };
   }, [socket, selectedContactId, contacts]);
 
@@ -460,7 +703,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobileLayout(window.innerWidth <= 960);
+      setIsMobileLayout(window.innerWidth <= 768);
     };
 
     window.addEventListener('resize', handleResize);
@@ -499,25 +742,36 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     return () => document.removeEventListener('keydown', handleEscape);
   }, []);
 
-  const handleSearch = async (value) => {
-    setAddFriendQuery(value);
-    setSettingsError('');
+  const handleSearch = async () => {
+    setHasSearchedAddFriend(true);
+    setAddFriendSearchError('');
+    setSearchResults([]);
+    setIsSearchingAddFriend(true);
 
-    if (!value.trim()) {
-      setSearchResults([]);
+    const value = addFriendQuery.trim();
+    if (!value) {
+      setAddFriendSearchError('Enter an email or phone number.');
+      setIsSearchingAddFriend(false);
       return;
     }
 
     if (!isEmailOrPhone(value)) {
-      setSearchResults([]);
+      setAddFriendSearchError('Enter a valid email or phone number.');
+      setIsSearchingAddFriend(false);
       return;
     }
 
     try {
-      const data = await searchUsers(authToken, value.trim());
-      setSearchResults(data.users || []);
+      const data = await searchUsers(authToken, value);
+      const users = data.users || [];
+      setSearchResults(users);
+      if (users.length === 0) {
+        setAddFriendSearchError('User not found on this platform');
+      }
     } catch (e) {
-      setError(e.message || 'Search failed');
+      setAddFriendSearchError(e.message || 'Search failed');
+    } finally {
+      setIsSearchingAddFriend(false);
     }
   };
 
@@ -527,11 +781,14 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
       await addContact(authToken, targetUniqueId);
       setAddFriendQuery('');
       setSearchResults([]);
+      setHasSearchedAddFriend(false);
+      setAddFriendSearchError('');
       await loadContacts();
       setSelectedContactId(targetUniqueId);
       if (isMobileLayout) {
         setMobilePane('chat');
       }
+      setSettingsSavedMessage('Friend added successfully.');
     } catch (e) {
       setError(e.message || 'Unable to add contact');
     }
@@ -541,22 +798,27 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     try {
       setSettingsError('');
       setSettingsSavedMessage('');
+      await saveUserSettings(authToken, {
+        theme: settingsThemeDraft,
+        notifications: settingsNotificationsDraft
+      });
       await updateFriendsProfile(authToken, {
         displayName: settingsNameDraft,
         bio: settingsBioDraft
       });
       await onProfileRefresh();
-      setSettingsSavedMessage('Profile updated successfully.');
+      setSettingsSavedMessage('Settings saved successfully.');
     } catch (e) {
       setSettingsError(e.message || 'Unable to save settings.');
     }
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!socket || !selectedContactId || !message.trim()) return;
 
     const policy = selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' };
     const messageText = message;
+    const targetUniqueId = selectedContactId;
     const tempId = makeTempMessageId();
     const optimisticMessage = {
       id: tempId,
@@ -569,54 +831,85 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     };
 
     setMessagesByContact((prev) => {
-      const current = prev[selectedContactId] || [];
+      const current = prev[targetUniqueId] || [];
       return {
         ...prev,
-        [selectedContactId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        [targetUniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
       };
     });
 
-    pendingSendTimersRef.current[tempId] = window.setTimeout(() => {
-      setMessagesByContact((prev) => {
-        const current = prev[selectedContactId] || [];
-        return {
-          ...prev,
-          [selectedContactId]: current.filter((m) => m.id !== tempId)
-        };
-      });
-      delete pendingSendTimersRef.current[tempId];
-      setError('Message send timed out. Please retry.');
-    }, 12000);
+    setMessage('');
+    setIsEmojiTrayOpen(false);
+    socket.emit('friends:typing', { toUniqueId: targetUniqueId, isTyping: false });
+    socket.emit('stop_typing', { toUniqueId: targetUniqueId });
+    typingActiveRef.current = false;
 
-    socket.emit('friends:send_message', {
-      toUniqueId: selectedContactId,
+    const queuedItem = {
+      tempId,
+      toUniqueId: targetUniqueId,
       text: messageText,
       disappearPolicy: policy,
-      clientTempId: tempId
-    }, (ack) => {
-      if (ack?.ok) {
-        return;
-      }
+      createdAt: new Date().toISOString()
+    };
+
+    if (!navigator.onLine) {
+      upsertQueuedMessage(queuedItem);
+      updateOptimisticDeliveryStatus(targetUniqueId, tempId, 'queued');
+      setError('You are offline. Message queued and will resend automatically.');
+      return;
+    }
+
+    pendingSendTimersRef.current[tempId] = window.setTimeout(() => {
+      delete pendingSendTimersRef.current[tempId];
+      upsertQueuedMessage(queuedItem);
+      updateOptimisticDeliveryStatus(targetUniqueId, tempId, 'queued');
+      setError('Message send timed out. Queued for automatic retry.');
+    }, 12000);
+
+    try {
+      const response = await sendWithRetry({
+        token: authToken,
+        payload: {
+          receiverId: targetUniqueId,
+          message: messageText,
+          disappearPolicy: policy,
+          clientTempId: tempId
+        },
+        attempts: 2
+      });
 
       if (pendingSendTimersRef.current[tempId]) {
         window.clearTimeout(pendingSendTimersRef.current[tempId]);
         delete pendingSendTimersRef.current[tempId];
       }
 
-      setMessagesByContact((prev) => {
-        const current = prev[selectedContactId] || [];
-        return {
-          ...prev,
-          [selectedContactId]: current.filter((m) => m.id !== tempId)
+      if (response?.message?.id) {
+        const confirmed = {
+          ...response.message,
+          isMine: true,
+          deliveryStatus: response.message.deliveryStatus || 'sent'
         };
-      });
-      setError(ack?.error || 'Message failed to send.');
-    });
-
-    setMessage('');
-    setIsEmojiTrayOpen(false);
-    socket.emit('friends:typing', { toUniqueId: selectedContactId, isTyping: false });
-    typingActiveRef.current = false;
+        setMessagesByContact((prev) => {
+          const current = prev[targetUniqueId] || [];
+          const withoutTemp = current.filter((m) => m.id !== tempId);
+          return {
+            ...prev,
+            [targetUniqueId]: mergeMessagesById(withoutTemp, [confirmed])
+          };
+        });
+      } else {
+        updateOptimisticDeliveryStatus(targetUniqueId, tempId, 'sent');
+      }
+      removeQueuedMessage(tempId);
+    } catch (apiError) {
+      if (pendingSendTimersRef.current[tempId]) {
+        window.clearTimeout(pendingSendTimersRef.current[tempId]);
+        delete pendingSendTimersRef.current[tempId];
+      }
+      upsertQueuedMessage(queuedItem);
+      updateOptimisticDeliveryStatus(targetUniqueId, tempId, 'queued');
+      setError(apiError?.message || 'Message send failed. Queued for automatic retry.');
+    }
   };
 
   const handleMessageInputChange = (value) => {
@@ -626,11 +919,13 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     const hasText = value.trim().length > 0;
     if (hasText && !typingActiveRef.current) {
       socket.emit('friends:typing', { toUniqueId: selectedContactId, isTyping: true });
+      socket.emit('typing', { toUniqueId: selectedContactId });
       typingActiveRef.current = true;
     }
 
     if (!hasText && typingActiveRef.current) {
       socket.emit('friends:typing', { toUniqueId: selectedContactId, isTyping: false });
+      socket.emit('stop_typing', { toUniqueId: selectedContactId });
       typingActiveRef.current = false;
     }
 
@@ -641,9 +936,51 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     typingStopTimerRef.current = window.setTimeout(() => {
       if (typingActiveRef.current) {
         socket.emit('friends:typing', { toUniqueId: selectedContactId, isTyping: false });
+        socket.emit('stop_typing', { toUniqueId: selectedContactId });
         typingActiveRef.current = false;
       }
     }, 1600);
+  };
+
+  const handleMessagesScroll = async (event) => {
+    if (!selectedContactId) return;
+    const container = event.currentTarget;
+    if (container.scrollTop > 60) return;
+
+    if (loadingOlderByContact[selectedContactId]) return;
+    if (!hasMoreByContact[selectedContactId]) return;
+
+    const before = oldestCursorByContact[selectedContactId];
+    if (!before) return;
+
+    const previousHeight = container.scrollHeight;
+    setLoadingOlderByContact((prev) => ({ ...prev, [selectedContactId]: true }));
+
+    try {
+      const data = await fetchConversationMessages(authToken, selectedContactId, {
+        before,
+        limit: 40
+      });
+      const incoming = data.messages || [];
+
+      setMessagesByContact((prev) => ({
+        ...prev,
+        [selectedContactId]: mergeMessagesById(incoming, prev[selectedContactId] || [])
+      }));
+
+      if (incoming[0]?.createdAt) {
+        setOldestCursorByContact((prev) => ({ ...prev, [selectedContactId]: incoming[0].createdAt }));
+      }
+      setHasMoreByContact((prev) => ({ ...prev, [selectedContactId]: incoming.length >= 40 }));
+
+      window.requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight - previousHeight + container.scrollTop;
+      });
+    } catch (e) {
+      setError(e.message || 'Failed to load older messages.');
+    } finally {
+      setLoadingOlderByContact((prev) => ({ ...prev, [selectedContactId]: false }));
+    }
   };
 
   const handleSelectContact = (contactUniqueId) => {
@@ -657,6 +994,8 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const handleOpenAddModal = () => {
     setAddFriendQuery('');
     setSearchResults([]);
+    setHasSearchedAddFriend(false);
+    setAddFriendSearchError('');
     setIsAddModalOpen(true);
   };
 
@@ -804,8 +1143,8 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             className="friends-sidebar-search"
             type="search"
             placeholder="Search chats"
-            value={chatSearch}
-            onChange={(e) => setChatSearch(e.target.value)}
+            value={chatSearchInput}
+            onChange={(e) => setChatSearchInput(e.target.value)}
             aria-label="Search chats"
           />
         </div>
@@ -817,7 +1156,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             </div>
           ) : null}
 
-          {filteredContacts.map((contact) => (
+          {filteredContacts.map((contact) => {
+            const listReceipt = getListReceipt(contact.lastMessage);
+            const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
+            return (
             <button
               key={contact.uniqueId}
               className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
@@ -840,7 +1182,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                       <>
                         {(contact.lastMessage?.isMine || contact.lastMessage?.fromUniqueId === profile.uniqueId) ? (
                           <>
-                            <span className="friends-list-receipt" aria-hidden="true">{getListReceipt(contact.lastMessage)}</span>
+                            <span className={`friends-list-receipt ${listReceiptClass}`.trim()} aria-hidden="true">{listReceipt}</span>
                             <span className="friends-list-prefix">You:</span>{' '}
                           </>
                         ) : null}
@@ -856,7 +1198,8 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 </div>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </aside>
 
@@ -886,7 +1229,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   <strong>{selectedContact.displayName || selectedContact.uniqueId}</strong>
                   <small>
                     {contactTyping
-                      ? 'typing...'
+                      ? 'User is typing...'
                       : selectedContact.online
                         ? 'online'
                         : (selectedContact.lastSeen ? `last seen ${formatChatTime(selectedContact.lastSeen)}` : selectedContact.uniqueId)}
@@ -902,7 +1245,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           </div>
         </header>
 
-        <div className="friends-messages" ref={messagesContainerRef}>
+        <div className="friends-messages" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
           {!selectedContact ? (
             <div className="friends-chat-empty">Select a friend from chats to start messaging.</div>
           ) : null}
@@ -996,6 +1339,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           </div>
 
           {error ? <p className="friends-error">{error}</p> : null}
+          {offlineQueueCount > 0 ? (
+            <p className="friends-note" aria-live="polite">
+              {offlineQueueCount} message{offlineQueueCount === 1 ? '' : 's'} queued for resend.
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -1022,29 +1370,48 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             <input
               placeholder="example@email.com or +911234567890"
               value={addFriendQuery}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={(e) => setAddFriendQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
               autoFocus
             />
 
-            {addFriendQuery.trim() && !isEmailOrPhone(addFriendQuery) ? (
-              <div className="friends-empty">Enter a valid email or phone number.</div>
-            ) : null}
+            <div className="friends-add-modal-actions left">
+              <button type="button" onClick={handleSearch}>Search</button>
+            </div>
+
+            <div className="friends-results-label">Results</div>
+
+            {isSearchingAddFriend ? <div className="friends-empty">Searching...</div> : null}
+
+            {addFriendSearchError ? <div className="friends-empty">{addFriendSearchError}</div> : null}
 
             <div className="friends-add-results">
-              {searchResults.length === 0 && isEmailOrPhone(addFriendQuery) ? <div className="friends-empty">No users found.</div> : null}
+              {hasSearchedAddFriend && !addFriendSearchError && searchResults.length === 0 ? (
+                <div className="friends-empty">User not found on this platform</div>
+              ) : null}
 
               {searchResults.map((item) => (
-                <button
-                  key={item.uniqueId}
-                  type="button"
-                  className="friends-search-result"
-                  onClick={() => {
-                    handleAddContact(item.uniqueId);
-                    setIsAddModalOpen(false);
-                  }}
-                >
-                  Add {item.displayName || item.uniqueId}
-                </button>
+                <div key={item.uniqueId} className="friends-search-result-card">
+                  <div className="friends-search-result-meta">
+                    <strong>{item.displayName || item.uniqueId}</strong>
+                    <small>{item.email || item.phoneNumber || item.uniqueId}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="friends-search-result"
+                    onClick={() => {
+                      handleAddContact(item.uniqueId);
+                      setIsAddModalOpen(false);
+                    }}
+                  >
+                    Add Friend
+                  </button>
+                </div>
               ))}
             </div>
 
@@ -1073,6 +1440,9 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             <h4>Profile</h4>
             <p><strong>Name:</strong> {profile.displayName || 'Not set'}</p>
             <p><strong>Unique ID:</strong> {profile.uniqueId}</p>
+            <p><strong>Email:</strong> {profile.email || 'Not set'}</p>
+            <p><strong>Phone:</strong> {profile.phoneNumber || 'Not set'}</p>
+            <p><strong>Avatar:</strong> {profile.photoURL ? 'Available' : 'Not set'}</p>
             <p><strong>Bio:</strong> {profile.bio || 'No bio yet.'}</p>
             <div className="friends-add-modal-actions">
               <button type="button" className="secondary" onClick={() => setIsProfileModalOpen(false)}>Close</button>
@@ -1102,6 +1472,28 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 onChange={(e) => setSettingsBioDraft(e.target.value)}
                 placeholder="Bio"
               />
+            </div>
+
+            <div className="friends-row">
+              <select
+                value={settingsThemeDraft}
+                onChange={(e) => setSettingsThemeDraft(e.target.value)}
+                aria-label="Theme setting"
+              >
+                <option value="light">Light theme</option>
+                <option value="dark">Dark theme</option>
+              </select>
+            </div>
+
+            <div className="friends-row">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={settingsNotificationsDraft}
+                  onChange={(e) => setSettingsNotificationsDraft(e.target.checked)}
+                />{' '}
+                Notifications enabled
+              </label>
             </div>
 
             {settingsSavedMessage ? <p className="friends-note">{settingsSavedMessage}</p> : null}

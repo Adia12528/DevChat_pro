@@ -33,15 +33,18 @@ export const updateFriendsProfile = (token, payload) =>
     body: JSON.stringify(payload)
   });
 
-export const fetchContacts = (token) => request('/api/friends/contacts', token);
+export const fetchContacts = (token) => request('/api/friends/list', token);
 
 export const searchUsers = (token, query) =>
-  request(`/api/friends/search?query=${encodeURIComponent(query)}`, token);
-
-export const addContact = (token, targetUniqueId) =>
-  request('/api/friends/contacts', token, {
+  request('/api/friends/search', token, {
     method: 'POST',
-    body: JSON.stringify({ targetUniqueId })
+    body: JSON.stringify({ query })
+  });
+
+export const addContact = (token, friendId) =>
+  request('/api/friends/add', token, {
+    method: 'POST',
+    body: JSON.stringify({ friendId })
   });
 
 export const updateContactPreferences = (token, targetUniqueId, preferences) =>
@@ -50,5 +53,22 @@ export const updateContactPreferences = (token, targetUniqueId, preferences) =>
     body: JSON.stringify(preferences)
   });
 
-export const fetchConversationMessages = (token, contactUniqueId) =>
-  request(`/api/friends/conversations/${encodeURIComponent(contactUniqueId)}/messages`, token);
+export const fetchConversationMessages = (token, contactUniqueId, options = {}) => {
+  const params = new URLSearchParams();
+  if (options.before) params.set('before', options.before);
+  if (options.limit) params.set('limit', String(options.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return request(`/api/friends/messages/${encodeURIComponent(contactUniqueId)}${suffix}`, token);
+};
+
+export const sendMessage = (token, payload) =>
+  request('/api/friends/send', token, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+export const saveUserSettings = (token, payload) =>
+  request('/api/user/settings', token, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
