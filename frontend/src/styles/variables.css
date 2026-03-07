@@ -1,7 +1,7 @@
 /* CSS Variables for theming */
 
 :root {
-    --msg-me-txt: var(--txt);
+    --msg-me-txt: #222b2e;
   /* Dark theme (default) */
   --bg: #0f0f11;
   --bg-secondary: #1a1a1e;
