@@ -105,6 +105,24 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+    // Notify user of incoming message (sound + desktop notification)
+    const notifyIncomingMessage = (contact, message) => {
+      // Play notification sound
+      playNotificationTone('chime');
+
+      // Show desktop notification if enabled and supported
+      if (window.Notification && Notification.permission === 'granted') {
+        const title = contact?.displayName || contact?.username || 'New message';
+        const body = message?.text || '[New message]';
+        new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: contact?.uniqueId || undefined
+        });
+      } else if (window.Notification && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    };
   // Remove a queued message by tempId
   const removeQueuedMessage = (tempId) => {
     if (!tempId) return;
