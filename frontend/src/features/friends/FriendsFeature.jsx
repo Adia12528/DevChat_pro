@@ -23,6 +23,8 @@ import {
   updateFriendsProfile
 } from './friendsApi';
 
+// --- FriendsWorkspace: Move all friend request logic here ---
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
   // Friend requests state
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
@@ -91,6 +93,9 @@ import {
     if (!authToken) return;
     loadRequests();
   }, [authToken]);
+
+  // ...existing FriendsWorkspace code (rest of the component)...
+  // (No need to change the rest, as it already exists below)
 
 const getFriendlyRemaining = (expiresAt) => {
   if (!expiresAt) return 'kept';
@@ -343,7 +348,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   );
 };
 
-const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+// (FriendsWorkspace definition is now above, with friend request logic included)
       // Real-time: listen for friend list updates
       useEffect(() => {
         if (!socket) return;
