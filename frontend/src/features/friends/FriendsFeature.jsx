@@ -1,53 +1,61 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-
-function FriendsFeature({ onSwitchToClassic }) {
-  // All hooks and logic must be inside the component
-  // ...existing hooks and logic...
-
-  // Forward message handler (move inside component)
-  const handleForwardMessage = async (targetUniqueId) => {
-    if (!socket || !forwardMsg || !targetUniqueId) return;
-    const tempId = makeTempMessageId();
-    const policy = { mode: 'keep' };
-    const optimisticMessage = {
-      id: tempId,
-      text: forwardMsg.text,
-      createdAt: new Date().toISOString(),
-      expiresAt: null,
-      disappearPolicy: policy,
-      isMine: true,
-      deliveryStatus: 'pending',
-      forwarded: true,
-      ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
-    };
-    setMessagesByContact((prev) => {
-      const current = prev[targetUniqueId] || [];
-      return {
-        ...prev,
-        [targetUniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      // Forward message handler
+      const handleForwardMessage = async (targetUniqueId) => {
+        if (!socket || !forwardMsg || !targetUniqueId) return;
+        const tempId = makeTempMessageId();
+        const policy = { mode: 'keep' };
+        const optimisticMessage = {
+          id: tempId,
+          text: forwardMsg.text,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          disappearPolicy: policy,
+          isMine: true,
+          deliveryStatus: 'pending',
+          forwarded: true,
+          ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
+        };
+        setMessagesByContact((prev) => {
+          const current = prev[targetUniqueId] || [];
+          return {
+            ...prev,
+            [targetUniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          };
+        });
+        setIsForwardModalOpen(false);
+        setForwardMsg(null);
+        const payload = {
+          receiverId: targetUniqueId,
+          message: forwardMsg.text,
+          disappearPolicy: policy,
+          clientTempId: tempId,
+          forwarded: true,
+          ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
+        };
+        try {
+          await sendWithRetry({ token: authToken, payload, attempts: 2 });
+        } catch (e) {
+          // Optionally handle error, e.g. show notification
+        }
       };
-    });
-    setIsForwardModalOpen(false);
-    setForwardMsg(null);
-    const payload = {
-      receiverId: targetUniqueId,
-      message: forwardMsg.text,
-      disappearPolicy: policy,
-      clientTempId: tempId,
-      forwarded: true,
-      ...(forwardMsg.attachmentUrl ? { attachmentUrl: forwardMsg.attachmentUrl, type: forwardMsg.type, name: forwardMsg.name } : {})
-    };
-    try {
-      await sendWithRetry({ token: authToken, payload, attempts: 2 });
-    } catch (e) {
-      // Optionally handle error, e.g. show notification
-    }
-  };
+    // Add to imports if not present
+    import React, { useState, useRef, useEffect } from 'react';
 
-  // ...rest of component code (all hooks, logic, and return JSX)...
+    // Add forward modal state near other useState hooks
+    const [forwardMsg, setForwardMsg] = useState(null);
+    const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
 
-  // (No stray code or hooks outside the component)
-
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(gainValue, ctx.currentTime + startOffset);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startOffset + duration);
+          {timelineItems.map((item) => {
+            if (item.type === 'date') {
+              return (
+                <div key={item.id} className="friends-date-divider" aria-label={`Date: ${item.label}`}>
+                  <span>{item.label}</span>
+                </div>
+              );
+            }
 
             if (item.type === 'unread') {
               return (
@@ -244,10 +252,64 @@ function FriendsFeature({ onSwitchToClassic }) {
                 </div>
               </article>
             );
-
-
           })}
-        {/* End .friends-messages div here */}
+        {/* Close .friends-messages div here */}
+        
+
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileLayout(window.innerWidth <= 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      setMobilePane('list');
+    }
+  }, [isMobileLayout]);
+
+  useEffect(() => {
+    const handleDocClick = (event) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocClick);
+    return () => document.removeEventListener('mousedown', handleDocClick);
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setIsMenuOpen(false);
+      setIsAddModalOpen(false);
+      setIsProfileModalOpen(false);
+      setIsSettingsModalOpen(false);
+      setIsEmojiTrayOpen(false);
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  const handleSearch = async () => {
+    setHasSearchedAddFriend(true);
+    setAddFriendSearchError('');
+    setSearchResults([]);
+    setIsSearchingAddFriend(true);
+
+    const value = addFriendQuery.trim();
+    if (!value) {
+      setAddFriendSearchError('Enter an email or phone number.');
+      setIsSearchingAddFriend(false);
+      return;
+    }
 
     if (!isEmailOrPhone(value)) {
       setAddFriendSearchError('Enter a valid email or phone number.');
