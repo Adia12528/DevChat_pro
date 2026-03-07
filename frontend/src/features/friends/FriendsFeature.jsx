@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
 // --- LoginPanel: must be defined before FriendsFeature uses it ---
 const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
   const [phone, setPhone] = useState('');
