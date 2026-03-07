@@ -1,3 +1,7 @@
+  // Fix: selectedContact should be derived from contacts and selectedContactId
+  const selectedContact = useMemo(() => {
+    return contacts.find((c) => c.uniqueId === selectedContactId) || null;
+  }, [contacts, selectedContactId]);
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 // --- LoginPanel: must be defined before FriendsFeature uses it ---
