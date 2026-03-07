@@ -1119,7 +1119,14 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     setIsAddModalOpen(true);
   };
 
+
   const contactTyping = selectedContactId ? !!typingByContact[selectedContactId] : false;
+
+  // Fix: Define activeMessages for timelineItems and chat rendering
+  const activeMessages = useMemo(() => {
+    if (!selectedContactId) return [];
+    return messagesByContact[selectedContactId] || [];
+  }, [selectedContactId, messagesByContact]);
 
   const timelineItems = useMemo(() => {
     const items = [];
