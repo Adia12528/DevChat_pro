@@ -1,3 +1,28 @@
+// Friend request APIs
+export const sendFriendRequest = (token, toUniqueId) =>
+  request('/api/friends/request', token, {
+    method: 'POST',
+    body: JSON.stringify({ toUniqueId })
+  });
+
+export const fetchFriendRequests = (token) =>
+  request('/api/friends/requests', token);
+
+export const acceptFriendRequest = (token, requestId) =>
+  request(`/api/friends/request/${requestId}/accept`, token, {
+    method: 'POST'
+  });
+
+export const rejectFriendRequest = (token, requestId) =>
+  request(`/api/friends/request/${requestId}/reject`, token, {
+    method: 'POST'
+  });
+
+export const removeFriend = (token, targetUniqueId) =>
+  request('/api/friends/remove', token, {
+    method: 'POST',
+    body: JSON.stringify({ targetUniqueId })
+  });
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
   (window.location.hostname.includes('localhost')

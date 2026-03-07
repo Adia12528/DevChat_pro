@@ -1,3 +1,101 @@
+/* Friend Requests Sidebar */
+.friends-requests-section {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+.friends-requests-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 1rem;
+  color: #333;
+}
+.friends-request-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9f9f9;
+  border-radius: 6px;
+  margin: 4px 0;
+  padding: 6px 10px;
+  font-size: 0.95rem;
+}
+.friends-request-card button {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 4px;
+  background: #e0e0e0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.friends-request-card button:hover {
+  background: #d1d1d1;
+}
+.friends-request-badge {
+  display: inline-block;
+  background: #ff5252;
+  color: #fff;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 0.85rem;
+  text-align: center;
+  line-height: 18px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.friends-remove-btn {
+  background: #ff5252;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.friends-remove-btn:hover {
+  background: #e53935;
+}
+.friends-error {
+  color: #ff5252;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.friends-empty-list {
+  color: #888;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+@media (max-width: 600px) {
+  .friends-requests-section {
+    padding: 4px 0;
+    font-size: 0.95rem;
+  }
+  .friends-request-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 6px 6px;
+    font-size: 0.9rem;
+  }
+  .friends-request-card button {
+    margin: 4px 0 0 0;
+    width: 100%;
+  }
+  .friends-request-badge {
+    width: 16px;
+    height: 16px;
+    font-size: 0.8rem;
+    line-height: 16px;
+    margin-left: 4px;
+  }
+  .friends-remove-btn {
+    margin-left: 0;
+    margin-top: 4px;
+    width: 100%;
+  }
+}
 .friends-shell {
   --wa-bg: #f0f2f5;
   --wa-sidebar: #f8f9fb;
@@ -46,6 +144,34 @@
   border-radius: 14px;
   background: linear-gradient(160deg, var(--bg-secondary) 0%, var(--bg) 100%);
   color: var(--txt);
+}
+
+.friends-mode-toggle {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.friends-mode-btn {
+  flex: 1;
+  border: 1px solid rgba(0, 168, 132, 0.22);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(0, 168, 132, 0.05);
+  color: var(--txt);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.friends-mode-btn.active {
+  border-color: rgba(0, 168, 132, 0.7);
+  background: rgba(0, 168, 132, 0.15);
+}
+
+.friends-mode-btn:disabled:not(.active) {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .friends-title {

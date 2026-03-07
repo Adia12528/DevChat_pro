@@ -198,6 +198,19 @@ const getModels = (mongoose) => {
 
   const FriendProfile = mongoose.models.FriendProfile || mongoose.model('FriendProfile', FriendProfileSchema);
   const FriendMessage = mongoose.models.FriendMessage || mongoose.model('FriendMessage', FriendMessageSchema);
+    const FriendRequestSchema = new mongoose.Schema(
+      {
+        fromUid: { type: String, required: true, index: true },
+        toUid: { type: String, required: true, index: true },
+        status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending', index: true },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now }
+      },
+      { timestamps: true }
+    );
+    const FriendRequest = mongoose.models.FriendRequest || mongoose.model('FriendRequest', FriendRequestSchema);
+    // Add FriendRequest to returned models
+    return { FriendProfile, FriendMessage, FriendRequest };
 
   return { FriendProfile, FriendMessage };
 };
@@ -347,6 +360,7 @@ const buildContactWithStats = async ({ FriendMessage, meUid, contact }) => {
 const setupFriendsFeature = ({ app, io, mongoose }) => {
   const enabled = initializeFirebaseAdmin();
   const { FriendProfile, FriendMessage } = getModels(mongoose);
+  const { FriendRequest } = getModels(mongoose);
   const authRequired = friendsAuthMiddleware(enabled);
 
   const router = express.Router();
@@ -370,6 +384,125 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
 
   const isUidOnline = (uid) => (onlineByUid.get(uid) || 0) > 0;
 
+  // --- Friend Request API ---
+  router.post('/request', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const toUniqueId = String(req.body?.toUniqueId || req.body?.targetUniqueId || '').trim();
+      if (!toUniqueId) return res.status(400).json({ error: 'targetUniqueId required.' });
+      if (toUniqueId === me.uniqueId) return res.status(400).json({ error: 'Cannot send request to yourself.' });
+      const toProfile = await FriendProfile.findOne({ uniqueId: toUniqueId });
+      if (!toProfile) return res.status(404).json({ error: 'User not found.' });
+      // Check for existing request
+      const existing = await FriendRequest.findOne({ fromUid: me.uid, toUid: toProfile.uid, status: 'pending' });
+      if (existing) return res.status(409).json({ error: 'Request already sent.' });
+      // Check if already friends
+      if (me.contacts.includes(toProfile.uniqueId)) return res.status(409).json({ error: 'Already friends.' });
+      const request = await FriendRequest.create({ fromUid: me.uid, toUid: toProfile.uid });
+      // Emit real-time event to recipient
+      friendsNsp.to(`user:${toProfile.uid}`).emit('friends:new_request', {
+        requestId: String(request._id),
+        fromUniqueId: me.uniqueId,
+        createdAt: request.createdAt
+      });
+      return res.json({ ok: true, request });
+    } catch (error) {
+      console.error('friends request error', error);
+      return res.status(500).json({ error: 'Failed to send request.' });
+    }
+  });
+
+  router.get('/requests', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      // Incoming requests
+      const incoming = await FriendRequest.find({ toUid: me.uid, status: 'pending' }).lean();
+      // Outgoing requests
+      const outgoing = await FriendRequest.find({ fromUid: me.uid, status: 'pending' }).lean();
+      return res.json({ incoming, outgoing });
+    } catch (error) {
+      console.error('friends requests error', error);
+      return res.status(500).json({ error: 'Failed to load requests.' });
+    }
+  });
+
+  router.post('/request/:requestId/accept', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const requestId = req.params.requestId;
+      const request = await FriendRequest.findById(requestId);
+      if (!request || request.status !== 'pending') return res.status(404).json({ error: 'Request not found.' });
+      if (request.toUid !== me.uid) return res.status(403).json({ error: 'Not authorized.' });
+      // Update request
+      request.status = 'accepted';
+      request.updatedAt = new Date();
+      await request.save();
+      // Add each other as contacts
+      const fromProfile = await FriendProfile.findOne({ uid: request.fromUid });
+      if (!fromProfile) return res.status(404).json({ error: 'Sender not found.' });
+      me.contacts = Array.from(new Set([...(me.contacts || []), fromProfile.uniqueId]));
+      fromProfile.contacts = Array.from(new Set([...(fromProfile.contacts || []), me.uniqueId]));
+      await me.save();
+      await fromProfile.save();
+      // Emit real-time event to sender
+      friendsNsp.to(`user:${fromProfile.uid}`).emit('friends:request_accepted', {
+        requestId: String(request._id),
+        toUniqueId: me.uniqueId,
+        createdAt: request.createdAt
+      });
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends accept request error', error);
+      return res.status(500).json({ error: 'Failed to accept request.' });
+    }
+  });
+
+  router.post('/request/:requestId/reject', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const requestId = req.params.requestId;
+      const request = await FriendRequest.findById(requestId);
+      if (!request || request.status !== 'pending') return res.status(404).json({ error: 'Request not found.' });
+      if (request.toUid !== me.uid) return res.status(403).json({ error: 'Not authorized.' });
+      request.status = 'rejected';
+      request.updatedAt = new Date();
+      await request.save();
+      // Emit real-time event to sender
+      friendsNsp.to(`user:${request.fromUid}`).emit('friends:request_rejected', {
+        requestId: String(request._id),
+        toUniqueId: me.uniqueId,
+        createdAt: request.createdAt
+      });
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends reject request error', error);
+      return res.status(500).json({ error: 'Failed to reject request.' });
+    }
+  });
+
+  // Remove friend endpoint
+  router.post('/remove', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const targetUniqueId = String(req.body?.targetUniqueId || '').trim();
+      if (!targetUniqueId) return res.status(400).json({ error: 'targetUniqueId required.' });
+      if (!me.contacts.includes(targetUniqueId)) return res.status(404).json({ error: 'Not a friend.' });
+      const target = await FriendProfile.findOne({ uniqueId: targetUniqueId });
+      if (!target) return res.status(404).json({ error: 'User not found.' });
+      me.contacts = me.contacts.filter((id) => id !== targetUniqueId);
+      target.contacts = target.contacts.filter((id) => id !== me.uniqueId);
+      await me.save();
+      await target.save();
+      // Emit real-time event
+      friendsNsp.to(`user:${target.uid}`).emit('friends:removed', {
+        fromUniqueId: me.uniqueId
+      });
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends remove error', error);
+      return res.status(500).json({ error: 'Failed to remove friend.' });
+    }
+  });
   router.get('/profile', authRequired, async (req, res) => {
     try {
       const profile = await ensureProfile(FriendProfile, req.firebaseUser);

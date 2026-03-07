@@ -6397,7 +6397,7 @@ function AppContent() {
   // ==================== RENDER LOGIN SCREEN ====================
   if (!showChat) {
     if (entryMode === 'friends') {
-      return <FriendsFeature />;
+      return <FriendsFeature onSwitchToClassic={() => setEntryMode('classic')} />;
     }
 
     return (

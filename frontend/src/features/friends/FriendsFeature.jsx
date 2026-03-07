@@ -1,3 +1,71 @@
+  // Friend requests state
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequests, setOutgoingRequests] = useState([]);
+  const [requestsError, setRequestsError] = useState('');
+
+  // Load friend requests
+  const loadRequests = async () => {
+    try {
+      setRequestsError('');
+      const data = await fetchFriendRequests(authToken);
+      setIncomingRequests(data.incoming || []);
+      setOutgoingRequests(data.outgoing || []);
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to load requests');
+    }
+  };
+
+  // Accept/reject request handlers
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await acceptFriendRequest(authToken, requestId);
+      await loadRequests();
+      await loadContacts();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to accept request');
+    }
+  };
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await rejectFriendRequest(authToken, requestId);
+      await loadRequests();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to reject request');
+    }
+  };
+  const handleRemoveFriend = async (targetUniqueId) => {
+    try {
+      await removeFriend(authToken, targetUniqueId);
+      await loadContacts();
+      setSelectedContactId('');
+    } catch (e) {
+      setError(e.message || 'Failed to remove friend');
+    }
+  };
+
+  // Real-time socket events for requests
+  useEffect(() => {
+    if (!socket) return;
+    const onNewRequest = () => loadRequests();
+    const onRequestAccepted = () => {
+      loadRequests();
+      loadContacts();
+    };
+    const onRequestRejected = () => loadRequests();
+    socket.on('friends:new_request', onNewRequest);
+    socket.on('friends:request_accepted', onRequestAccepted);
+    socket.on('friends:request_rejected', onRequestRejected);
+    return () => {
+      socket.off('friends:new_request', onNewRequest);
+      socket.off('friends:request_accepted', onRequestAccepted);
+      socket.off('friends:request_rejected', onRequestRejected);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    loadRequests();
+  }, [authToken]);
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import {
@@ -197,12 +265,33 @@ const mapFriendsBackendError = (error) => {
   return raw || 'Friends backend request failed';
 };
 
-const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error }) => {
+const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
 
   return (
     <div className="friends-login" aria-label="Friends auth login">
+      <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
+        <button
+          type="button"
+          role="tab"
+          className="friends-mode-btn"
+          onClick={onSwitchToClassic}
+          disabled={!onSwitchToClassic}
+        >
+          Username + Room
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected="true"
+          className="friends-mode-btn active"
+          disabled
+        >
+          Friends Login
+        </button>
+      </div>
+
       <h3 className="friends-title">Friends Login</h3>
       <p className="friends-subtitle">Use Firebase auth. Your chats sync through backend + socket namespace.</p>
 
@@ -255,6 +344,52 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
 };
 
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+      // Real-time: listen for friend list updates
+      useEffect(() => {
+        if (!socket) return;
+        const onFriendListUpdate = () => {
+          loadContacts();
+        };
+        socket.on('friends:refresh', onFriendListUpdate);
+        return () => socket.off('friends:refresh', onFriendListUpdate);
+      }, [socket]);
+    // Add state for addBy (tab: 'email' or 'id')
+    const [addBy, setAddBy] = useState('email');
+
+    // Handler for searching by unique ID
+    const handleSearchById = async () => {
+      setHasSearchedAddFriend(true);
+      setAddFriendSearchError('');
+      setSearchResults([]);
+      setIsSearchingAddFriend(true);
+
+      const value = addFriendQuery.trim();
+      if (!value) {
+        setAddFriendSearchError('Enter a unique ID.');
+        setIsSearchingAddFriend(false);
+        return;
+      }
+
+      try {
+        // Use searchUsers if it supports uniqueId, else filter manually
+        const data = await searchUsers(authToken, value);
+        let users = data.users || [];
+        // If not found, try to match uniqueId directly
+        if (!users.length) {
+          users = data.users?.filter(u => u.uniqueId === value) || [];
+        }
+        // If still not found, try a direct API call if available (pseudo-code)
+        // Optionally, you can add a new API endpoint for lookup by uniqueId
+        setSearchResults(users);
+        if (users.length === 0) {
+          setAddFriendSearchError('User not found with this unique ID');
+        }
+      } catch (e) {
+        setAddFriendSearchError(e.message || 'Search failed');
+      } finally {
+        setIsSearchingAddFriend(false);
+      }
+    };
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
@@ -784,6 +919,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
       setHasSearchedAddFriend(false);
       setAddFriendSearchError('');
       await loadContacts();
+      // Real-time: notify both users to refresh contacts
+      if (socket) {
+        socket.emit('friends:refresh', { to: targetUniqueId });
+      }
       setSelectedContactId(targetUniqueId);
       if (isMobileLayout) {
         setMobilePane('chat');
@@ -1084,6 +1223,37 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
+        {/* Friend Requests Section */}
+        <div className="friends-requests-section">
+          <h5>Requests</h5>
+          {requestsError ? <div className="friends-error">{requestsError}</div> : null}
+          {incomingRequests.length === 0 && outgoingRequests.length === 0 ? (
+            <div className="friends-empty-list">No friend requests</div>
+          ) : null}
+          {incomingRequests.length > 0 ? (
+            <div className="friends-incoming-requests">
+              <strong>Incoming</strong>
+              {incomingRequests.map((req) => (
+                <div key={req._id} className="friends-request-card">
+                  <span>From: {req.fromUid}</span>
+                  <button onClick={() => handleAcceptRequest(req._id)}>Accept</button>
+                  <button onClick={() => handleRejectRequest(req._id)}>Reject</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {outgoingRequests.length > 0 ? (
+            <div className="friends-outgoing-requests">
+              <strong>Outgoing</strong>
+              {outgoingRequests.map((req) => (
+                <div key={req._id} className="friends-request-card">
+                  <span>To: {req.toUid}</span>
+                  <span>Status: {req.status}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
         <header className="friends-side-header">
           <div className="friends-menu-wrap" ref={menuRef}>
             <button
@@ -1157,6 +1327,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           ) : null}
 
           {filteredContacts.map((contact) => {
+            // Show remove friend button and badge
             const listReceipt = getListReceipt(contact.lastMessage);
             const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
             return (
@@ -1192,9 +1363,17 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </span>
 
                   <span className="friends-contact-signals">
+                    {/* Badge for requests */}
+                    {incomingRequests.some((req) => req.fromUid === contact.uid) ? (
+                      <span className="friends-request-badge">!</span>
+                    ) : null}
                     <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
                     {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
                   </span>
+                  {/* Remove friend button */}
+                  <button className="friends-remove-btn" onClick={() => handleRemoveFriend(contact.uniqueId)}>
+                    Remove
+                  </button>
                 </div>
               </div>
             </button>
@@ -1227,6 +1406,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 </div>
                 <div className="friends-chat-header-copy">
                   <strong>{selectedContact.displayName || selectedContact.uniqueId}</strong>
+                  {/* Badge for requests */}
+                  {incomingRequests.some((req) => req.fromUid === selectedContact.uid) ? (
+                    <span className="friends-request-badge">!</span>
+                  ) : null}
                   <small>
                     {contactTyping
                       ? 'User is typing...'
@@ -1365,36 +1548,76 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             onClick={(e) => e.stopPropagation()}
           >
             <h4>Add people</h4>
-            <p>Add users by email or phone number. Only existing users can be added.</p>
-
-            <input
-              placeholder="example@email.com or +911234567890"
-              value={addFriendQuery}
-              onChange={(e) => setAddFriendQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSearch();
-                }
-              }}
-              autoFocus
-            />
-
-            <div className="friends-add-modal-actions left">
-              <button type="button" onClick={handleSearch}>Search</button>
+            <div className="friends-add-tabs">
+              <button
+                type="button"
+                className={addBy === 'email' ? 'active' : ''}
+                onClick={() => {
+                  setAddBy('email');
+                  setAddFriendQuery('');
+                  setSearchResults([]);
+                  setHasSearchedAddFriend(false);
+                  setAddFriendSearchError('');
+                }}
+              >By Email/Phone</button>
+              <button
+                type="button"
+                className={addBy === 'id' ? 'active' : ''}
+                onClick={() => {
+                  setAddBy('id');
+                  setAddFriendQuery('');
+                  setSearchResults([]);
+                  setHasSearchedAddFriend(false);
+                  setAddFriendSearchError('');
+                }}
+              >By Unique ID</button>
             </div>
-
+            {addBy === 'email' ? (
+              <>
+                <p>Add users by email or phone number. Only existing users can be added.</p>
+                <input
+                  placeholder="example@email.com or +911234567890"
+                  value={addFriendQuery}
+                  onChange={(e) => setAddFriendQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearch();
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="friends-add-modal-actions left">
+                  <button type="button" onClick={handleSearch}>Search</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>Add users by their unique ID. Only existing users can be added.</p>
+                <input
+                  placeholder="Enter unique ID (case sensitive)"
+                  value={addFriendQuery}
+                  onChange={(e) => setAddFriendQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearchById();
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="friends-add-modal-actions left">
+                  <button type="button" onClick={handleSearchById}>Search</button>
+                </div>
+              </>
+            )}
             <div className="friends-results-label">Results</div>
-
             {isSearchingAddFriend ? <div className="friends-empty">Searching...</div> : null}
-
             {addFriendSearchError ? <div className="friends-empty">{addFriendSearchError}</div> : null}
-
             <div className="friends-add-results">
               {hasSearchedAddFriend && !addFriendSearchError && searchResults.length === 0 ? (
                 <div className="friends-empty">User not found on this platform</div>
               ) : null}
-
               {searchResults.map((item) => (
                 <div key={item.uniqueId} className="friends-search-result-card">
                   <div className="friends-search-result-meta">
@@ -1414,7 +1637,6 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 </div>
               ))}
             </div>
-
             <div className="friends-add-modal-actions">
               <button
                 type="button"
@@ -1510,7 +1732,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   );
 };
 
-function FriendsFeature() {
+function FriendsFeature({ onSwitchToClassic }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authToken, setAuthToken] = useState('');
   const [profile, setProfile] = useState(null);
@@ -1673,6 +1895,21 @@ function FriendsFeature() {
   if (!isFirebaseConfigured) {
     return (
       <div className="friends-login">
+        <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
+          <button
+            type="button"
+            role="tab"
+            className="friends-mode-btn"
+            onClick={onSwitchToClassic}
+            disabled={!onSwitchToClassic}
+          >
+            Username + Room
+          </button>
+          <button type="button" role="tab" aria-selected="true" className="friends-mode-btn active" disabled>
+            Friends Login
+          </button>
+        </div>
+
         <h3 className="friends-title">Friends Login</h3>
         <p className="friends-error">Missing Firebase client configuration in frontend env.</p>
       </div>
@@ -1687,6 +1924,7 @@ function FriendsFeature() {
         onPhoneConfirm={handlePhoneConfirm}
         phoneState={phoneState}
         error={error}
+        onSwitchToClassic={onSwitchToClassic}
       />
     );
   }
