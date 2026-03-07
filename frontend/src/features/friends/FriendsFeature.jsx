@@ -93,6 +93,7 @@ import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
 import {
   addContact,
   fetchContacts,
+  fetchFriendRequests,
   fetchConversationMessages,
   fetchFriendsProfile,
   getFriendsBackendUrl,
