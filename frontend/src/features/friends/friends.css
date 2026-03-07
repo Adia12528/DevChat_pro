@@ -6,7 +6,7 @@
 .friends-requests-section h5 {
   margin: 0 0 6px 0;
   font-size: 1rem;
-  color: #333;
+  color: var(--txt);
 }
 .friends-request-card {
   display: flex;
@@ -34,7 +34,7 @@
 .friends-request-badge {
   display: inline-block;
   background: #ff5252;
-  color: #fff;
+  color: var(--txt);
   border-radius: 50%;
   width: 18px;
   height: 18px;
@@ -46,7 +46,7 @@
 }
 .friends-remove-btn {
   background: #ff5252;
-  color: #fff;
+  color: var(--txt);
   border: none;
   border-radius: 4px;
   padding: 2px 8px;
@@ -59,12 +59,12 @@
   background: #e53935;
 }
 .friends-error {
-  color: #ff5252;
+  color: var(--error);
   font-size: 0.95rem;
   margin-bottom: 4px;
 }
 .friends-empty-list {
-  color: #888;
+  color: var(--txt-muted);
   font-size: 0.95rem;
   margin-bottom: 4px;
 }
