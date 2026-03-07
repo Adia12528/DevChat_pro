@@ -146,15 +146,6 @@
   color: var(--txt);
 }
 
-.friends-login,
-.friends-login * {
-  color: var(--txt) !important;
-  background: transparent;
-  border-color: var(--border);
-  caret-color: var(--primary);
-}
-}
-
 .friends-mode-toggle {
   width: 100%;
   display: flex;
@@ -217,14 +208,13 @@
   padding: 10px;
   background: var(--input-bg);
   color: var(--txt);
-  caret-color: var(--primary);
 }
 
 .friends-row button {
   border: 0;
   border-radius: 10px;
   padding: 10px 12px;
-  background: var(--primary);
+  background: var(--wa-accent);
   color: #fff;
   cursor: pointer;
 }
@@ -236,7 +226,7 @@
 }
 
 .friends-note {
-  color: var(--primary-dark);
+  color: #2e6a4d;
   font-size: 0.83rem;
   margin: 4px 0;
 }
@@ -579,27 +569,21 @@
   border-radius: 14px;
   padding: 9px 11px;
   border: 1px solid #d8d2ca;
-  background: var(--msg-other);
-  color: var(--txt);
+  background: var(--wa-incoming);
   justify-self: start;
   animation: friendsMessageIn 140ms ease-out;
 }
 
 .friends-msg.me {
   justify-self: end;
-  background: var(--msg-me);
-  color: var(--txt);
+  background: var(--wa-outgoing);
   border-color: #c2e6bc;
 }
 
 .friends-msg-meta {
   margin-top: 6px;
   font-size: 0.72rem;
-  color: var(--txt-muted);
-    color: var(--txt);
-    background: var(--input-bg);
-    border-color: var(--border);
-    caret-color: var(--primary);
+  color: #4a675c;
   display: flex;
   align-items: center;
   justify-content: space-between;
