@@ -911,9 +911,15 @@
 
 @media (max-width: 768px) {
   .friends-shell {
-    display: block;
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
     height: 100vh;
+    width: 100vw;
+    max-width: 100vw;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
   }
 
   @supports (height: 100svh) {
@@ -928,38 +934,150 @@
     }
   }
 
-  .friends-messages {
-    padding: 12px;
-  }
-
-  .friends-input-wrap {
-    padding: 8px 10px;
-  }
-
   .friends-side {
-    width: 100%;
+    width: 100vw;
     min-width: 0;
     border-right: 0;
     border-bottom: 1px solid var(--wa-border);
+    height: 100vh;
+    max-height: 100vh;
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 10;
+    background: var(--wa-sidebar);
+    display: flex;
+    flex-direction: column;
   }
 
   .friends-shell.mobile-list .friends-main {
-    display: none;
+    display: none !important;
+  }
+  .friends-shell.mobile-chat .friends-side {
+    display: none !important;
   }
 
-  .friends-shell.mobile-chat .friends-side {
-    display: none;
+  .friends-main {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 11;
+    display: flex;
+    flex-direction: column;
+    background: var(--wa-chat-bg);
+  }
+
+  .friends-chat-header {
+    flex-shrink: 0;
+    padding: 10px 10px;
+    border-bottom: 1px solid #d4dde1;
+    background: #f0f4f6;
+  }
+
+  .friends-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    padding: 12px 6px 12px 6px;
+    display: grid;
+    gap: 10px;
+    background: #e7ddd3;
+  }
+
+  .friends-input-wrap {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    z-index: 20;
+    background: #f0f2f5;
+    border-top: 1px solid #d8d4cc;
+    padding: 8px 10px 10px 10px;
+    box-sizing: border-box;
+  }
+
+  .friends-input-row {
+    grid-template-columns: auto 1fr auto;
+    gap: 6px;
   }
 
   .friends-msg {
-    max-width: 88%;
+    max-width: 92vw;
+    font-size: 1rem;
+    padding: 10px 12px;
+    word-break: break-word;
   }
 
   .friends-fab {
-    right: 16px;
-    bottom: 86px;
+    position: fixed;
+    right: 18px;
+    bottom: 74px;
     width: 52px;
     height: 52px;
+    z-index: 30;
+    box-shadow: 0 8px 18px rgba(23, 75, 50, 0.22);
+  }
+
+  .friends-fab:active, .friends-fab:focus {
+    outline: 2px solid var(--wa-accent-dark);
+  }
+
+  .friends-msg-meta {
+    font-size: 0.85rem;
+  }
+
+  .friends-date-divider span,
+  .friends-unread-divider span {
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+
+  .friends-contact-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 0.8rem;
+  }
+
+  .friends-empty-list, .friends-chat-empty {
+    font-size: 1rem;
+    padding: 18px 8px;
+  }
+
+  .friends-contact-name {
+    font-size: 1.05rem;
+  }
+
+  .friends-contact-preview {
+    font-size: 0.95rem;
+  }
+
+  .friends-unread-badge {
+    min-width: 18px;
+    height: 18px;
+    font-size: 0.8rem;
+  }
+
+  .friends-remove-btn {
+    font-size: 0.9rem;
+    padding: 2px 8px;
+    margin-left: 6px;
+  }
+
+  .friends-emoji-tray {
+    max-width: 100vw;
+    overflow-x: auto;
+    padding: 6px 0;
+  }
+
+  /* Prevent overflow and stacking issues */
+  .friends-shell, .friends-main, .friends-side {
+    box-sizing: border-box;
   }
 }
 
