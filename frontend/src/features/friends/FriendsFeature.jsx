@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import {
+  getRedirectResult,
   GoogleAuthProvider,
   RecaptchaVerifier,
   onAuthStateChanged,
   signInWithPhoneNumber,
+  signInWithRedirect,
   signInWithPopup,
   signOut
 } from 'firebase/auth';
@@ -53,6 +55,32 @@ const formatDayLabel = (input) => {
   });
 };
 
+const formatChatTime = (input) => {
+  if (!input) return '';
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const sameDay =
+    now.getFullYear() === date.getFullYear() &&
+    now.getMonth() === date.getMonth() &&
+    now.getDate() === date.getDate();
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+};
+
+const isEmailOrPhone = (value) => {
+  const cleaned = value.trim();
+  if (!cleaned) return false;
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^\+?[0-9]{8,15}$/;
+  return emailRegex.test(cleaned) || phoneRegex.test(cleaned);
+};
+
 const getReceiptConfig = (msg) => {
   if (!msg?.isMine) return null;
   if (msg.deliveryStatus === 'pending') {
@@ -66,6 +94,14 @@ const getReceiptConfig = (msg) => {
     return { text: '✓✓', className: 'delivered', title: 'Delivered' };
   }
   return { text: '✓', className: 'sent', title: 'Sent' };
+};
+
+const getListReceipt = (msg) => {
+  if (!msg) return null;
+  if (msg.deliveryStatus === 'pending') return '...';
+  if (msg.deliveryStatus === 'read') return '✓✓';
+  if (msg.deliveryStatus === 'delivered') return '✓✓';
+  return '✓';
 };
 
 const playNotificationTone = (kind = 'soft') => {
@@ -141,6 +177,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
       <div className="friends-row">
         <button type="button" onClick={onGoogleLogin}>Continue with Google</button>
       </div>
+      <p className="friends-note">If popups are blocked, sign-in will continue with a secure redirect.</p>
 
       <div className="friends-row">
         <input
@@ -185,90 +222,12 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   );
 };
 
-const FriendsHomePage = ({ profile, onOpenChats, onOpenSettings, onLogout }) => {
-  return (
-    <div className="friends-login friends-home-page" aria-label="Friends home page">
-      <h3 className="friends-title">Welcome, {profile.displayName || 'Friend'}</h3>
-      <p className="friends-subtitle">You are logged in. Choose what to open next.</p>
-
-      <div className="friends-home-grid">
-        <button type="button" className="friends-home-card" onClick={onOpenChats}>
-          <strong>Open Chats</strong>
-          <span>Go to your contacts and conversations.</span>
-        </button>
-        <button type="button" className="friends-home-card secondary" onClick={onOpenSettings}>
-          <strong>Open Settings</strong>
-          <span>Update profile and preferences before chatting.</span>
-        </button>
-      </div>
-
-      <div className="friends-row">
-        <button type="button" className="secondary" onClick={onLogout}>Log out</button>
-      </div>
-    </div>
-  );
-};
-
-const FriendsSettingsPage = ({ profile, authToken, onProfileRefresh, onBackHome, onOpenChats, onLogout }) => {
-  const [nameDraft, setNameDraft] = useState(profile.displayName || '');
-  const [bioDraft, setBioDraft] = useState(profile.bio || '');
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState('');
-
-  useEffect(() => {
-    setNameDraft(profile.displayName || '');
-    setBioDraft(profile.bio || '');
-  }, [profile.displayName, profile.bio]);
-
-  const handleSave = async () => {
-    try {
-      setError('');
-      setSaved('');
-      await updateFriendsProfile(authToken, {
-        displayName: nameDraft,
-        bio: bioDraft
-      });
-      await onProfileRefresh();
-      setSaved('Profile saved successfully.');
-    } catch (e) {
-      setError(e.message || 'Failed to update profile');
-    }
-  };
-
-  return (
-    <div className="friends-login friends-settings-page" aria-label="Friends settings page">
-      <h3 className="friends-title">Friends Settings</h3>
-      <p className="friends-subtitle">Manage your profile before entering chats.</p>
-
-      <div className="friends-id-badge">ID: {profile.uniqueId}</div>
-
-      <div className="friends-row">
-        <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} placeholder="Display name" />
-      </div>
-      <div className="friends-row">
-        <textarea value={bioDraft} onChange={(e) => setBioDraft(e.target.value)} placeholder="Bio" rows={4} />
-      </div>
-
-      <div className="friends-row">
-        <button type="button" onClick={handleSave}>Save Profile</button>
-        <button type="button" className="secondary" onClick={onOpenChats}>Open Chats</button>
-      </div>
-      <div className="friends-row">
-        <button type="button" className="secondary" onClick={onBackHome}>Back</button>
-        <button type="button" className="secondary" onClick={onLogout}>Log out</button>
-      </div>
-
-      {saved ? <p className="friends-note">{saved}</p> : null}
-      {error ? <p className="friends-error">{error}</p> : null}
-    </div>
-  );
-};
-
-const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings }) => {
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
   const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
-  const [query, setQuery] = useState('');
+  const [chatSearch, setChatSearch] = useState('');
+  const [addFriendQuery, setAddFriendQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -277,6 +236,13 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
   const [mobilePane, setMobilePane] = useState('list');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsNameDraft, setSettingsNameDraft] = useState(profile.displayName || '');
+  const [settingsBioDraft, setSettingsBioDraft] = useState(profile.bio || '');
+  const [settingsSavedMessage, setSettingsSavedMessage] = useState('');
+  const [settingsError, setSettingsError] = useState('');
+  const [isEmojiTrayOpen, setIsEmojiTrayOpen] = useState(false);
 
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
@@ -288,10 +254,21 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
   const shouldAutoScrollUnreadRef = useRef(false);
   const swipeStartRef = useRef(null);
 
+  const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
+
   const selectedContact = useMemo(
     () => contacts.find((item) => item.uniqueId === selectedContactId) || null,
     [contacts, selectedContactId]
   );
+
+  const filteredContacts = useMemo(() => {
+    const term = chatSearch.trim().toLowerCase();
+    if (!term) return contacts;
+    return contacts.filter((contact) => {
+      const display = `${contact.displayName || ''} ${contact.uniqueId || ''} ${contact.lastMessage?.text || ''}`.toLowerCase();
+      return display.includes(term);
+    });
+  }, [contacts, chatSearch]);
 
   const activeMessages = useMemo(() => messagesByContact[selectedContactId] || [], [messagesByContact, selectedContactId]);
 
@@ -348,6 +325,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
   useEffect(() => {
     loadContacts();
   }, []);
+
+  useEffect(() => {
+    setSettingsNameDraft(profile.displayName || '');
+    setSettingsBioDraft(profile.bio || '');
+  }, [profile.displayName, profile.bio]);
 
   useEffect(() => {
     if (!selectedContactId) return;
@@ -508,6 +490,9 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
       if (event.key !== 'Escape') return;
       setIsMenuOpen(false);
       setIsAddModalOpen(false);
+      setIsProfileModalOpen(false);
+      setIsSettingsModalOpen(false);
+      setIsEmojiTrayOpen(false);
     };
 
     document.addEventListener('keydown', handleEscape);
@@ -515,8 +500,15 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
   }, []);
 
   const handleSearch = async (value) => {
-    setQuery(value);
+    setAddFriendQuery(value);
+    setSettingsError('');
+
     if (!value.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (!isEmailOrPhone(value)) {
       setSearchResults([]);
       return;
     }
@@ -533,7 +525,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
     try {
       setError('');
       await addContact(authToken, targetUniqueId);
-      setQuery('');
+      setAddFriendQuery('');
       setSearchResults([]);
       await loadContacts();
       setSelectedContactId(targetUniqueId);
@@ -545,11 +537,25 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
     }
   };
 
+  const handleSaveSettings = async () => {
+    try {
+      setSettingsError('');
+      setSettingsSavedMessage('');
+      await updateFriendsProfile(authToken, {
+        displayName: settingsNameDraft,
+        bio: settingsBioDraft
+      });
+      await onProfileRefresh();
+      setSettingsSavedMessage('Profile updated successfully.');
+    } catch (e) {
+      setSettingsError(e.message || 'Unable to save settings.');
+    }
+  };
+
   const handleSendMessage = () => {
     if (!socket || !selectedContactId || !message.trim()) return;
 
     const policy = selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' };
-
     const messageText = message;
     const tempId = makeTempMessageId();
     const optimisticMessage = {
@@ -608,10 +614,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
     });
 
     setMessage('');
+    setIsEmojiTrayOpen(false);
     socket.emit('friends:typing', { toUniqueId: selectedContactId, isTyping: false });
     typingActiveRef.current = false;
   };
-
 
   const handleMessageInputChange = (value) => {
     setMessage(value);
@@ -642,13 +648,14 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
 
   const handleSelectContact = (contactUniqueId) => {
     setSelectedContactId(contactUniqueId);
+    setIsEmojiTrayOpen(false);
     if (isMobileLayout) {
       setMobilePane('chat');
     }
   };
 
   const handleOpenAddModal = () => {
-    setQuery('');
+    setAddFriendQuery('');
     setSearchResults([]);
     setIsAddModalOpen(true);
   };
@@ -746,19 +753,28 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
               onClick={() => setIsMenuOpen((prev) => !prev)}
               aria-expanded={isMenuOpen}
               aria-haspopup="menu"
-              aria-label="Open friends menu"
+              aria-label="Open dashboard menu"
             >
               ☰
             </button>
             {isMenuOpen ? (
-              <div className="friends-menu-dropdown" role="menu" aria-label="Friends menu">
+              <div className="friends-menu-dropdown" role="menu" aria-label="Dashboard menu">
                 <button
                   type="button"
                   className="friends-menu-item"
                   onClick={() => {
                     setIsMenuOpen(false);
-                    setMobilePane('list');
-                    onOpenSettings();
+                    setIsProfileModalOpen(true);
+                  }}
+                >
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  className="friends-menu-item"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setIsSettingsModalOpen(true);
                   }}
                 >
                   Settings
@@ -771,22 +787,37 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
                     onLogout();
                   }}
                 >
-                  Log out
+                  Logout
                 </button>
               </div>
             ) : null}
           </div>
+
           <div className="friends-self-meta">
             <strong>Chats</strong>
             <span className="friends-id-badge">{profile.displayName || profile.uniqueId}</span>
           </div>
         </header>
 
+        <div className="friends-sidebar-search-wrap">
+          <input
+            className="friends-sidebar-search"
+            type="search"
+            placeholder="Search chats"
+            value={chatSearch}
+            onChange={(e) => setChatSearch(e.target.value)}
+            aria-label="Search chats"
+          />
+        </div>
+
         <div className="friends-contacts" aria-label="Friends conversations">
-          {contacts.length === 0 ? (
-            <div className="friends-empty-list">No chats yet. Tap + to add people.</div>
+          {filteredContacts.length === 0 ? (
+            <div className="friends-empty-list">
+              {contacts.length === 0 ? 'No chats yet. Tap + to add people.' : 'No chats match your search.'}
+            </div>
           ) : null}
-          {contacts.map((contact) => (
+
+          {filteredContacts.map((contact) => (
             <button
               key={contact.uniqueId}
               className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
@@ -796,19 +827,32 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
               <div className="friends-contact-avatar" aria-hidden="true">
                 {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
               </div>
+
               <div className="friends-contact-content">
                 <div className="friends-contact-top">
-                  <span className="friends-contact-name">
-                    {contact.displayName || contact.uniqueId}
-                    <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
-                  </span>
-                  {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
+                  <span className="friends-contact-name">{contact.displayName || contact.uniqueId}</span>
+                  <span className="friends-contact-time">{formatChatTime(contact.lastMessage?.createdAt || contact.updatedAt)}</span>
                 </div>
-                <small>
-                  {contact.online ? 'online now' : (contact.lastSeen ? `last seen ${new Date(contact.lastSeen).toLocaleTimeString()}` : contact.uniqueId)}
-                </small>
-                <div className="friends-contact-preview">
-                  {contact.lastMessage?.text ? contact.lastMessage.text : 'Tap to start chatting'}
+
+                <div className="friends-contact-bottom">
+                  <span className="friends-contact-preview">
+                    {contact.lastMessage?.text ? (
+                      <>
+                        {(contact.lastMessage?.isMine || contact.lastMessage?.fromUniqueId === profile.uniqueId) ? (
+                          <>
+                            <span className="friends-list-receipt" aria-hidden="true">{getListReceipt(contact.lastMessage)}</span>
+                            <span className="friends-list-prefix">You:</span>{' '}
+                          </>
+                        ) : null}
+                        {contact.lastMessage.text}
+                      </>
+                    ) : 'Tap to start chatting'}
+                  </span>
+
+                  <span className="friends-contact-signals">
+                    <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
+                    {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
+                  </span>
                 </div>
               </div>
             </button>
@@ -832,8 +876,29 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
                 Back
               </button>
             ) : null}
-            {selectedContact ? `Chat with ${selectedContact.displayName || selectedContact.uniqueId}` : 'Choose a friend to start chatting'}
-            {contactTyping ? <div className="friends-typing-indicator">Typing...</div> : null}
+
+            {selectedContact ? (
+              <>
+                <div className="friends-contact-avatar" aria-hidden="true">
+                  {(selectedContact.displayName || selectedContact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
+                </div>
+                <div className="friends-chat-header-copy">
+                  <strong>{selectedContact.displayName || selectedContact.uniqueId}</strong>
+                  <small>
+                    {contactTyping
+                      ? 'typing...'
+                      : selectedContact.online
+                        ? 'online'
+                        : (selectedContact.lastSeen ? `last seen ${formatChatTime(selectedContact.lastSeen)}` : selectedContact.uniqueId)}
+                  </small>
+                </div>
+              </>
+            ) : (
+              <div className="friends-chat-header-copy">
+                <strong>Select a chat</strong>
+                <small>Choose a friend from the left sidebar.</small>
+              </div>
+            )}
           </div>
         </header>
 
@@ -841,6 +906,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
           {!selectedContact ? (
             <div className="friends-chat-empty">Select a friend from chats to start messaging.</div>
           ) : null}
+
           {timelineItems.map((item) => {
             if (item.type === 'date') {
               return (
@@ -868,7 +934,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
               <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
                 <div>{msg.text}</div>
                 <div className="friends-msg-meta">
-                  <span>{new Date(msg.createdAt).toLocaleString()} • {getFriendlyRemaining(msg.expiresAt)}</span>
+                  <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
                   {msg.isMine ? (() => {
                     const receipt = getReceiptConfig(msg);
                     if (!receipt) return null;
@@ -885,9 +951,34 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
         </div>
 
         <div className="friends-input-wrap">
-          <div className="friends-row">
+          {isEmojiTrayOpen ? (
+            <div className="friends-emoji-tray" aria-label="Emoji picker">
+              {quickEmojis.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="friends-emoji-chip"
+                  onClick={() => handleMessageInputChange(`${message}${emoji}`)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="friends-input-row">
+            <button
+              type="button"
+              className="friends-emoji-toggle"
+              onClick={() => setIsEmojiTrayOpen((prev) => !prev)}
+              aria-label="Toggle emoji picker"
+              disabled={!selectedContact}
+            >
+              🙂
+            </button>
+
             <input
-              placeholder={selectedContact ? 'Type a message...' : 'Add/select a friend to start'}
+              placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
               value={message}
               onChange={(e) => handleMessageInputChange(e.target.value)}
               disabled={!selectedContact}
@@ -898,10 +989,12 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
                 }
               }}
             />
+
             <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
               Send
             </button>
           </div>
+
           {error ? <p className="friends-error">{error}</p> : null}
         </div>
       </section>
@@ -924,15 +1017,22 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
             onClick={(e) => e.stopPropagation()}
           >
             <h4>Add people</h4>
-            <p>Search by email, phone number, name, or unique ID.</p>
+            <p>Add users by email or phone number. Only existing users can be added.</p>
+
             <input
               placeholder="example@email.com or +911234567890"
-              value={query}
+              value={addFriendQuery}
               onChange={(e) => handleSearch(e.target.value)}
               autoFocus
             />
+
+            {addFriendQuery.trim() && !isEmailOrPhone(addFriendQuery) ? (
+              <div className="friends-empty">Enter a valid email or phone number.</div>
+            ) : null}
+
             <div className="friends-add-results">
-              {searchResults.length === 0 && query.trim() ? <div className="friends-empty">No users found.</div> : null}
+              {searchResults.length === 0 && isEmailOrPhone(addFriendQuery) ? <div className="friends-empty">No users found.</div> : null}
+
               {searchResults.map((item) => (
                 <button
                   key={item.uniqueId}
@@ -947,11 +1047,12 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
                 </button>
               ))}
             </div>
+
             <div className="friends-add-modal-actions">
               <button
                 type="button"
+                disabled={!searchResults?.[0]?.uniqueId}
                 onClick={() => {
-                  if (!query.trim()) return;
                   const first = searchResults?.[0];
                   if (!first?.uniqueId) return;
                   handleAddContact(first.uniqueId);
@@ -961,6 +1062,54 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onOpenSettings
                 Add First Match
               </button>
               <button type="button" className="secondary" onClick={() => setIsAddModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isProfileModalOpen ? (
+        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsProfileModalOpen(false)}>
+          <div className="friends-profile-modal" role="dialog" aria-label="Profile" onClick={(e) => e.stopPropagation()}>
+            <h4>Profile</h4>
+            <p><strong>Name:</strong> {profile.displayName || 'Not set'}</p>
+            <p><strong>Unique ID:</strong> {profile.uniqueId}</p>
+            <p><strong>Bio:</strong> {profile.bio || 'No bio yet.'}</p>
+            <div className="friends-add-modal-actions">
+              <button type="button" className="secondary" onClick={() => setIsProfileModalOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isSettingsModalOpen ? (
+        <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsSettingsModalOpen(false)}>
+          <div className="friends-settings-modal" role="dialog" aria-label="Settings" onClick={(e) => e.stopPropagation()}>
+            <h4>Settings</h4>
+            <p>Update your profile details.</p>
+
+            <div className="friends-row">
+              <input
+                value={settingsNameDraft}
+                onChange={(e) => setSettingsNameDraft(e.target.value)}
+                placeholder="Display name"
+              />
+            </div>
+
+            <div className="friends-row">
+              <textarea
+                rows={4}
+                value={settingsBioDraft}
+                onChange={(e) => setSettingsBioDraft(e.target.value)}
+                placeholder="Bio"
+              />
+            </div>
+
+            {settingsSavedMessage ? <p className="friends-note">{settingsSavedMessage}</p> : null}
+            {settingsError ? <p className="friends-error">{settingsError}</p> : null}
+
+            <div className="friends-add-modal-actions">
+              <button type="button" onClick={handleSaveSettings}>Save</button>
+              <button type="button" className="secondary" onClick={() => setIsSettingsModalOpen(false)}>Close</button>
             </div>
           </div>
         </div>
@@ -977,7 +1126,6 @@ function FriendsFeature() {
   const [phoneState, setPhoneState] = useState('idle');
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [socket, setSocket] = useState(null);
-  const [postLoginView, setPostLoginView] = useState('chat');
 
   const recaptchaRef = useRef(null);
 
@@ -996,7 +1144,6 @@ function FriendsFeature() {
       if (!nextUser) {
         setAuthToken('');
         setProfile(null);
-        setPostLoginView('chat');
         return;
       }
       try {
@@ -1047,13 +1194,36 @@ function FriendsFeature() {
       return;
     }
     setError('');
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
       await signInWithPopup(friendsAuth, provider);
     } catch (e) {
+      const code = e?.code || '';
+      const shouldUseRedirect = code === 'auth/popup-blocked' || code === 'auth/cancelled-popup-request';
+
+      if (shouldUseRedirect) {
+        try {
+          await signInWithRedirect(friendsAuth, provider);
+          return;
+        } catch (redirectError) {
+          setError(mapFirebaseAuthError(redirectError));
+          return;
+        }
+      }
+
       setError(mapFirebaseAuthError(e));
     }
   };
+
+  useEffect(() => {
+    if (!friendsAuth) return;
+
+    getRedirectResult(friendsAuth).catch((e) => {
+      const code = e?.code || '';
+      if (code === 'auth/no-auth-event') return;
+      setError(mapFirebaseAuthError(e));
+    });
+  }, []);
 
   const handlePhoneStart = async (phone) => {
     if (!friendsAuth) {
@@ -1129,26 +1299,13 @@ function FriendsFeature() {
     );
   }
 
-  if (postLoginView === 'settings') {
-    return (
-      <FriendsSettingsPage
-        profile={profile}
-        authToken={authToken}
-        onProfileRefresh={async () => refreshProfile()}
-        onBackHome={() => setPostLoginView('chat')}
-        onOpenChats={() => setPostLoginView('chat')}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
   return (
     <FriendsWorkspace
       authToken={authToken}
       profile={profile}
       onLogout={handleLogout}
       socket={socket}
-      onOpenSettings={() => setPostLoginView('settings')}
+      onProfileRefresh={() => refreshProfile()}
     />
   );
 }
