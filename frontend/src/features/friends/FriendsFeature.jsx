@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
   // Friend requests state
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
