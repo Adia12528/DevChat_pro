@@ -457,92 +457,94 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     try {
       const raw = window.localStorage.getItem(queueStorageKey);
       if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((item) => item?.tempId && item?.toUniqueId && item?.text);
-    } catch {
-      return [];
-    }
-  };
 
-  const upsertQueuedMessage = (queuedItem) => {
-    const next = offlineQueueRef.current.some((item) => item.tempId === queuedItem.tempId)
-      ? offlineQueueRef.current.map((item) => (item.tempId === queuedItem.tempId ? queuedItem : item))
-      : [...offlineQueueRef.current, queuedItem];
-    offlineQueueRef.current = next;
-    setOfflineQueueCount(next.length);
-    persistQueue(next);
-  };
-
-  const removeQueuedMessage = (tempId) => {
-    if (!tempId) return;
-    const next = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
-    offlineQueueRef.current = next;
-    setOfflineQueueCount(next.length);
-    persistQueue(next);
-  };
-
-  const updateOptimisticDeliveryStatus = (contactUniqueId, tempId, nextStatus) => {
-    if (!contactUniqueId || !tempId) return;
-    setMessagesByContact((prev) => {
-      const current = prev[contactUniqueId] || [];
-      return {
-        ...prev,
-        [contactUniqueId]: current.map((msg) => (msg.id === tempId ? { ...msg, deliveryStatus: nextStatus } : msg))
+      const mapFriendsBackendError = (error) => {
+        const raw = error?.message || String(error || '');
+        if (raw.includes('Firebase auth is not configured on backend')) {
+          return 'Friends backend Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY) on the backend host and redeploy.';
+        }
+        return raw || 'Friends backend request failed';
       };
-    });
-  };
 
-  const selectedContact = useMemo(
-    () => contacts.find((item) => item.uniqueId === selectedContactId) || null,
-    [contacts, selectedContactId]
-  );
+      // Move LoginPanel above FriendsFeature so it is defined before use
+      function LoginPanel({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) {
+        const [phone, setPhone] = useState('');
+        const [otp, setOtp] = useState('');
 
-  const filteredContacts = useMemo(() => {
-    const term = chatSearch.trim().toLowerCase();
-    if (!term) return contacts;
-    return contacts.filter((contact) => {
-      const display = `${contact.displayName || ''} ${contact.uniqueId || ''} ${contact.lastMessage?.text || ''}`.toLowerCase();
-      return display.includes(term);
-    });
-  }, [contacts, chatSearch]);
+        return (
+          <div className="friends-login" aria-label="Friends auth login">
+            <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
+              <button
+                type="button"
+                role="tab"
+                className="friends-mode-btn"
+                onClick={onSwitchToClassic}
+                disabled={!onSwitchToClassic}
+              >
+                Username + Room
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                className="friends-mode-btn active"
+                disabled
+              >
+                Friends Login
+              </button>
+            </div>
 
-  const activeMessages = useMemo(() => messagesByContact[selectedContactId] || [], [messagesByContact, selectedContactId]);
+            <h3 className="friends-title">Friends Login</h3>
+            <p className="friends-subtitle">Use Firebase auth. Your chats sync through backend + socket namespace.</p>
 
-  const notifyIncomingMessage = (contact, incoming) => {
-    if (!contact || !incoming || incoming.isMine) return;
-    if (contact.preferences?.muted || contact.preferences?.notifications === false) return;
+            <div className="friends-row">
+              <button type="button" onClick={onGoogleLogin}>Continue with Google</button>
+            </div>
 
-    const key = contact.uniqueId;
-    const now = Date.now();
-    if (now - (lastNotifyAtRef.current[key] || 0) < 2500) return;
-    lastNotifyAtRef.current[key] = now;
+            <p className="friends-note">If popups are blocked, sign-in will continue with a secure redirect.</p>
 
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        new Notification(contact.displayName || contact.uniqueId, {
-          body: incoming.text,
-          tag: `friends-${key}`
-        });
-      } else if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+            <div className="friends-row">
+              <input
+                placeholder="Phone number (E.164, e.g. +911234567890)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={phoneState === 'sending'}
+              />
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => onPhoneStart(phone)}
+                disabled={!phone.trim() || phoneState === 'sending'}
+              >
+                {phoneState === 'sending' ? 'Sending...' : 'Send OTP'}
+              </button>
+            </div>
+
+            <div className="friends-row">
+              <input
+                placeholder="Enter OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                disabled={phoneState !== 'code-sent'}
+              />
+              <button
+                type="button"
+                onClick={() => onPhoneConfirm(otp)}
+                disabled={phoneState !== 'code-sent' || !otp.trim()}
+              >
+                Verify OTP
+              </button>
+            </div>
+
+            <div id="friends-recaptcha-container" />
+
+            {!isFirebaseConfigured ? (
+              <p className="friends-error">Firebase client config is missing. Add REACT_APP_FIREBASE_* vars.</p>
+            ) : null}
+            {error ? <p className="friends-error">{error}</p> : null}
+          </div>
+        );
       }
-    }
-
-    playNotificationTone(contact.preferences?.notificationSound || 'soft');
-  };
-
-  const loadContacts = async () => {
-    try {
-      const data = await fetchContacts(authToken);
-      setContacts(data.contacts || []);
-      if (!selectedContactId && data.contacts?.[0]?.uniqueId) {
-        setSelectedContactId(data.contacts[0].uniqueId);
-      }
-    } catch (e) {
-      setError(e.message || 'Failed to load contacts');
-    }
-  };
 
   const loadMessages = async (contactUniqueId, options = {}) => {
     if (!contactUniqueId) return;
