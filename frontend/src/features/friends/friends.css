@@ -1,3 +1,36 @@
+/* Voice recorder button styles */
+.friends-voice-btn {
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, background 0.2s;
+  box-shadow: 0 1px 4px rgba(142,36,170,0.08);
+  padding: 0;
+  outline: none;
+}
+.friends-voice-btn svg {
+  transition: box-shadow 0.2s, background 0.2s, transform 0.25s cubic-bezier(.4,2,.6,1);
+}
+.friends-voice-btn:hover:not(:disabled),
+.friends-voice-btn:focus:not(:disabled) {
+  background: #f3e5f5;
+  box-shadow: 0 4px 16px rgba(142,36,170,0.16);
+}
+.friends-voice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.friends-voice-btn:focus {
+  outline: 2px solid #8e24aa;
+  outline-offset: 2px;
+}
 /* Toast notification styles */
 .friends-toast {
   position: fixed;
