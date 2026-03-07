@@ -105,6 +105,24 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+      // Load messages for a contact
+      const loadMessages = async (contactId, { reset } = {}) => {
+        if (!contactId) return;
+        try {
+          const data = await fetchConversationMessages(authToken, contactId, { limit: 40 });
+          const messages = data.messages || [];
+          setMessagesByContact((prev) => ({
+            ...prev,
+            [contactId]: reset ? messages : mergeMessagesById(prev[contactId] || [], messages)
+          }));
+          if (messages[0]?.createdAt) {
+            setOldestCursorByContact((prev) => ({ ...prev, [contactId]: messages[0].createdAt }));
+          }
+          setHasMoreByContact((prev) => ({ ...prev, [contactId]: messages.length >= 40 }));
+        } catch (e) {
+          setError(e.message || 'Failed to load messages.');
+        }
+      };
     // Load contacts from backend
     const loadContacts = async () => {
       try {
