@@ -570,6 +570,7 @@
   padding: 9px 11px;
   border: 1px solid #d8d2ca;
   background: var(--wa-incoming);
+  color: var(--txt);
   justify-self: start;
   animation: friendsMessageIn 140ms ease-out;
 }
@@ -577,6 +578,7 @@
 .friends-msg.me {
   justify-self: end;
   background: var(--wa-outgoing);
+  color: var(--txt);
   border-color: #c2e6bc;
 }
 
