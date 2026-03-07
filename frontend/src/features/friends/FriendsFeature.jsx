@@ -1208,6 +1208,17 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     }
   };
 
+  // Fix: filteredContacts must be defined as a hook, not inside JSX
+  const filteredContacts = useMemo(() => {
+    const search = chatSearch.trim().toLowerCase();
+    if (!search) return contacts;
+    return contacts.filter(
+      (c) =>
+        (c.displayName && c.displayName.toLowerCase().includes(search)) ||
+        (c.uniqueId && c.uniqueId.toLowerCase().includes(search))
+    );
+  }, [contacts, chatSearch]);
+
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
@@ -1307,129 +1318,64 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
           />
         </div>
 
-        {/* Fix: Define filteredContacts for chat search */}
-        {(() => {
-          const filteredContacts = useMemo(() => {
-            const search = chatSearch.trim().toLowerCase();
-            if (!search) return contacts;
-            return contacts.filter(
-              (c) =>
-                (c.displayName && c.displayName.toLowerCase().includes(search)) ||
-                (c.uniqueId && c.uniqueId.toLowerCase().includes(search))
-            );
-          }, [contacts, chatSearch]);
 
-          return (
-            <div className="friends-contacts" aria-label="Friends conversations">
-              {filteredContacts.length === 0 ? (
-                <div className="friends-empty-list">
-                  {contacts.length === 0 ? 'No chats yet. Tap + to add people.' : 'No chats match your search.'}
-                </div>
-              ) : null}
-
-              {filteredContacts.map((contact) => {
-                // Show remove friend button and badge
-                const listReceipt = getListReceipt(contact.lastMessage);
-                const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
-                return (
-                  <button
-                    key={contact.uniqueId}
-                    className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => handleSelectContact(contact.uniqueId)}
-                  >
-                    <div className="friends-contact-avatar" aria-hidden="true">
-                      {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
-                    </div>
-
-                    <div className="friends-contact-content">
-                      <div className="friends-contact-top">
-                        <span className="friends-contact-name">{contact.displayName || contact.uniqueId}</span>
-                        <span className="friends-contact-time">{formatChatTime(contact.lastMessage?.createdAt || contact.updatedAt)}</span>
-                      </div>
-
-                      <div className="friends-contact-bottom">
-                        <span className="friends-contact-preview">
-                          {contact.lastMessage?.text ? (
-                            <>
-                              {(contact.lastMessage?.isMine || contact.lastMessage?.fromUniqueId === profile.uniqueId) ? (
-                                <>
-                                  <span className={`friends-list-receipt ${listReceiptClass}`.trim()} aria-hidden="true">{listReceipt}</span>
-                                  <span className="friends-list-prefix">You:</span>{' '}
-                                </>
-                              ) : null}
-                              {contact.lastMessage.text}
-                            </>
-                          ) : 'Tap to start chatting'}
-                        </span>
-
-                        <span className="friends-contact-signals">
-                          {/* Badge for requests */}
-                          {incomingRequests.some((req) => req.fromUid === contact.uid) ? (
-                            <span className="friends-request-badge">!</span>
-                          ) : null}
-                          <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
-                          {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
-                        </span>
-                        {/* Remove friend button */}
-                        <button className="friends-remove-btn" onClick={() => handleRemoveFriend(contact.uniqueId)}>
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+        <div className="friends-contacts" aria-label="Friends conversations">
+          {filteredContacts.length === 0 ? (
+            <div className="friends-empty-list">
+              {contacts.length === 0 ? 'No chats yet. Tap + to add people.' : 'No chats match your search.'}
             </div>
-          );
-        })()}
+          ) : null}
+
+          {filteredContacts.map((contact) => {
+            const listReceipt = getListReceipt(contact.lastMessage);
+            const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
             return (
-            <button
-              key={contact.uniqueId}
-              className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
-              type="button"
-              onClick={() => handleSelectContact(contact.uniqueId)}
-            >
-              <div className="friends-contact-avatar" aria-hidden="true">
-                {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
-              </div>
-
-              <div className="friends-contact-content">
-                <div className="friends-contact-top">
-                  <span className="friends-contact-name">{contact.displayName || contact.uniqueId}</span>
-                  <span className="friends-contact-time">{formatChatTime(contact.lastMessage?.createdAt || contact.updatedAt)}</span>
+              <button
+                key={contact.uniqueId}
+                className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
+                type="button"
+                onClick={() => handleSelectContact(contact.uniqueId)}
+              >
+                <div className="friends-contact-avatar" aria-hidden="true">
+                  {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
                 </div>
 
-                <div className="friends-contact-bottom">
-                  <span className="friends-contact-preview">
-                    {contact.lastMessage?.text ? (
-                      <>
-                        {(contact.lastMessage?.isMine || contact.lastMessage?.fromUniqueId === profile.uniqueId) ? (
-                          <>
-                            <span className={`friends-list-receipt ${listReceiptClass}`.trim()} aria-hidden="true">{listReceipt}</span>
-                            <span className="friends-list-prefix">You:</span>{' '}
-                          </>
-                        ) : null}
-                        {contact.lastMessage.text}
-                      </>
-                    ) : 'Tap to start chatting'}
-                  </span>
+                <div className="friends-contact-content">
+                  <div className="friends-contact-top">
+                    <span className="friends-contact-name">{contact.displayName || contact.uniqueId}</span>
+                    <span className="friends-contact-time">{formatChatTime(contact.lastMessage?.createdAt || contact.updatedAt)}</span>
+                  </div>
 
-                  <span className="friends-contact-signals">
-                    {/* Badge for requests */}
-                    {incomingRequests.some((req) => req.fromUid === contact.uid) ? (
-                      <span className="friends-request-badge">!</span>
-                    ) : null}
-                    <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
-                    {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
-                  </span>
-                  {/* Remove friend button */}
-                  <button className="friends-remove-btn" onClick={() => handleRemoveFriend(contact.uniqueId)}>
-                    Remove
-                  </button>
+                  <div className="friends-contact-bottom">
+                    <span className="friends-contact-preview">
+                      {contact.lastMessage?.text ? (
+                        <>
+                          {(contact.lastMessage?.isMine || contact.lastMessage?.fromUniqueId === profile.uniqueId) ? (
+                            <>
+                              <span className={`friends-list-receipt ${listReceiptClass}`.trim()} aria-hidden="true">{listReceipt}</span>
+                              <span className="friends-list-prefix">You:</span>{' '}
+                            </>
+                          ) : null}
+                          {contact.lastMessage.text}
+                        </>
+                      ) : 'Tap to start chatting'}
+                    </span>
+
+                    <span className="friends-contact-signals">
+                      {/* Badge for requests */}
+                      {incomingRequests.some((req) => req.fromUid === contact.uid) ? (
+                        <span className="friends-request-badge">!</span>
+                      ) : null}
+                      <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
+                      {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
+                    </span>
+                    {/* Remove friend button */}
+                    <button className="friends-remove-btn" onClick={() => handleRemoveFriend(contact.uniqueId)}>
+                      Remove
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
             );
           })}
         </div>
