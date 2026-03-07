@@ -1,4 +1,4 @@
-  // Fix: selectedContact should be derived from contacts and selectedContactId
+  // Fix: selectedContact and filteredContacts should be defined after all useState hooks
   const selectedContact = useMemo(() => {
     return contacts.find((c) => c.uniqueId === selectedContactId) || null;
   }, [contacts, selectedContactId]);
