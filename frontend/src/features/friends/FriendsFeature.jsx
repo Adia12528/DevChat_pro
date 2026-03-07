@@ -1,3 +1,30 @@
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
+import {
+  getRedirectResult,
+  GoogleAuthProvider,
+  RecaptchaVerifier,
+  onAuthStateChanged,
+  signInWithPhoneNumber,
+  signInWithRedirect,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import './friends.css';
+import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
+import {
+  addContact,
+  fetchContacts,
+  fetchConversationMessages,
+  fetchFriendsProfile,
+  getFriendsBackendUrl,
+  saveUserSettings,
+  searchUsers,
+  sendMessage,
+  updateFriendsProfile
+} from './friendsApi';
+
   // Friend requests state
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
