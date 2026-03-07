@@ -6396,6 +6396,10 @@ function AppContent() {
 
   // ==================== RENDER LOGIN SCREEN ====================
   if (!showChat) {
+    if (entryMode === 'friends') {
+      return <FriendsFeature />;
+    }
+
     return (
       <div className="login-screen">
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="login-card">
@@ -6420,17 +6424,13 @@ function AppContent() {
             </button>
           </div>
 
-          {entryMode === 'classic' ? (
-            <>
-              <Zap color="#00a884" size={48} fill="#00a884" />
-              <h2 className="brand">DevChat <span>Pro+</span></h2>
-              <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} autoFocus /></div>
-              <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} /></div>
-              <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
-            </>
-          ) : (
-            <FriendsFeature />
-          )}
+          <>
+            <Zap color="#00a884" size={48} fill="#00a884" />
+            <h2 className="brand">DevChat <span>Pro+</span></h2>
+            <div className="input-group"><User size={18}/><input placeholder="Your name" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} autoFocus /></div>
+            <div className="input-group"><Hash size={18}/><input placeholder="Room ID" value={room} onChange={e => setRoom(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); joinRoom(); } }} /></div>
+            <button className="join-btn" onClick={joinRoom} disabled={!username.trim() || !room.trim()}>Enter Chat</button>
+          </>
         </motion.div>
       </div>
     );
