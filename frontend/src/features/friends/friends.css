@@ -578,7 +578,8 @@
 .friends-msg.me {
   justify-self: end;
   background: var(--wa-outgoing);
-  color: var(--msg-me-txt);
+  color: #222b2e;
+  font-weight: 500;
   border-color: #c2e6bc;
 }
 
