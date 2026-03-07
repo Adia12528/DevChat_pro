@@ -104,6 +104,15 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+    // Load contacts from backend
+    const loadContacts = async () => {
+      try {
+        const data = await fetchContacts(authToken);
+        setContacts(data.contacts || []);
+      } catch (e) {
+        // Optionally handle error, e.g., set an error state
+      }
+    };
   // Friend requests state
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
