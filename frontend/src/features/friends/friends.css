@@ -177,7 +177,8 @@
 .friends-title {
   font-size: 1.2rem;
   margin: 0 0 8px;
-  color: var(--txt);
+  color: #222b2e;
+  font-weight: 600;
 }
 
 .friends-subtitle {
@@ -350,7 +351,8 @@
   border: 0;
   border-bottom: 1px solid #e4ebef;
   background: transparent;
-  color: inherit;
+  color: #222b2e;
+  font-weight: 600;
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 10px;
@@ -496,7 +498,7 @@
 }
 
 .friends-chat-header-copy strong {
-  color: #182a33;
+  color: #222b2e;
 }
 
 .friends-chat-header-copy small {
