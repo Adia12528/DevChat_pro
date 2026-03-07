@@ -1,4 +1,7 @@
-﻿const express = require('express');
+﻿// Image upload route
+const uploadRouter = require('./upload');
+app.use('/api/upload', uploadRouter);
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');

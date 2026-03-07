@@ -598,8 +598,31 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     const handleUploadImage = (e) => {
       const file = e.target.files && e.target.files[0];
       if (file && selectedContact) {
-        // TODO: Implement image upload logic here
-        alert(`Image upload: ${file.name}`);
+        // Upload image to backend
+        const formData = new FormData();
+        formData.append('image', file);
+        fetch('/api/upload/image', {
+          method: 'POST',
+          body: formData
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.url) {
+              // Send image message
+              sendMessage(authToken, {
+                toUniqueId: selectedContact.uniqueId,
+                text: '',
+                type: 'image',
+                fileUrl: data.url,
+                fileName: file.name,
+                fileSize: file.size
+              });
+              showToast('Image uploaded!', 'success');
+            } else {
+              showToast('Upload failed', 'error');
+            }
+          })
+          .catch(() => showToast('Upload failed', 'error'));
       }
       setIsInputMenuOpen(false);
       e.target.value = '';
@@ -1640,7 +1663,12 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             const msg = item.message;
             return (
               <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
-                <div>{msg.text}</div>
+                <div>
+                  {msg.type === 'image' && msg.fileUrl ? (
+                    <img src={msg.fileUrl} alt={msg.fileName || 'Image'} style={{ maxWidth: '220px', borderRadius: '12px', marginBottom: '6px' }} />
+                  ) : null}
+                  {msg.text}
+                </div>
                 <div className="friends-msg-meta">
                   <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
                   {msg.isMine ? (() => {
