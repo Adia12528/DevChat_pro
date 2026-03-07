@@ -457,38 +457,11 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     try {
       const raw = window.localStorage.getItem(queueStorageKey);
       if (!raw) return [];
-
-      const mapFriendsBackendError = (error) => {
-        const raw = error?.message || String(error || '');
-        if (raw.includes('Firebase auth is not configured on backend')) {
-          return 'Friends backend Firebase Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON (or FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY) on the backend host and redeploy.';
-        }
-        return raw || 'Friends backend request failed';
-      };
-
-      // Move LoginPanel above FriendsFeature so it is defined before use
-
-  const loadMessages = async (contactUniqueId, options = {}) => {
-    if (!contactUniqueId) return;
-    const { before, reset = false } = options;
-    try {
-      const data = await fetchConversationMessages(authToken, contactUniqueId, {
-        before,
-        limit: 40
-      });
-      const incoming = data.messages || [];
-      setMessagesByContact((prev) => {
-        const existing = reset ? [] : (prev[contactUniqueId] || []);
-        return {
-          ...prev,
-          [contactUniqueId]: mergeMessagesById(existing, incoming)
-        };
-      });
-      const oldest = incoming[0]?.createdAt || before || null;
-      setOldestCursorByContact((prev) => ({ ...prev, [contactUniqueId]: oldest }));
-      setHasMoreByContact((prev) => ({ ...prev, [contactUniqueId]: incoming.length >= 40 }));
-    } catch (e) {
-      setError(e.message || 'Failed to load messages');
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((item) => item?.tempId && item?.toUniqueId && item?.text);
+    } catch {
+      return [];
     }
   };
 
