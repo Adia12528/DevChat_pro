@@ -168,14 +168,29 @@
 /* Friend Requests Sidebar */
 .friends-requests-section {
   padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-.friends-requests-section h5 {
-  margin: 0 0 6px 0;
-  font-size: 1rem;
-  color: var(--txt);
-}
-.friends-request-card {
+    .friends-header-menu-dropdown {
+      right: 8px;
+      min-width: 140px;
+    }
+    .friends-input-menu-dropdown {
+      left: 4px;
+      min-width: 96vw;
+      max-width: 98vw;
+      width: auto;
+      padding: 4px 0;
+      border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(25, 118, 210, 0.16);
+    }
+    .friends-input-menu-dropdown button {
+      font-size: 1.08rem;
+      padding: 16px 18px;
+      margin: 0 4px;
+      border-radius: 10px;
+      min-width: 0;
+      width: 100%;
+      justify-content: flex-start;
+      /* Larger touch target */
+    }
   display: flex;
   align-items: center;
   justify-content: space-between;
