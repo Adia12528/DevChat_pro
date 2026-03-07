@@ -105,6 +105,24 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+        // Remove a queued message by tempId
+        const removeQueuedMessage = (tempId) => {
+          if (!tempId) return;
+          const queue = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
+          offlineQueueRef.current = queue;
+          persistQueue(queue);
+          setOfflineQueueCount(queue.length);
+        };
+
+        // Add or update a queued message by tempId
+        const upsertQueuedMessage = (queuedItem) => {
+          if (!queuedItem?.tempId) return;
+          let queue = offlineQueueRef.current.filter((item) => item.tempId !== queuedItem.tempId);
+          queue.push(queuedItem);
+          offlineQueueRef.current = queue;
+          persistQueue(queue);
+          setOfflineQueueCount(queue.length);
+        };
       // Load messages for a contact
       const loadMessages = async (contactId, { reset } = {}) => {
         if (!contactId) return;
