@@ -1619,66 +1619,83 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
           })}
         </div>
 
-        <div className="friends-input-wrap">
-          {/* Multi-purpose input menu */}
-          {isInputMenuOpen && (
-            <div className="friends-input-menu-dropdown" role="menu">
-              <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>Emoji Picker</button>
-              <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>Upload Image</button>
-              <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>Upload File</button>
-              <button type="button" disabled>More (coming soon)</button>
-            </div>
-          )}
-          {isEmojiTrayOpen ? (
-            <div className="friends-emoji-tray" aria-label="Emoji picker">
-              {quickEmojis.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="friends-emoji-chip"
-                  onClick={() => handleMessageInputChange(`${message}${emoji}`)}
+        {selectedContact && (
+          <div className="friends-input-wrap">
+            {/* Multi-purpose input menu */}
+            {isInputMenuOpen && (
+              <div className="friends-input-menu-dropdown" role="menu">
+                <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>Emoji Picker</button>
+                <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>Upload Image</button>
+                <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>Upload File</button>
+                <button type="button" disabled>More (coming soon)</button>
+              </div>
+            )}
+            {isEmojiTrayOpen ? (
+              <div className="friends-emoji-tray" aria-label="Emoji picker">
+                {quickEmojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    className="friends-emoji-chip"
+                    onClick={() => handleMessageInputChange(`${message}${emoji}`)}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="friends-input-row">
+              <button
+                type="button"
+                className="friends-input-menu-btn enhanced-plus-btn"
+                aria-label="Open input menu"
+                title="More options"
+                onClick={() => setIsInputMenuOpen((prev) => !prev)}
+                disabled={!selectedContact}
+                tabIndex={selectedContact ? 0 : -1}
+              >
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 28 28"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                  focusable="false"
+                  style={{ display: 'block', margin: 'auto' }}
                 >
-                  {emoji}
-                </button>
-              ))}
+                  <circle cx="14" cy="14" r="13" fill="#f5f5f5" stroke="#bbb" strokeWidth="1.5" />
+                  <rect x="13" y="7" width="2" height="14" rx="1" fill="#333" />
+                  <rect x="7" y="13" width="14" height="2" rx="1" fill="#333" />
+                </svg>
+              </button>
+              <input
+                placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
+                value={message}
+                onChange={(e) => handleMessageInputChange(e.target.value)}
+                disabled={!selectedContact}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+              />
+              <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
+                Send
+              </button>
+              {/* Hidden file/image inputs */}
+              <input type="file" accept="image/*" style={{ display: 'none' }} ref={imageInputRef} onChange={handleUploadImage} />
+              <input type="file" style={{ display: 'none' }} ref={fileInputRef} onChange={handleUploadFile} />
             </div>
-          ) : null}
-          <div className="friends-input-row">
-            <button
-              type="button"
-              className="friends-input-menu-btn"
-              aria-label="Open input menu"
-              onClick={() => setIsInputMenuOpen((prev) => !prev)}
-              disabled={!selectedContact}
-            >
-              +
-            </button>
-            <input
-              placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
-              value={message}
-              onChange={(e) => handleMessageInputChange(e.target.value)}
-              disabled={!selectedContact}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-            />
-            <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
-              Send
-            </button>
-            {/* Hidden file/image inputs */}
-            <input type="file" accept="image/*" style={{ display: 'none' }} ref={imageInputRef} onChange={handleUploadImage} />
-            <input type="file" style={{ display: 'none' }} ref={fileInputRef} onChange={handleUploadFile} />
+            {error ? <p className="friends-error">{error}</p> : null}
+            {offlineQueueCount > 0 ? (
+              <p className="friends-note" aria-live="polite">
+                {offlineQueueCount} message{offlineQueueCount === 1 ? '' : 's'} queued for resend.
+              </p>
+            ) : null}
           </div>
-          {error ? <p className="friends-error">{error}</p> : null}
-          {offlineQueueCount > 0 ? (
-            <p className="friends-note" aria-live="polite">
-              {offlineQueueCount} message{offlineQueueCount === 1 ? '' : 's'} queued for resend.
-            </p>
-          ) : null}
-        </div>
+        )}
 
         {/* Media/Links/Docs Modal */}
         {showMediaModal && (
