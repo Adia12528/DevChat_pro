@@ -1,7 +1,3 @@
-  // Fix: selectedContact and filteredContacts should be defined after all useState hooks
-  const selectedContact = useMemo(() => {
-    return contacts.find((c) => c.uniqueId === selectedContactId) || null;
-  }, [contacts, selectedContactId]);
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 // --- LoginPanel: must be defined before FriendsFeature uses it ---
