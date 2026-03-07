@@ -90,6 +90,7 @@ import {
   signOut
 } from 'firebase/auth';
 import './friends.css';
+import { useToast } from './toast';
 import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
 import {
   addContact,
@@ -106,6 +107,7 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+  const { showToast, Toast } = useToast();
     // Notify user of incoming message (sound + desktop notification)
     const notifyIncomingMessage = (contact, message) => {
       // Play notification sound
@@ -603,26 +605,43 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
       e.target.value = '';
     };
 
+
     const handleClearChat = () => {
+      setIsHeaderMenuOpen(false);
+      if (!selectedContactId) return;
       if (window.confirm('Clear all messages in this chat?')) {
         setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
+        showToast('Chat cleared', 'success');
+      } else {
+        showToast('Cancelled', 'info');
       }
-      setIsHeaderMenuOpen(false);
     };
+
 
     const handleToggleMute = () => {
-      setIsMute((prev) => !prev);
       setIsHeaderMenuOpen(false);
+      setIsMute((prev) => {
+        const next = !prev;
+        showToast(next ? 'Notifications muted' : 'Notifications unmuted', 'info');
+        return next;
+      });
     };
+
 
     const handleToggleDisappearing = () => {
-      setIsDisappearing((prev) => !prev);
       setIsHeaderMenuOpen(false);
+      setIsDisappearing((prev) => {
+        const next = !prev;
+        showToast(next ? 'Disappearing messages enabled' : 'Disappearing messages disabled', 'info');
+        return next;
+      });
     };
 
+
     const handleShowMedia = () => {
-      setShowMediaModal(true);
       setIsHeaderMenuOpen(false);
+      setShowMediaModal(true);
+      showToast('Media, links, and docs opened', 'info');
     };
 
     const handleCloseMediaModal = () => setShowMediaModal(false);
@@ -1554,10 +1573,30 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                   </button>
                   {isHeaderMenuOpen && (
                     <div className="friends-header-menu-dropdown" role="menu">
-                      <button type="button" onClick={handleClearChat}>Clear Chat</button>
-                      <button type="button" onClick={handleShowMedia}>Media, Links, Docs</button>
-                      <button type="button" onClick={handleToggleDisappearing}>{isDisappearing ? 'Disable' : 'Enable'} Disappearing Messages</button>
-                      <button type="button" onClick={handleToggleMute}>{isMute ? 'Unmute' : 'Mute'} Notifications</button>
+                      <button type="button" onClick={handleClearChat}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="4" width="14" height="14" rx="4" fill="#ffebee" stroke="#e53935" strokeWidth="1.2"/><path d="M8 8l6 6M14 8l-6 6" stroke="#e53935" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        </span>
+                        Clear Chat
+                      </button>
+                      <button type="button" onClick={handleShowMedia}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="12" rx="3" fill="#e3f2fd" stroke="#1976d2" strokeWidth="1.2"/><circle cx="8" cy="11" r="2" fill="#90caf9"/><rect x="11" y="12" width="5" height="3" rx="1.5" fill="#1976d2" opacity=".3"/></svg>
+                        </span>
+                        Media, Links, Docs
+                      </button>
+                      <button type="button" onClick={handleToggleDisappearing}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><path d="M7 11a4 4 0 018 0c0 2.21-1.79 4-4 4s-4-1.79-4-4z" fill="#8e24aa" opacity=".2"/><path d="M11 7v4l2 2" stroke="#8e24aa" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        </span>
+                        {isDisappearing ? 'Disable' : 'Enable'} Disappearing Messages
+                      </button>
+                      <button type="button" onClick={handleToggleMute}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="7" width="6" height="8" rx="2" fill="#e8f5e9" stroke="#43a047" strokeWidth="1.2"/><rect x="10" y="9" width="6" height="4" rx="2" fill="#43a047" opacity=".3"/><path d="M16 7l2 2m0 0l-2 2m2-2H14" stroke="#e53935" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                        </span>
+                        {isMute ? 'Unmute' : 'Mute'} Notifications
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1717,6 +1756,8 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
           </div>
         )}
 
+        {/* Toast notification */}
+        <Toast />
         {/* Media/Links/Docs Modal */}
         {showMediaModal && (
           <div className="friends-modal-backdrop" role="presentation" onClick={handleCloseMediaModal}>

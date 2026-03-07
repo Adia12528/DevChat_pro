@@ -1,3 +1,39 @@
+/* Toast notification styles */
+.friends-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  min-width: 180px;
+  max-width: 90vw;
+  background: #fff;
+  color: #1976d2;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(25, 118, 210, 0.13);
+  padding: 14px 32px;
+  font-size: 1.08rem;
+  font-weight: 600;
+  z-index: 9999;
+  text-align: center;
+  opacity: 0.97;
+  animation: toastIn 0.18s cubic-bezier(.4,2,.6,1);
+}
+.friends-toast-success {
+  background: linear-gradient(90deg, #e8f5e9 0%, #fafdff 100%);
+  color: #388e3c;
+}
+.friends-toast-info {
+  background: linear-gradient(90deg, #e3f2fd 0%, #fafdff 100%);
+  color: #1976d2;
+}
+.friends-toast-error {
+  background: linear-gradient(90deg, #ffebee 0%, #fafdff 100%);
+  color: #d32f2f;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 0.97; transform: translateX(-50%) translateY(0); }
+}
 /* Multi-purpose input menu button */
 /* Modernized multi-purpose + dropdown */
 /* Modern, stylish multi-purpose dropdown */
@@ -17,6 +53,7 @@
   gap: 4px;
   animation: fadeInMenu 0.18s cubic-bezier(.4,2,.6,1);
   border: 1.5px solid #e3f2fd;
+  -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
 /* Stylish dropdown buttons with icons */
@@ -137,9 +174,7 @@
   background: #1976d2;
   box-shadow: 0 6px 24px rgba(25, 118, 210, 0.22);
 }
-.friends-input-menu-btn.enhanced-plus-btn.open svg {
-  /* The rotation is handled inline in JSX for accessibility */
-}
+
 .friends-input-menu-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -175,36 +210,70 @@
   background: #d0f0e2;
   color: #127a36;
 }
+/* Stylish three-dot dropdown menu */
 .friends-header-menu-dropdown {
   position: absolute;
   top: 44px;
   right: 0;
-  background: #fff;
-  border: 1px solid #b7ceda;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(23, 75, 50, 0.13);
+  background: linear-gradient(135deg, #fafdff 60%, #e3f2fd 100%);
+  border: 1.5px solid #e3f2fd;
+  border-radius: 20px;
+  box-shadow: 0 10px 36px 0 rgba(25, 118, 210, 0.22), 0 2px 8px rgba(23, 75, 50, 0.10);
   z-index: 100;
   display: flex;
   flex-direction: column;
-  min-width: 180px;
-  padding: 6px 0;
+  min-width: 200px;
+  padding: 14px 0 12px 0;
+  gap: 4px;
+  animation: fadeInMenu 0.18s cubic-bezier(.4,2,.6,1);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
 }
 .friends-header-menu-dropdown button {
-  background: none;
+  background: linear-gradient(90deg, #e3f2fd 0%, #fafdff 100%);
   border: none;
-  color: #179c47;
-  font-size: 1rem;
-  padding: 10px 18px;
+  color: #1976d2;
+  font-size: 1.13rem;
+  font-weight: 600;
+  padding: 14px 26px 14px 18px;
   text-align: left;
+  border-radius: 16px;
+  margin: 0 12px 8px 12px;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
   cursor: pointer;
-  transition: background 0.2s;
+  outline: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  box-shadow: 0 2.5px 10px rgba(25, 118, 210, 0.10), 0 1.5px 6px rgba(25, 118, 210, 0.06);
+  letter-spacing: 0.01em;
+  min-height: 48px;
+  font-family: inherit;
+  will-change: transform, box-shadow;
 }
-.friends-header-menu-dropdown button:hover:not(:disabled) {
-  background: #e3f5ed;
+.friends-header-menu-dropdown button:hover:not(:disabled),
+.friends-header-menu-dropdown button:focus:not(:disabled) {
+  background: linear-gradient(90deg, #bbdefb 0%, #e3f2fd 100%);
+  color: #0d47a1;
+  box-shadow: 0 6px 24px rgba(25, 118, 210, 0.18), 0 2px 8px rgba(25, 118, 210, 0.10);
+  transform: translateY(-2px) scale(1.04);
+  border: 1.5px solid #90caf9;
+}
+.friends-header-menu-dropdown button:active:not(:disabled) {
+  background: linear-gradient(90deg, #90caf9 0%, #e3f2fd 100%);
+  color: #1565c0;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
+  transform: scale(0.97);
+  border: 1.5px solid #1976d2;
 }
 .friends-header-menu-dropdown button:disabled {
   color: #b7ceda;
   cursor: not-allowed;
+  background: none;
+  opacity: 0.7;
+  box-shadow: none;
+  border: none;
 }
 
 @media (max-width: 768px) {
