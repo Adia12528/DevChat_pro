@@ -10,8 +10,11 @@ const { AccessToken, WebhookReceiver } = require('livekit-server-sdk');
 const { setupFriendsFeature } = require('./friends');
 require('dotenv').config();
 
+
 // 1. INITIALIZE EXPRESS FIRST
 const app = express();
+// Serve uploaded files statically
+app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 
 const LOG_LEVELS = Object.freeze({ silent: 0, error: 1, warn: 2, info: 3, debug: 4 });
 const configuredLogLevel = (process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'debug')).toLowerCase();
