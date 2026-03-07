@@ -1647,7 +1647,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             <div className="friends-input-row">
               <button
                 type="button"
-                className="friends-input-menu-btn enhanced-plus-btn"
+                className={`friends-input-menu-btn enhanced-plus-btn${isInputMenuOpen ? ' open' : ''}`}
                 aria-label="Open input menu"
                 title="More options"
                 onClick={() => setIsInputMenuOpen((prev) => !prev)}
@@ -1655,18 +1655,18 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                 tabIndex={selectedContact ? 0 : -1}
               >
                 <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 28 28"
+                  width="32"
+                  height="32"
+                  viewBox="0 0 32 32"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                   aria-hidden="true"
                   focusable="false"
-                  style={{ display: 'block', margin: 'auto' }}
+                  style={{ display: 'block', margin: 'auto', transition: 'transform 0.25s cubic-bezier(.4,2,.6,1)', transform: isInputMenuOpen ? 'rotate(45deg)' : 'rotate(0deg)' }}
                 >
-                  <circle cx="14" cy="14" r="13" fill="#f5f5f5" stroke="#bbb" strokeWidth="1.5" />
-                  <rect x="13" y="7" width="2" height="14" rx="1" fill="#333" />
-                  <rect x="7" y="13" width="14" height="2" rx="1" fill="#333" />
+                  <circle cx="16" cy="16" r="15" fill={isInputMenuOpen ? '#1976d2' : '#e3f2fd'} stroke="#1976d2" strokeWidth="1.5" />
+                  <rect x="15" y="8" width="2" height="16" rx="1" fill={isInputMenuOpen ? '#fff' : '#1976d2'} />
+                  <rect x="8" y="15" width="16" height="2" rx="1" fill={isInputMenuOpen ? '#fff' : '#1976d2'} />
                 </svg>
               </button>
               <input
