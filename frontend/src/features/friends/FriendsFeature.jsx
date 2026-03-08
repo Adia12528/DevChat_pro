@@ -1,84 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-// For emoji picker, you may use a library like emoji-mart or keep the existing logic
 import { io } from 'socket.io-client';
-// --- LoginPanel: must be defined before FriendsFeature uses it ---
-const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-
-  return (
-    <div className="friends-login" aria-label="Friends auth login">
-      <div className="friends-mode-toggle" role="tablist" aria-label="Choose login mode">
-        <button
-          type="button"
-          role="tab"
-          className="friends-mode-btn"
-          onClick={onSwitchToClassic}
-          disabled={!onSwitchToClassic}
-        >
-          Username + Room
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected="true"
-          className="friends-mode-btn active"
-          disabled
-        >
-          Friends Login
-        </button>
-      </div>
-
-      <h3 className="friends-title">Friends Login</h3>
-      <p className="friends-subtitle">Use Firebase auth. Your chats sync through backend + socket namespace.</p>
-
-      <div className="friends-row">
-        <button type="button" onClick={onGoogleLogin}>Continue with Google</button>
-      </div>
-      <p className="friends-note">If popups are blocked, sign-in will continue with a secure redirect.</p>
-
-      <div className="friends-row">
-        <input
-          placeholder="Phone number (E.164, e.g. +911234567890)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          disabled={phoneState === 'sending'}
-        />
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => onPhoneStart(phone)}
-          disabled={!phone.trim() || phoneState === 'sending'}
-        >
-          {phoneState === 'sending' ? 'Sending...' : 'Send OTP'}
-        </button>
-      </div>
-
-      <div className="friends-row">
-        <input
-          placeholder="Enter OTP"
-          value={otp}
-          onChange={(e) => setOtp(e.target.value)}
-          disabled={phoneState !== 'code-sent'}
-        />
-        <button
-          type="button"
-          onClick={() => onPhoneConfirm(otp)}
-          disabled={phoneState !== 'code-sent' || !otp.trim()}
-        >
-          Verify OTP
-        </button>
-      </div>
-
-      <div id="friends-recaptcha-container" />
-
-      {!isFirebaseConfigured ? (
-        <p className="friends-error">Firebase client config is missing. Add REACT_APP_FIREBASE_* vars.</p>
-      ) : null}
-      {error ? <p className="friends-error">{error}</p> : null}
-    </div>
-  );
-};
 import {
   getRedirectResult,
   GoogleAuthProvider,
@@ -101,163 +22,23 @@ import {
   saveUserSettings,
   searchUsers,
   sendMessage,
-  updateFriendsProfile
+  updateFriendsProfile,
+  sendFriendRequest,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  removeFriend,
+  updateContactPreferences
 } from './friendsApi';
+import { uploadFileToBackend } from './uploadApi';
 
-// --- FriendsWorkspace: Move all friend request logic here ---
-const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
-    // Notify user of incoming message (sound + desktop notification)
-    const notifyIncomingMessage = (contact, message) => {
-      // Play notification sound
-      playNotificationTone('chime');
-
-      // Show desktop notification if enabled and supported
-      if (window.Notification && Notification.permission === 'granted') {
-        const title = contact?.displayName || contact?.username || 'New message';
-        const body = message?.text || '[New message]';
-        new Notification(title, {
-          body,
-          icon: '/favicon.ico',
-          tag: contact?.uniqueId || undefined
-        });
-      } else if (window.Notification && Notification.permission !== 'denied') {
-        Notification.requestPermission();
-      }
-    };
-  // Remove a queued message by tempId
-  const removeQueuedMessage = (tempId) => {
-    if (!tempId) return;
-    const queue = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
-    offlineQueueRef.current = queue;
-    persistQueue(queue);
-    setOfflineQueueCount(queue.length);
-  };
-
-  // Add or update a queued message by tempId
-  const upsertQueuedMessage = (queuedItem) => {
-    if (!queuedItem?.tempId) return;
-    let queue = offlineQueueRef.current.filter((item) => item.tempId !== queuedItem.tempId);
-    queue.push(queuedItem);
-    offlineQueueRef.current = queue;
-    persistQueue(queue);
-    setOfflineQueueCount(queue.length);
-  };
-      // Load messages for a contact
-      const loadMessages = async (contactId, { reset } = {}) => {
-        if (!contactId) return;
-        try {
-          const data = await fetchConversationMessages(authToken, contactId, { limit: 40 });
-          const messages = data.messages || [];
-          setMessagesByContact((prev) => ({
-            ...prev,
-            [contactId]: reset ? messages : mergeMessagesById(prev[contactId] || [], messages)
-          }));
-          if (messages[0]?.createdAt) {
-            setOldestCursorByContact((prev) => ({ ...prev, [contactId]: messages[0].createdAt }));
-          }
-          setHasMoreByContact((prev) => ({ ...prev, [contactId]: messages.length >= 40 }));
-        } catch (e) {
-          setError(e.message || 'Failed to load messages.');
-        }
-      };
-    // Load contacts from backend
-    const loadContacts = async () => {
-      try {
-        const data = await fetchContacts(authToken);
-        setContacts(data.contacts || []);
-      } catch (e) {
-        // Optionally handle error, e.g., set an error state
-      }
-    };
-  // Friend requests state
-  const [incomingRequests, setIncomingRequests] = useState([]);
-  const [outgoingRequests, setOutgoingRequests] = useState([]);
-  const [requestsError, setRequestsError] = useState('');
-  // ...existing useState hooks...
-  const [contacts, setContacts] = useState([]);
-  const [selectedContactId, setSelectedContactId] = useState('');
-  // ...other useState hooks...
-
-  // Fix: selectedContact must be defined after contacts and selectedContactId useState
-  const selectedContact = useMemo(
-    () => contacts.find((c) => c.uniqueId === selectedContactId) || null,
-    [contacts, selectedContactId]
-  );
-
-  // Load friend requests
-  const loadRequests = async () => {
-    try {
-      setRequestsError('');
-      const data = await fetchFriendRequests(authToken);
-      setIncomingRequests(data.incoming || []);
-      setOutgoingRequests(data.outgoing || []);
-    } catch (e) {
-      setRequestsError(e.message || 'Failed to load requests');
-    }
-  };
-
-  // Accept/reject request handlers
-  const handleAcceptRequest = async (requestId) => {
-    try {
-      await acceptFriendRequest(authToken, requestId);
-      await loadRequests();
-      await loadContacts();
-    } catch (e) {
-      setRequestsError(e.message || 'Failed to accept request');
-    }
-  };
-  const handleRejectRequest = async (requestId) => {
-    try {
-      await rejectFriendRequest(authToken, requestId);
-      await loadRequests();
-    } catch (e) {
-      setRequestsError(e.message || 'Failed to reject request');
-    }
-  };
-  const handleRemoveFriend = async (targetUniqueId) => {
-    try {
-      await removeFriend(authToken, targetUniqueId);
-      await loadContacts();
-      setSelectedContactId('');
-    } catch (e) {
-      setError(e.message || 'Failed to remove friend');
-    }
-  };
-
-  // Real-time socket events for requests
-  useEffect(() => {
-    if (!socket) return;
-    const onNewRequest = () => loadRequests();
-    const onRequestAccepted = () => {
-      loadRequests();
-      loadContacts();
-    };
-    const onRequestRejected = () => loadRequests();
-    socket.on('friends:new_request', onNewRequest);
-    socket.on('friends:request_accepted', onRequestAccepted);
-    socket.on('friends:request_rejected', onRequestRejected);
-    return () => {
-      socket.off('friends:new_request', onNewRequest);
-      socket.off('friends:request_accepted', onRequestAccepted);
-      socket.off('friends:request_rejected', onRequestRejected);
-    };
-  }, [socket]);
-
-  useEffect(() => {
-    if (!authToken) return;
-    loadRequests();
-  }, [authToken]);
-
-  // ...existing FriendsWorkspace code (rest of the component)...
-  // (No need to change the rest, as it already exists below)
-
+// Utility functions
 const getFriendlyRemaining = (expiresAt) => {
   if (!expiresAt) return 'kept';
   const diff = new Date(expiresAt).getTime() - Date.now();
   if (diff <= 0) return 'expires now';
   const mins = Math.round(diff / 60000);
   if (mins < 60) return `${mins}m left`;
-  const hours = Math.round(mins / 60);
+  const hours = Math.round(mins / 66);
   if (hours < 24) return `${hours}h left`;
   const days = Math.round(hours / 24);
   return `${days}d left`;
@@ -424,6 +205,7 @@ const mapFriendsBackendError = (error) => {
   return raw || 'Friends backend request failed';
 };
 
+// --- LoginPanel Component ---
 const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, error, onSwitchToClassic }) => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -502,54 +284,99 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   );
 };
 
-// (FriendsWorkspace definition is now above, with friend request logic included)
-      // Real-time: listen for friend list updates
-      useEffect(() => {
-        if (!socket) return;
-        const onFriendListUpdate = () => {
-          loadContacts();
-        };
-        socket.on('friends:refresh', onFriendListUpdate);
-        return () => socket.off('friends:refresh', onFriendListUpdate);
-      }, [socket]);
-    // Add state for addBy (tab: 'email' or 'id')
-    const [addBy, setAddBy] = useState('email');
+// --- FriendsWorkspace Component ---
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+  // Notify user of incoming message (sound + desktop notification)
+  const notifyIncomingMessage = (contact, message) => {
+    // Play notification sound
+    playNotificationTone('chime');
 
-    // Handler for searching by unique ID
-    const handleSearchById = async () => {
-      setHasSearchedAddFriend(true);
-      setAddFriendSearchError('');
-      setSearchResults([]);
-      setIsSearchingAddFriend(true);
+    // Show desktop notification if enabled and supported
+    if (window.Notification && Notification.permission === 'granted') {
+      const title = contact?.displayName || contact?.username || 'New message';
+      const body = message?.text || '[New message]';
+      new Notification(title, {
+        body,
+        icon: '/favicon.ico',
+        tag: contact?.uniqueId || undefined
+      });
+    } else if (window.Notification && Notification.permission !== 'denied') {
+      Notification.requestPermission();
+    }
+  };
 
-      const value = addFriendQuery.trim();
-      if (!value) {
-        setAddFriendSearchError('Enter a unique ID.');
-        setIsSearchingAddFriend(false);
-        return;
+  // Remove a queued message by tempId
+  const removeQueuedMessage = (tempId) => {
+    if (!tempId) return;
+    const queue = offlineQueueRef.current.filter((item) => item.tempId !== tempId);
+    offlineQueueRef.current = queue;
+    persistQueue(queue);
+    setOfflineQueueCount(queue.length);
+  };
+
+  // Add or update a queued message by tempId
+  const upsertQueuedMessage = (queuedItem) => {
+    if (!queuedItem?.tempId) return;
+    let queue = offlineQueueRef.current.filter((item) => item.tempId !== queuedItem.tempId);
+    queue.push(queuedItem);
+    offlineQueueRef.current = queue;
+    persistQueue(queue);
+    setOfflineQueueCount(queue.length);
+  };
+
+  const updateOptimisticDeliveryStatus = (contactId, tempId, status) => {
+    setMessagesByContact((prev) => {
+      const current = prev[contactId] || [];
+      return {
+        ...prev,
+        [contactId]: current.map((msg) =>
+          msg.id === tempId ? { ...msg, deliveryStatus: status } : msg
+        )
+      };
+    });
+  };
+
+  // Load messages for a contact
+  const loadMessages = async (contactId, { reset } = {}) => {
+    if (!contactId) return;
+
+    try {
+      if (reset) {
+        setMessagesByContact((prev) => ({ ...prev, [contactId]: [] }));
       }
+      
+      const data = await fetchConversationMessages(authToken, contactId, { limit: 50 });
+      const incoming = data.messages || [];
+      
+      setMessagesByContact((prev) => ({
+        ...prev,
+        [contactId]: mergeMessagesById(prev[contactId] || [], incoming)
+      }));
 
-      try {
-        // Use searchUsers if it supports uniqueId, else filter manually
-        const data = await searchUsers(authToken, value);
-        let users = data.users || [];
-        // If not found, try to match uniqueId directly
-        if (!users.length) {
-          users = data.users?.filter(u => u.uniqueId === value) || [];
-        }
-        // If still not found, try a direct API call if available (pseudo-code)
-        // Optionally, you can add a new API endpoint for lookup by uniqueId
-        setSearchResults(users);
-        if (users.length === 0) {
-          setAddFriendSearchError('User not found with this unique ID');
-        }
-      } catch (e) {
-        setAddFriendSearchError(e.message || 'Search failed');
-      } finally {
-        setIsSearchingAddFriend(false);
+      if (incoming.length > 0) {
+        setOldestCursorByContact((prev) => ({ ...prev, [contactId]: incoming[0].createdAt }));
       }
-    };
-  // (removed duplicate contacts and selectedContactId useState)
+      setHasMoreByContact((prev) => ({ ...prev, [contactId]: incoming.length >= 50 }));
+    } catch (e) {
+      setError(e.message || 'Failed to load messages');
+    }
+  };
+
+  const loadContacts = async () => {
+    try {
+      const data = await fetchContacts(authToken);
+      setContacts(data.contacts || []);
+    } catch (e) {
+      // Optionally handle error, e.g., set an error state
+    }
+  };
+
+  // Friend requests state
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequests, setOutgoingRequests] = useState([]);
+  const [requestsError, setRequestsError] = useState('');
+  const [contacts, setContacts] = useState([]);
+  const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
   const [chatSearchInput, setChatSearchInput] = useState('');
   const [chatSearch, setChatSearch] = useState('');
@@ -579,57 +406,11 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   const [isMute, setIsMute] = useState(false);
   const [isDisappearing, setIsDisappearing] = useState(false);
   const [showMediaModal, setShowMediaModal] = useState(false);
-    // File/image upload handlers
-    const fileInputRef = useRef(null);
-    const imageInputRef = useRef(null);
-
-    const handleUploadFile = (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (file && selectedContact) {
-        // TODO: Implement file upload logic here
-        alert(`File upload: ${file.name}`);
-      }
-      setIsInputMenuOpen(false);
-      e.target.value = '';
-    };
-
-    const handleUploadImage = (e) => {
-      const file = e.target.files && e.target.files[0];
-      if (file && selectedContact) {
-        // TODO: Implement image upload logic here
-        alert(`Image upload: ${file.name}`);
-      }
-      setIsInputMenuOpen(false);
-      e.target.value = '';
-    };
-
-    const handleClearChat = () => {
-      if (window.confirm('Clear all messages in this chat?')) {
-        setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
-      }
-      setIsHeaderMenuOpen(false);
-    };
-
-    const handleToggleMute = () => {
-      setIsMute((prev) => !prev);
-      setIsHeaderMenuOpen(false);
-    };
-
-    const handleToggleDisappearing = () => {
-      setIsDisappearing((prev) => !prev);
-      setIsHeaderMenuOpen(false);
-    };
-
-    const handleShowMedia = () => {
-      setShowMediaModal(true);
-      setIsHeaderMenuOpen(false);
-    };
-
-    const handleCloseMediaModal = () => setShowMediaModal(false);
   const [loadingOlderByContact, setLoadingOlderByContact] = useState({});
   const [hasMoreByContact, setHasMoreByContact] = useState({});
   const [oldestCursorByContact, setOldestCursorByContact] = useState({});
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [addBy, setAddBy] = useState('email');
 
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
@@ -642,6 +423,8 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   const firstUnreadDividerRef = useRef(null);
   const shouldAutoScrollUnreadRef = useRef(false);
   const swipeStartRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
 
@@ -649,6 +432,29 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     () => `friends_pending_queue_${profile.uniqueId || 'anonymous'}`,
     [profile.uniqueId]
   );
+
+  // Fix: selectedContact must be defined after contacts and selectedContactId useState
+  const selectedContact = useMemo(
+    () => contacts.find((c) => c.uniqueId === selectedContactId) || null,
+    [contacts, selectedContactId]
+  );
+
+  // Fix: Define activeMessages for timelineItems and chat rendering
+  const activeMessages = useMemo(() => {
+    if (!selectedContactId) return [];
+    return messagesByContact[selectedContactId] || [];
+  }, [selectedContactId, messagesByContact]);
+
+  // Fix: filteredContacts must be defined as a hook, not inside JSX
+  const filteredContacts = useMemo(() => {
+    const search = chatSearch.trim().toLowerCase();
+    if (!search) return contacts;
+    return contacts.filter(
+      (c) =>
+        (c.displayName && c.displayName.toLowerCase().includes(search)) ||
+        (c.uniqueId && c.uniqueId.toLowerCase().includes(search))
+    );
+  }, [contacts, chatSearch]);
 
   const persistQueue = (queue) => {
     try {
@@ -732,8 +538,236 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     }
   };
 
+  // Load friend requests
+  const loadRequests = async () => {
+    try {
+      setRequestsError('');
+      const data = await fetchFriendRequests(authToken);
+      setIncomingRequests(data.incoming || []);
+      setOutgoingRequests(data.outgoing || []);
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to load requests');
+    }
+  };
+
+  // Accept/reject request handlers
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await acceptFriendRequest(authToken, requestId);
+      await loadRequests();
+      await loadContacts();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to accept request');
+    }
+  };
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await rejectFriendRequest(authToken, requestId);
+      await loadRequests();
+    } catch (e) {
+      setRequestsError(e.message || 'Failed to reject request');
+    }
+  };
+
+  const handleRemoveFriend = async (targetUniqueId) => {
+    try {
+      await removeFriend(authToken, targetUniqueId);
+      await loadContacts();
+      setSelectedContactId('');
+    } catch (e) {
+      setError(e.message || 'Failed to remove friend');
+    }
+  };
+
+  // Handler for searching by unique ID
+  const handleSearchById = async () => {
+    setHasSearchedAddFriend(true);
+    setAddFriendSearchError('');
+    setSearchResults([]);
+    setIsSearchingAddFriend(true);
+
+    const value = addFriendQuery.trim();
+    if (!value) {
+      setAddFriendSearchError('Enter a unique ID.');
+      setIsSearchingAddFriend(false);
+      return;
+    }
+
+    try {
+      // Use searchUsers if it supports uniqueId, else filter manually
+      const data = await searchUsers(authToken, value);
+      let users = data.users || [];
+      // If not found, try to match uniqueId directly
+      if (!users.length) {
+        users = data.users?.filter(u => u.uniqueId === value) || [];
+      }
+      // If still not found, try a direct API call if available (pseudo-code)
+      // Optionally, you can add a new API endpoint for lookup by uniqueId
+      setSearchResults(users);
+      if (users.length === 0) {
+        setAddFriendSearchError('User not found with this unique ID');
+      }
+    } catch (e) {
+      setAddFriendSearchError(e.message || 'Search failed');
+    } finally {
+      setIsSearchingAddFriend(false);
+    }
+  };
+
+  // File/image upload handlers
+  const handleUploadFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file && selectedContact) {
+      try {
+        setError('');
+        // Upload file to backend
+        const result = await uploadFileToBackend(authToken, file, 'file');
+        if (!result?.url) throw new Error('No file URL returned');
+        // Send file message to chat
+        const tempId = makeTempMessageId();
+        const optimisticMessage = {
+          id: tempId,
+          text: `[File](${result.url})`,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
+          isMine: true,
+          deliveryStatus: 'pending',
+          fileUrl: result.url,
+          fileName: file.name
+        };
+        setMessagesByContact((prev) => {
+          const current = prev[selectedContact.uniqueId] || [];
+          return {
+            ...prev,
+            [selectedContact.uniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          };
+        });
+        // Actually send message
+        await sendMessage(authToken, {
+          receiverId: selectedContact.uniqueId,
+          message: `[File](${result.url})`,
+          fileUrl: result.url,
+          fileName: file.name,
+          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
+          clientTempId: tempId
+        });
+      } catch (err) {
+        setError(err.message || 'File upload failed');
+      }
+    }
+    setIsInputMenuOpen(false);
+    e.target.value = '';
+  };
+
+  const handleUploadImage = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file && selectedContact) {
+      try {
+        setError('');
+        // Upload image to backend
+        const result = await uploadFileToBackend(authToken, file, 'image');
+        if (!result?.url) throw new Error('No image URL returned');
+        // Send image message to chat
+        const tempId = makeTempMessageId();
+        const optimisticMessage = {
+          id: tempId,
+          text: `[Image](${result.url})`,
+          createdAt: new Date().toISOString(),
+          expiresAt: null,
+          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
+          isMine: true,
+          deliveryStatus: 'pending',
+          imageUrl: result.url,
+          fileName: file.name
+        };
+        setMessagesByContact((prev) => {
+          const current = prev[selectedContact.uniqueId] || [];
+          return {
+            ...prev,
+            [selectedContact.uniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+          };
+        });
+        // Actually send message
+        await sendMessage(authToken, {
+          receiverId: selectedContact.uniqueId,
+          message: `[Image](${result.url})`,
+          imageUrl: result.url,
+          fileName: file.name,
+          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
+          clientTempId: tempId
+        });
+      } catch (err) {
+        setError(err.message || 'Image upload failed');
+      }
+    }
+    setIsInputMenuOpen(false);
+    e.target.value = '';
+  };
+
+  const handleClearChat = () => {
+    if (window.confirm('Clear all messages in this chat?')) {
+      setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
+    }
+    setIsHeaderMenuOpen(false);
+  };
+
+  const handleToggleMute = () => {
+    setIsMute((prev) => !prev);
+    setIsHeaderMenuOpen(false);
+  };
+
+  const handleToggleDisappearing = () => {
+    setIsDisappearing((prev) => !prev);
+    setIsHeaderMenuOpen(false);
+  };
+
+  const handleShowMedia = () => {
+    setShowMediaModal(true);
+    setIsHeaderMenuOpen(false);
+  };
+
+  const handleCloseMediaModal = () => setShowMediaModal(false);
+
+  const timelineItems = useMemo(() => {
+    const items = [];
+    let lastDayKey = '';
+    let unreadInserted = false;
+
+    for (const msg of activeMessages) {
+      const createdAtDate = new Date(msg.createdAt);
+      const dayKey = Number.isNaN(createdAtDate.getTime())
+        ? ''
+        : `${createdAtDate.getFullYear()}-${createdAtDate.getMonth()}-${createdAtDate.getDate()}`;
+
+      if (dayKey && dayKey !== lastDayKey) {
+        items.push({
+          type: 'date',
+          id: `date-${dayKey}`,
+          label: formatDayLabel(msg.createdAt)
+        });
+        lastDayKey = dayKey;
+      }
+
+      if (!unreadInserted && !msg.isMine && !msg.readAt) {
+        items.push({
+          type: 'unread',
+          id: `unread-${msg.id}`,
+          label: 'Unread messages'
+        });
+        unreadInserted = true;
+      }
+
+      items.push({ type: 'message', id: msg.id, message: msg });
+    }
+
+    return items;
+  }, [activeMessages]);
+
   useEffect(() => {
     loadContacts();
+    loadRequests();
   }, []);
 
   useEffect(() => {
@@ -772,7 +806,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     setSettingsBioDraft(profile.bio || '');
     setSettingsThemeDraft(profile.settings?.theme || 'light');
     setSettingsNotificationsDraft(profile.settings?.notifications !== false);
-  }, [profile.displayName, profile.bio]);
+  }, [profile.displayName, profile.bio, profile.settings]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -788,6 +822,35 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     socket?.emit('friends:join_conversation', { withUniqueId: selectedContactId });
     emitMarkRead(selectedContactId);
   }, [selectedContactId, socket]);
+
+  // Real-time socket events for requests
+  useEffect(() => {
+    if (!socket) return;
+    const onNewRequest = () => loadRequests();
+    const onRequestAccepted = () => {
+      loadRequests();
+      loadContacts();
+    };
+    const onRequestRejected = () => loadRequests();
+    socket.on('friends:new_request', onNewRequest);
+    socket.on('friends:request_accepted', onRequestAccepted);
+    socket.on('friends:request_rejected', onRequestRejected);
+    return () => {
+      socket.off('friends:new_request', onNewRequest);
+      socket.off('friends:request_accepted', onRequestAccepted);
+      socket.off('friends:request_rejected', onRequestRejected);
+    };
+  }, [socket]);
+
+  // Real-time: listen for friend list updates
+  useEffect(() => {
+    if (!socket) return;
+    const onFriendListUpdate = () => {
+      loadContacts();
+    };
+    socket.on('friends:refresh', onFriendListUpdate);
+    return () => socket.off('friends:refresh', onFriendListUpdate);
+  }, [socket]);
 
   useEffect(() => {
     if (!socket) return undefined;
@@ -929,7 +992,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
       socket.off('user_online', onUserOnline);
       socket.off('user_offline', onUserOffline);
     };
-  }, [socket, selectedContactId, contacts]);
+  }, [socket, selectedContactId, contacts, authToken]);
 
   useEffect(() => {
     return () => {
@@ -983,6 +1046,21 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, []);
+
+  useEffect(() => {
+    if (!selectedContactId || !shouldAutoScrollUnreadRef.current) return;
+
+    const rafId = window.requestAnimationFrame(() => {
+      if (firstUnreadDividerRef.current) {
+        firstUnreadDividerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      shouldAutoScrollUnreadRef.current = false;
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [selectedContactId, timelineItems]);
 
   const handleSearch = async () => {
     setHasSearchedAddFriend(true);
@@ -1245,64 +1323,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     setIsAddModalOpen(true);
   };
 
-
   const contactTyping = selectedContactId ? !!typingByContact[selectedContactId] : false;
-
-  // Fix: Define activeMessages for timelineItems and chat rendering
-  const activeMessages = useMemo(() => {
-    if (!selectedContactId) return [];
-    return messagesByContact[selectedContactId] || [];
-  }, [selectedContactId, messagesByContact]);
-
-  const timelineItems = useMemo(() => {
-    const items = [];
-    let lastDayKey = '';
-    let unreadInserted = false;
-
-    for (const msg of activeMessages) {
-      const createdAtDate = new Date(msg.createdAt);
-      const dayKey = Number.isNaN(createdAtDate.getTime())
-        ? ''
-        : `${createdAtDate.getFullYear()}-${createdAtDate.getMonth()}-${createdAtDate.getDate()}`;
-
-      if (dayKey && dayKey !== lastDayKey) {
-        items.push({
-          type: 'date',
-          id: `date-${dayKey}`,
-          label: formatDayLabel(msg.createdAt)
-        });
-        lastDayKey = dayKey;
-      }
-
-      if (!unreadInserted && !msg.isMine && !msg.readAt) {
-        items.push({
-          type: 'unread',
-          id: `unread-${msg.id}`,
-          label: 'Unread messages'
-        });
-        unreadInserted = true;
-      }
-
-      items.push({ type: 'message', id: msg.id, message: msg });
-    }
-
-    return items;
-  }, [activeMessages]);
-
-  useEffect(() => {
-    if (!selectedContactId || !shouldAutoScrollUnreadRef.current) return;
-
-    const rafId = window.requestAnimationFrame(() => {
-      if (firstUnreadDividerRef.current) {
-        firstUnreadDividerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      }
-      shouldAutoScrollUnreadRef.current = false;
-    });
-
-    return () => window.cancelAnimationFrame(rafId);
-  }, [selectedContactId, timelineItems]);
 
   const handleChatTouchStart = (event) => {
     if (!isMobileLayout || mobilePane !== 'chat') return;
@@ -1333,17 +1354,6 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
       setMobilePane('list');
     }
   };
-
-  // Fix: filteredContacts must be defined as a hook, not inside JSX
-  const filteredContacts = useMemo(() => {
-    const search = chatSearch.trim().toLowerCase();
-    if (!search) return contacts;
-    return contacts.filter(
-      (c) =>
-        (c.displayName && c.displayName.toLowerCase().includes(search)) ||
-        (c.uniqueId && c.uniqueId.toLowerCase().includes(search))
-    );
-  }, [contacts, chatSearch]);
 
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
@@ -1443,7 +1453,6 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             aria-label="Search chats"
           />
         </div>
-
 
         <div className="friends-contacts" aria-label="Friends conversations">
           {filteredContacts.length === 0 ? (
@@ -1664,7 +1673,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
                 </button>
                 <button type="button" disabled>
                   <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><rect x="7" y="10" width="8" height="2" rx="1" fill="#8e24aa"/><rect x="10" y="7" width="2" height="8" rx="1" fill="#8e24aa"/></svg>
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><path d="M7 11a4 4 0 018 0c0 2.21-1.79 4-4 4s-4-1.79-4-4z" fill="#8e24aa" opacity=".2"/><path d="M11 7v4l2 2" stroke="#8e24aa" strokeWidth="1.5" strokeLinecap="round"/></svg>
                   </span>
                   More (coming soon)
                 </button>
@@ -1953,6 +1962,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
   );
 };
 
+// --- Main FriendsFeature Component ---
 function FriendsFeature({ onSwitchToClassic }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authToken, setAuthToken] = useState('');
