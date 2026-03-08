@@ -29,7 +29,7 @@ import {
   removeFriend,
   updateContactPreferences
 } from './friendsApi';
-import { uploadFileToBackend } from './uploadApi';
+
 
 // Utility functions
 const getFriendlyRemaining = (expiresAt) => {
@@ -423,8 +423,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const firstUnreadDividerRef = useRef(null);
   const shouldAutoScrollUnreadRef = useRef(false);
   const swipeStartRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const imageInputRef = useRef(null);
+
 
   const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
 
@@ -615,96 +614,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     }
   };
 
-  // File/image upload handlers
-  const handleUploadFile = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file && selectedContact) {
-      try {
-        setError('');
-        // Upload file to backend
-        const result = await uploadFileToBackend(authToken, file, 'file');
-        if (!result?.url) throw new Error('No file URL returned');
-        // Send file message to chat
-        const tempId = makeTempMessageId();
-        const optimisticMessage = {
-          id: tempId,
-          text: `[File](${result.url})`,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
-          isMine: true,
-          deliveryStatus: 'pending',
-          fileUrl: result.url,
-          fileName: file.name
-        };
-        setMessagesByContact((prev) => {
-          const current = prev[selectedContact.uniqueId] || [];
-          return {
-            ...prev,
-            [selectedContact.uniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-          };
-        });
-        // Actually send message
-        await sendMessage(authToken, {
-          receiverId: selectedContact.uniqueId,
-          message: `[File](${result.url})`,
-          fileUrl: result.url,
-          fileName: file.name,
-          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
-          clientTempId: tempId
-        });
-      } catch (err) {
-        setError(err.message || 'File upload failed');
-      }
-    }
-    setIsInputMenuOpen(false);
-    e.target.value = '';
-  };
 
-  const handleUploadImage = async (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file && selectedContact) {
-      try {
-        setError('');
-        // Upload image to backend
-        const result = await uploadFileToBackend(authToken, file, 'image');
-        if (!result?.url) throw new Error('No image URL returned');
-        // Send image message to chat
-        const tempId = makeTempMessageId();
-        const optimisticMessage = {
-          id: tempId,
-          text: `[Image](${result.url})`,
-          createdAt: new Date().toISOString(),
-          expiresAt: null,
-          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
-          isMine: true,
-          deliveryStatus: 'pending',
-          imageUrl: result.url,
-          fileName: file.name
-        };
-        setMessagesByContact((prev) => {
-          const current = prev[selectedContact.uniqueId] || [];
-          return {
-            ...prev,
-            [selectedContact.uniqueId]: [...current, optimisticMessage].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-          };
-        });
-        // Actually send message
-        await sendMessage(authToken, {
-          receiverId: selectedContact.uniqueId,
-          message: `[Image](${result.url})`,
-          imageUrl: result.url,
-          fileName: file.name,
-          disappearPolicy: selectedContact?.preferences?.defaultDisappearPolicy || { mode: 'keep' },
-          clientTempId: tempId
-        });
-      } catch (err) {
-        setError(err.message || 'Image upload failed');
-      }
-    }
-    setIsInputMenuOpen(false);
-    e.target.value = '';
-  };
 
   const handleClearChat = () => {
     if (window.confirm('Clear all messages in this chat?')) {
@@ -1650,36 +1560,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 
         {selectedContact && (
           <div className="friends-input-wrap">
-            {/* Multi-purpose input menu */}
-            {isInputMenuOpen && (
-              <div className="friends-input-menu-dropdown" role="menu">
-                <button type="button" onClick={() => { setIsEmojiTrayOpen((prev) => !prev); setIsInputMenuOpen(false); }}>
-                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#fffbe7" stroke="#ffd600" strokeWidth="1.2"/><text x="6" y="16" fontSize="13" fill="#ffd600">😊</text></svg>
-                  </span>
-                  Emoji Picker
-                </button>
-                <button type="button" onClick={() => imageInputRef.current && imageInputRef.current.click()}>
-                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2.5" y="4.5" width="17" height="13" rx="2.5" fill="#e3f2fd" stroke="#1976d2" strokeWidth="1.2"/><circle cx="7.5" cy="9" r="2" fill="#90caf9"/><rect x="10" y="11" width="6" height="4" rx="1.5" fill="#1976d2" opacity=".3"/></svg>
-                  </span>
-                  Upload Image
-                </button>
-                <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
-                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="3" width="14" height="16" rx="2" fill="#e8f5e9" stroke="#43a047" strokeWidth="1.2"/><rect x="7" y="7" width="8" height="2" rx="1" fill="#43a047"/><rect x="7" y="11" width="5" height="2" rx="1" fill="#43a047" opacity=".5"/></svg>
-                  </span>
-                  Upload File
-                </button>
-                <button type="button" disabled>
-                  <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><path d="M7 11a4 4 0 018 0c0 2.21-1.79 4-4 4s-4-1.79-4-4z" fill="#8e24aa" opacity=".2"/><path d="M11 7v4l2 2" stroke="#8e24aa" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  </span>
-                  More (coming soon)
-                </button>
-              </div>
-            )}
-            {isEmojiTrayOpen ? (
+            {isEmojiTrayOpen && (
               <div className="friends-emoji-tray" aria-label="Emoji picker">
                 {quickEmojis.map((emoji) => (
                   <button
@@ -1692,31 +1573,18 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </button>
                 ))}
               </div>
-            ) : null}
+            )}
             <div className="friends-input-row">
               <button
                 type="button"
-                className={`friends-input-menu-btn enhanced-plus-btn${isInputMenuOpen ? ' open' : ''}`}
-                aria-label="Open input menu"
-                title="More options"
-                onClick={() => setIsInputMenuOpen((prev) => !prev)}
+                className="friends-emoji-btn"
+                aria-label="Toggle emoji picker"
+                title="Emoji picker"
+                onClick={() => setIsEmojiTrayOpen((prev) => !prev)}
                 disabled={!selectedContact}
                 tabIndex={selectedContact ? 0 : -1}
               >
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 32 32"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                  focusable="false"
-                  style={{ display: 'block', margin: 'auto', transition: 'transform 0.25s cubic-bezier(.4,2,.6,1)', transform: isInputMenuOpen ? 'rotate(45deg)' : 'rotate(0deg)' }}
-                >
-                  <circle cx="16" cy="16" r="15" fill={isInputMenuOpen ? '#1976d2' : '#e3f2fd'} stroke="#1976d2" strokeWidth="1.5" />
-                  <rect x="15" y="8" width="2" height="16" rx="1" fill={isInputMenuOpen ? '#fff' : '#1976d2'} />
-                  <rect x="8" y="15" width="16" height="2" rx="1" fill={isInputMenuOpen ? '#fff' : '#1976d2'} />
-                </svg>
+                <span role="img" aria-label="Emoji">😊</span>
               </button>
               <input
                 placeholder={selectedContact ? 'Type a message' : 'Add or select a friend to start'}
@@ -1733,9 +1601,6 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
               <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
                 Send
               </button>
-              {/* Hidden file/image inputs */}
-              <input type="file" accept="image/*" style={{ display: 'none' }} ref={imageInputRef} onChange={handleUploadImage} />
-              <input type="file" style={{ display: 'none' }} ref={fileInputRef} onChange={handleUploadFile} />
             </div>
             {error ? <p className="friends-error">{error}</p> : null}
             {offlineQueueCount > 0 ? (
