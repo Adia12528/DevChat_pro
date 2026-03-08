@@ -384,6 +384,23 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
 
   const isUidOnline = (uid) => (onlineByUid.get(uid) || 0) > 0;
 
+  // Clear all messages in a conversation between the authenticated user and a contact
+  router.post('/messages/:contactUniqueId/delete', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const contactUniqueId = req.params.contactUniqueId;
+      if (!contactUniqueId) return res.status(400).json({ error: 'contactUniqueId required.' });
+      const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId });
+      if (!contact) return res.status(404).json({ error: 'Contact not found.' });
+      const conversationId = conversationIdFor(me.uid, contact.uid);
+      await FriendMessage.deleteMany({ conversationId });
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends clear chat error', error);
+      return res.status(500).json({ error: 'Failed to clear chat.' });
+    }
+  });
+
   // --- Friend Request API ---
   router.post('/request', authRequired, async (req, res) => {
     try {
