@@ -1,283 +1,14 @@
-/* Multi-purpose input menu button */
-/* Modernized multi-purpose + dropdown */
-/* Modern, stylish multi-purpose dropdown */
-.friends-input-menu-dropdown {
-  position: absolute;
-  bottom: 56px;
-  left: 0;
-  background: linear-gradient(135deg, #fafdff 60%, #e3f2fd 100%);
-  border: none;
-  border-radius: 20px;
-  box-shadow: 0 10px 36px 0 rgba(25, 118, 210, 0.22), 0 2px 8px rgba(23, 75, 50, 0.10);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  min-width: 220px;
-  padding: 14px 0 12px 0;
-  gap: 4px;
-  animation: fadeInMenu 0.18s cubic-bezier(.4,2,.6,1);
-  border: 1.5px solid #e3f2fd;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-/* Stylish dropdown buttons with icons */
-/* Button-like dropdown options with elevation and animation */
-.friends-input-menu-dropdown button {
-  background: linear-gradient(90deg, #e3f2fd 0%, #fafdff 100%);
-  border: none;
-  color: #1976d2;
-  font-size: 1.13rem;
-  font-weight: 600;
-  padding: 14px 26px 14px 18px;
-  text-align: left;
-  border-radius: 16px;
-  margin: 0 12px 8px 12px;
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
-  cursor: pointer;
-  outline: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-  box-shadow: 0 2.5px 10px rgba(25, 118, 210, 0.10), 0 1.5px 6px rgba(25, 118, 210, 0.06);
-  letter-spacing: 0.01em;
-  min-height: 48px;
-  font-family: inherit;
-  will-change: transform, box-shadow;
-}
-.friends-input-menu-dropdown button:hover:not(:disabled),
-.friends-input-menu-dropdown button:focus:not(:disabled) {
-  background: linear-gradient(90deg, #bbdefb 0%, #e3f2fd 100%);
-  color: #0d47a1;
-  box-shadow: 0 6px 24px rgba(25, 118, 210, 0.18), 0 2px 8px rgba(25, 118, 210, 0.10);
-  transform: translateY(-2px) scale(1.04);
-  border: 1.5px solid #90caf9;
-}
-.friends-input-menu-dropdown button:active:not(:disabled) {
-  background: linear-gradient(90deg, #90caf9 0%, #e3f2fd 100%);
-  color: #1565c0;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-  transform: scale(0.97);
-  border: 1.5px solid #1976d2;
-}
-.friends-input-menu-dropdown button:disabled {
-  color: #b7ceda;
-  cursor: not-allowed;
-  background: none;
-  opacity: 0.7;
-  box-shadow: none;
-  border: none;
-}
-.friends-input-menu-dropdown button:hover:not(:disabled),
-.friends-input-menu-dropdown button:focus:not(:disabled) {
-  background: linear-gradient(90deg, #bbdefb 0%, #e3f2fd 100%);
-  color: #0d47a1;
-  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.13);
-  transform: translateY(-1px) scale(1.03);
-}
-.friends-input-menu-dropdown button:active:not(:disabled) {
-  background: linear-gradient(90deg, #90caf9 0%, #e3f2fd 100%);
-  color: #1565c0;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-  transform: scale(0.98);
-}
-.friends-input-menu-dropdown button:disabled {
-  color: #b7ceda;
-  cursor: not-allowed;
-  background: none;
-  opacity: 0.7;
-}
-.friends-input-menu-dropdown button:hover:not(:disabled),
-.friends-input-menu-dropdown button:focus:not(:disabled) {
-  background: #e3f2fd;
-  color: #0d47a1;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-}
-.friends-input-menu-dropdown button:active:not(:disabled) {
-  background: #bbdefb;
-  color: #1565c0;
-}
-.friends-input-menu-dropdown button:disabled {
-  color: #b7ceda;
-  cursor: not-allowed;
-  background: none;
-}
-@keyframes fadeInMenu {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Input menu dropdown */
-/* Enhanced multi-purpose + button */
-/* Modern multi-purpose + button */
-.friends-input-menu-btn {
-  background: transparent;
-  border: none;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 8px;
-  cursor: pointer;
-  transition: box-shadow 0.2s, background 0.2s;
-  box-shadow: 0 1px 4px rgba(25,118,210,0.08);
-  padding: 0;
-  outline: none;
-}
-.friends-input-menu-btn svg {
-  transition: box-shadow 0.2s, background 0.2s, transform 0.25s cubic-bezier(.4,2,.6,1);
-}
-.friends-input-menu-btn.enhanced-plus-btn:hover:not(:disabled),
-.friends-input-menu-btn.enhanced-plus-btn:focus:not(:disabled) {
-  background: #e3f2fd;
-  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.16);
-}
-.friends-input-menu-btn.enhanced-plus-btn.open {
-  background: #1976d2;
-  box-shadow: 0 6px 24px rgba(25, 118, 210, 0.22);
-}
-.friends-input-menu-btn.enhanced-plus-btn.open svg {
-  /* The rotation is handled inline in JSX for accessibility */
-}
-.friends-input-menu-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.friends-input-menu-btn:focus {
-  outline: 2px solid #1976d2;
-  outline-offset: 2px;
-}
-
-.friends-input-menu-dropdown button:hover:not(:disabled) {
-  background: #e3f5ed;
-}
-.friends-input-menu-dropdown button:disabled {
-  color: #b7ceda;
-  cursor: not-allowed;
-}
-
-/* Header menu (three dots) */
-.friends-header-menu-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid #b7ceda;
-  background: #e3f5ed;
-  color: #179c47;
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-left: 8px;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.friends-header-menu-btn:hover, .friends-header-menu-btn:focus {
-  background: #d0f0e2;
-  color: #127a36;
-}
-/* Stylish three-dot dropdown menu */
-.friends-header-menu-dropdown {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  background: linear-gradient(135deg, #fafdff 60%, #e3f2fd 100%);
-  border: 1.5px solid #e3f2fd;
-  border-radius: 20px;
-  box-shadow: 0 10px 36px 0 rgba(25, 118, 210, 0.22), 0 2px 8px rgba(23, 75, 50, 0.10);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  padding: 14px 0 12px 0;
-  gap: 4px;
-  animation: fadeInMenu 0.18s cubic-bezier(.4,2,.6,1);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-.friends-header-menu-dropdown button {
-  background: linear-gradient(90deg, #e3f2fd 0%, #fafdff 100%);
-  border: none;
-  color: #1976d2;
-  font-size: 1.13rem;
-  font-weight: 600;
-  padding: 14px 26px 14px 18px;
-  text-align: left;
-  border-radius: 16px;
-  margin: 0 12px 8px 12px;
-  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.13s;
-  cursor: pointer;
-  outline: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-  box-shadow: 0 2.5px 10px rgba(25, 118, 210, 0.10), 0 1.5px 6px rgba(25, 118, 210, 0.06);
-  letter-spacing: 0.01em;
-  min-height: 48px;
-  font-family: inherit;
-  will-change: transform, box-shadow;
-}
-.friends-header-menu-dropdown button:hover:not(:disabled),
-.friends-header-menu-dropdown button:focus:not(:disabled) {
-  background: linear-gradient(90deg, #bbdefb 0%, #e3f2fd 100%);
-  color: #0d47a1;
-  box-shadow: 0 6px 24px rgba(25, 118, 210, 0.18), 0 2px 8px rgba(25, 118, 210, 0.10);
-  transform: translateY(-2px) scale(1.04);
-  border: 1.5px solid #90caf9;
-}
-.friends-header-menu-dropdown button:active:not(:disabled) {
-  background: linear-gradient(90deg, #90caf9 0%, #e3f2fd 100%);
-  color: #1565c0;
-  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
-  transform: scale(0.97);
-  border: 1.5px solid #1976d2;
-}
-.friends-header-menu-dropdown button:disabled {
-  color: #b7ceda;
-  cursor: not-allowed;
-  background: none;
-  opacity: 0.7;
-  box-shadow: none;
-  border: none;
-}
-
-@media (max-width: 768px) {
-  .friends-header-menu-dropdown {
-    right: 8px;
-    min-width: 140px;
-  }
-  .friends-input-menu-dropdown {
-    left: 8px;
-    min-width: 120px;
-  }
-}
 /* Friend Requests Sidebar */
 .friends-requests-section {
   padding: 8px 0;
-    .friends-header-menu-dropdown {
-      right: 8px;
-      min-width: 140px;
-    }
-    .friends-input-menu-dropdown {
-      left: 4px;
-      min-width: 96vw;
-      max-width: 98vw;
-      width: auto;
-      padding: 4px 0;
-      border-radius: 14px;
-      box-shadow: 0 4px 18px rgba(25, 118, 210, 0.16);
-    }
-    .friends-input-menu-dropdown button {
-      font-size: 1.08rem;
-      padding: 16px 18px;
-      margin: 0 4px;
-      border-radius: 10px;
-      min-width: 0;
-      width: 100%;
-      justify-content: flex-start;
-      /* Larger touch target */
-    }
+  border-bottom: 1px solid #eee;
+}
+.friends-requests-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 1rem;
+  color: var(--txt);
+}
+.friends-request-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -643,9 +374,8 @@
   width: 40px;
   height: 40px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #4bb1cf 0%, #2f9c6d 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(75, 177, 207, 0.10);
+  background: linear-gradient(145deg, #2f9c6d 0%, #1d7851 100%);
+  color: #f4fff9;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -777,20 +507,7 @@
 }
 
 .friends-mobile-back {
-  margin-right: 8px;
-  background: #e3f5ed !important;
-  color: #179c47 !important;
-  border: 1px solid #b7ceda !important;
-  font-weight: 600;
-  border-radius: 8px;
-  padding: 6px 16px;
-  box-shadow: 0 1px 4px rgba(23, 156, 71, 0.07);
-  transition: background 0.2s, color 0.2s;
-}
-.friends-mobile-back:hover, .friends-mobile-back:focus {
-  background: #d0f0e2 !important;
-  color: #127a36 !important;
-  outline: none;
+  margin-right: 2px;
 }
 
 .friends-messages {
@@ -1194,15 +911,9 @@
 
 @media (max-width: 768px) {
   .friends-shell {
-    display: flex;
-    flex-direction: column;
+    display: block;
     min-height: 100vh;
     height: 100vh;
-    width: 100vw;
-    max-width: 100vw;
-    overflow: hidden;
-    position: fixed;
-    inset: 0;
   }
 
   @supports (height: 100svh) {
@@ -1217,150 +928,38 @@
     }
   }
 
-  .friends-side {
-    width: 100vw;
-    min-width: 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--wa-border);
-    height: 100vh;
-    max-height: 100vh;
-    position: absolute;
-    left: 0;
-    top: 0;
-    z-index: 10;
-    background: var(--wa-sidebar);
-    display: flex;
-    flex-direction: column;
-  }
-
-  .friends-shell.mobile-list .friends-main {
-    display: none !important;
-  }
-  .friends-shell.mobile-chat .friends-side {
-    display: none !important;
-  }
-
-  .friends-main {
-    width: 100vw;
-    height: 100vh;
-    max-width: 100vw;
-    max-height: 100vh;
-    position: absolute;
-    left: 0;
-    top: 0;
-    z-index: 11;
-    display: flex;
-    flex-direction: column;
-    background: var(--wa-chat-bg);
-  }
-
-  .friends-chat-header {
-    flex-shrink: 0;
-    padding: 10px 10px;
-    border-bottom: 1px solid #d4dde1;
-    background: #f0f4f6;
-  }
-
   .friends-messages {
-    flex: 1 1 auto;
-    min-height: 0;
-    max-height: none;
-    overflow-y: auto;
-    padding: 12px 6px 12px 6px;
-    display: grid;
-    gap: 10px;
-    background: #e7ddd3;
+    padding: 12px;
   }
 
   .friends-input-wrap {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    z-index: 20;
-    background: #f0f2f5;
-    border-top: 1px solid #d8d4cc;
-    padding: 8px 10px 10px 10px;
-    box-sizing: border-box;
+    padding: 8px 10px;
   }
 
-  .friends-input-row {
-    grid-template-columns: auto 1fr auto;
-    gap: 6px;
+  .friends-side {
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--wa-border);
+  }
+
+  .friends-shell.mobile-list .friends-main {
+    display: none;
+  }
+
+  .friends-shell.mobile-chat .friends-side {
+    display: none;
   }
 
   .friends-msg {
-    max-width: 92vw;
-    font-size: 1rem;
-    padding: 10px 12px;
-    word-break: break-word;
+    max-width: 88%;
   }
 
   .friends-fab {
-    position: fixed;
-    right: 18px;
-    bottom: 74px;
+    right: 16px;
+    bottom: 86px;
     width: 52px;
     height: 52px;
-    z-index: 30;
-    box-shadow: 0 8px 18px rgba(23, 75, 50, 0.22);
-  }
-
-  .friends-fab:active, .friends-fab:focus {
-    outline: 2px solid var(--wa-accent-dark);
-  }
-
-  .friends-msg-meta {
-    font-size: 0.85rem;
-  }
-
-  .friends-date-divider span,
-  .friends-unread-divider span {
-    font-size: 0.8rem;
-    padding: 4px 8px;
-  }
-
-  .friends-contact-avatar {
-    width: 36px;
-    height: 36px;
-    font-size: 0.8rem;
-  }
-
-  .friends-empty-list, .friends-chat-empty {
-    font-size: 1rem;
-    padding: 18px 8px;
-  }
-
-  .friends-contact-name {
-    font-size: 1.05rem;
-  }
-
-  .friends-contact-preview {
-    font-size: 0.95rem;
-  }
-
-  .friends-unread-badge {
-    min-width: 18px;
-    height: 18px;
-    font-size: 0.8rem;
-  }
-
-  .friends-remove-btn {
-    font-size: 0.9rem;
-    padding: 2px 8px;
-    margin-left: 6px;
-  }
-
-  .friends-emoji-tray {
-    max-width: 100vw;
-    overflow-x: auto;
-    padding: 6px 0;
-  }
-
-  /* Prevent overflow and stacking issues */
-  .friends-shell, .friends-main, .friends-side {
-    box-sizing: border-box;
   }
 }
 
