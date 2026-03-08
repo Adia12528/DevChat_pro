@@ -1451,6 +1451,24 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             </button>
             {isMenuOpen ? (
               <div className="friends-menu-dropdown" role="menu" aria-label="Dashboard menu">
+                <div className="friends-menu-profile-section">
+                  <div className="friends-menu-profile-avatar-enhanced">
+                    {profile.photoUrl ? (
+                      <img src={profile.photoUrl} alt="Profile" />
+                    ) : (
+                      <span>{(profile.displayName || profile.uniqueId || 'U').slice(0,2).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="friends-menu-profile-info-enhanced">
+                    <div className="friends-menu-profile-name-row">
+                      <span className="friends-menu-profile-name">{profile.displayName || 'User'}</span>
+                      {profile.isPremium && <span className="friends-menu-profile-premium" title="Premium User">★</span>}
+                    </div>
+                    <div className="friends-menu-profile-id">{profile.uniqueId || profile.email || ''}</div>
+                    {profile.bio && <div className="friends-menu-profile-bio">{profile.bio}</div>}
+                  </div>
+                </div>
+                <hr className="friends-menu-profile-divider" />
                 <button
                   type="button"
                   className="friends-menu-item"
