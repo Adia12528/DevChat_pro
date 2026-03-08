@@ -28,7 +28,8 @@
     "prebuild": "node update-version.js",
     "build": "react-scripts build",
     "lint:css": "npx stylelint 'src/styles/**/*.css'",
-    "version:bump": "npm version patch --no-git-tag-version && node update-version.js"
+    "version:bump": "npm version patch --no-git-tag-version && node update-version.js",
+    "test": "echo \"No tests specified\""
   },
   "browserslist": {
     "production": [

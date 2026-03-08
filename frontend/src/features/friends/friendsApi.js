@@ -1,3 +1,22 @@
+// Edit a message
+export const editMessage = (token, messageId, text) =>
+  request(`/api/friends/messages/${encodeURIComponent(messageId)}/edit`, token, {
+    method: 'PUT',
+    body: JSON.stringify({ text })
+  });
+
+// Delete a message
+export const deleteMessage = (token, messageId) =>
+  request(`/api/friends/messages/${encodeURIComponent(messageId)}`, token, {
+    method: 'DELETE'
+  });
+
+// React to a message
+export const reactToMessage = (token, messageId, emoji) =>
+  request(`/api/friends/messages/${encodeURIComponent(messageId)}/react`, token, {
+    method: 'POST',
+    body: JSON.stringify({ emoji })
+  });
 // Delete all messages in a conversation for the user
 export const deleteConversationMessages = (token, contactUniqueId) =>
   request(`/api/friends/messages/${encodeURIComponent(contactUniqueId)}/delete`, token, {

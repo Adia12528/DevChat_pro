@@ -1084,26 +1084,18 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     }
   };
 
-  const handleAddContact = async (targetUniqueId) => {
+  // Send friend request instead of adding contact immediately
+  const handleSendFriendRequest = async (targetUniqueId) => {
     try {
       setError('');
-      await addContact(authToken, targetUniqueId);
+      await sendFriendRequest(authToken, targetUniqueId);
       setAddFriendQuery('');
       setSearchResults([]);
       setHasSearchedAddFriend(false);
       setAddFriendSearchError('');
-      await loadContacts();
-      // Real-time: notify both users to refresh contacts
-      if (socket) {
-        socket.emit('friends:refresh', { to: targetUniqueId });
-      }
-      setSelectedContactId(targetUniqueId);
-      if (isMobileLayout) {
-        setMobilePane('chat');
-      }
-      setSettingsSavedMessage('Friend added successfully.');
+      setSettingsSavedMessage('Friend request sent. The user must accept to become friends.');
     } catch (e) {
-      setError(e.message || 'Unable to add contact');
+      setError(e.message || 'Unable to send friend request');
     }
   };
 
@@ -1885,47 +1877,165 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             <div className="friends-chat-empty">Select a friend from chats to start messaging.</div>
           ) : null}
 
-          {timelineItems.map((item) => {
-            if (item.type === 'date') {
+          {/* --- Context menu state for all messages --- */}
+          {(() => {
+            const [contextMenu, setContextMenu] = React.useState({ open: false, x: 0, y: 0, msgId: null });
+            const [editingMsgId, setEditingMsgId] = React.useState(null);
+            const [editText, setEditText] = React.useState('');
+            const [emojiPickerMsgId, setEmojiPickerMsgId] = React.useState(null);
+
+            // Handlers for context menu
+            const handleContextMenu = (e, msg) => {
+              e.preventDefault();
+              setContextMenu({ open: true, x: e.clientX, y: e.clientY, msgId: msg.id });
+              setEditText(msg.text);
+            };
+            let touchTimer = null;
+            const handleTouchStart = (e, msg) => {
+              touchTimer = setTimeout(() => {
+                setContextMenu({ open: true, x: e.touches[0].clientX, y: e.touches[0].clientY, msgId: msg.id });
+                setEditText(msg.text);
+              }, 500);
+            };
+            const handleTouchEnd = () => {
+              if (touchTimer) clearTimeout(touchTimer);
+            };
+
+            // Edit, delete, react logic
+            const handleEdit = async (msg) => {
+              try {
+                await editMessage(authToken, msg.id, editText);
+                setEditingMsgId(null);
+                setContextMenu({ ...contextMenu, open: false });
+                setEmojiPickerMsgId(null);
+                await loadMessages(selectedContactId, { reset: true });
+              } catch (e) {
+                setError(e.message || 'Edit failed');
+                setContextMenu({ ...contextMenu, open: false });
+                setEmojiPickerMsgId(null);
+              }
+            };
+            const handleDelete = async (msg) => {
+              if (!window.confirm('Delete this message?')) return;
+              try {
+                await deleteMessage(authToken, msg.id);
+                setContextMenu({ ...contextMenu, open: false });
+                setEmojiPickerMsgId(null);
+                await loadMessages(selectedContactId, { reset: true });
+              } catch (e) {
+                setError(e.message || 'Delete failed');
+                setContextMenu({ ...contextMenu, open: false });
+                setEmojiPickerMsgId(null);
+              }
+            };
+            const handleReact = async (msg, emoji) => {
+              try {
+                await reactToMessage(authToken, msg.id, emoji);
+                setEmojiPickerMsgId(null);
+                setContextMenu({ ...contextMenu, open: false });
+                await loadMessages(selectedContactId, { reset: true });
+              } catch (e) {
+                setError(e.message || 'React failed');
+                setEmojiPickerMsgId(null);
+                setContextMenu({ ...contextMenu, open: false });
+              }
+            };
+
+            // Render reactions (if any)
+            const renderReactions = (msg) => {
+              if (!msg.reactions || !Array.isArray(msg.reactions) || msg.reactions.length === 0) return null;
               return (
-                <div key={item.id} className="friends-date-divider" aria-label={`Date: ${item.label}`}>
-                  <span>{item.label}</span>
+                <div className="friends-msg-reactions">
+                  {msg.reactions.map((r, i) => (
+                    <span key={i} className="friends-msg-reaction">{r.emoji} {r.count > 1 ? r.count : ''}</span>
+                  ))}
                 </div>
               );
-            }
+            };
 
-            if (item.type === 'unread') {
+            return timelineItems.map((item) => {
+              if (item.type === 'date') {
+                return (
+                  <div key={item.id} className="friends-date-divider" aria-label={`Date: ${item.label}`}>
+                    <span>{item.label}</span>
+                  </div>
+                );
+              }
+              if (item.type === 'unread') {
+                return (
+                  <div
+                    key={item.id}
+                    className="friends-unread-divider"
+                    aria-label="Unread messages"
+                    ref={firstUnreadDividerRef}
+                  >
+                    <span>{item.label}</span>
+                  </div>
+                );
+              }
+              const msg = item.message;
+              const isEditing = editingMsgId === msg.id;
               return (
-                <div
+                <article
                   key={item.id}
-                  className="friends-unread-divider"
-                  aria-label="Unread messages"
-                  ref={firstUnreadDividerRef}
+                  className={`friends-msg ${msg.isMine ? 'me' : ''}`}
+                  onContextMenu={e => handleContextMenu(e, msg)}
+                  onTouchStart={e => handleTouchStart(e, msg)}
+                  onTouchEnd={handleTouchEnd}
+                  style={{ position: 'relative' }}
                 >
-                  <span>{item.label}</span>
-                </div>
+                  {isEditing ? (
+                    <div className="friends-msg-edit-row">
+                      <input
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleEdit(msg); if (e.key === 'Escape') setEditingMsgId(null); }}
+                        autoFocus
+                      />
+                      <button onClick={() => handleEdit(msg)}>Save</button>
+                      <button onClick={() => setEditingMsgId(null)}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div>{msg.text}</div>
+                  )}
+                  {renderReactions(msg)}
+                  <div className="friends-msg-meta">
+                    <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
+                    {msg.isMine ? (() => {
+                      const receipt = getReceiptConfig(msg);
+                      if (!receipt) return null;
+                      return (
+                        <span className={`friends-receipt ${receipt.className}`} title={receipt.title} aria-label={receipt.title}>
+                          <span key={`${msg.id}-${receipt.className}`} className="friends-receipt-text">{receipt.text}</span>
+                        </span>
+                      );
+                    })() : null}
+                  </div>
+                  {/* Context menu */}
+                  {contextMenu.open && contextMenu.msgId === msg.id && (
+                    <div
+                      className="friends-msg-menu"
+                      style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 9999, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #0002', minWidth: 120 }}
+                      onMouseLeave={() => setContextMenu({ ...contextMenu, open: false })}
+                    >
+                      {msg.isMine && <button onClick={() => { setEditingMsgId(msg.id); setContextMenu({ ...contextMenu, open: false }); }}>Edit</button>}
+                      {msg.isMine && <button onClick={() => handleDelete(msg)}>Delete</button>}
+                      <button onClick={() => setEmojiPickerMsgId(msg.id)}>React</button>
+                    </div>
+                  )}
+                  {/* Emoji picker */}
+                  {emojiPickerMsgId === msg.id && (
+                    <div className="friends-emoji-picker" style={{ position: 'fixed', top: contextMenu.y + 30, left: contextMenu.x, zIndex: 10000, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #0002', padding: 8 }}>
+                      {["👍","😂","❤️","😮","😢","😡","🎉","🙏"].map(emoji => (
+                        <button key={emoji} style={{ fontSize: 22, margin: 2 }} onClick={() => handleReact(msg, emoji)}>{emoji}</button>
+                      ))}
+                      <button style={{ marginLeft: 8 }} onClick={() => setEmojiPickerMsgId(null)}>Close</button>
+                    </div>
+                  )}
+                </article>
               );
-            }
-
-            const msg = item.message;
-            return (
-              <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
-                <div>{msg.text}</div>
-                <div className="friends-msg-meta">
-                  <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
-                  {msg.isMine ? (() => {
-                    const receipt = getReceiptConfig(msg);
-                    if (!receipt) return null;
-                    return (
-                      <span className={`friends-receipt ${receipt.className}`} title={receipt.title} aria-label={receipt.title}>
-                        <span key={`${msg.id}-${receipt.className}`} className="friends-receipt-text">{receipt.text}</span>
-                      </span>
-                    );
-                  })() : null}
-                </div>
-              </article>
-            );
-          })}
+            });
+          })()}
         </div>
 
         {selectedContact && (
@@ -2098,11 +2208,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                     type="button"
                     className="friends-search-result"
                     onClick={() => {
-                      handleAddContact(item.uniqueId);
+                      handleSendFriendRequest(item.uniqueId);
                       setIsAddModalOpen(false);
                     }}
                   >
-                    Add Friend
+                    Send Friend Request
                   </button>
                 </div>
               ))}
@@ -2114,11 +2224,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 onClick={() => {
                   const first = searchResults?.[0];
                   if (!first?.uniqueId) return;
-                  handleAddContact(first.uniqueId);
+                  handleSendFriendRequest(first.uniqueId);
                   setIsAddModalOpen(false);
                 }}
               >
-                Add First Match
+                Send Request to First Match
               </button>
               <button type="button" className="secondary" onClick={() => setIsAddModalOpen(false)}>Close</button>
             </div>

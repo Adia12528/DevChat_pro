@@ -185,7 +185,18 @@ const getModels = (mongoose) => {
       disappearPolicy: { type: Object, default: { mode: 'keep' } },
       expiresAt: { type: Date, default: null },
       deliveredAt: { type: Date, default: null },
-      readAt: { type: Date, default: null }
+      readAt: { type: Date, default: null },
+      reactions: {
+        type: [
+          {
+            user: { type: String, required: true }, // uid
+            emoji: { type: String, required: true }
+          }
+        ],
+        default: []
+      },
+      editedAt: { type: Date, default: null },
+      deleted: { type: Boolean, default: false }
     },
     { timestamps: true }
   );
@@ -364,6 +375,49 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   const authRequired = friendsAuthMiddleware(enabled);
 
   const router = express.Router();
+
+  // Edit a message
+  router.put('/messages/:messageId/edit', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const messageId = req.params.messageId;
+      const newText = sanitizeMessageText(req.body?.text || '');
+      if (!messageId) return res.status(400).json({ error: 'messageId required.' });
+      if (!newText) return res.status(400).json({ error: 'Message text required.' });
+      const msg = await FriendMessage.findById(messageId);
+      if (!msg) return res.status(404).json({ error: 'Message not found.' });
+      if (msg.fromUid !== me.uid) return res.status(403).json({ error: 'Not authorized to edit this message.' });
+      msg.text = newText;
+      msg.editedAt = new Date();
+      await msg.save();
+      return res.json({ ok: true, message: await mapMessageForClient(FriendProfile, msg, me.uid) });
+    } catch (error) {
+      console.error('friends edit message error', error);
+      return res.status(500).json({ error: 'Failed to edit message.' });
+    }
+  });
+
+  // React to a message
+  router.post('/messages/:messageId/react', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const messageId = req.params.messageId;
+      const emoji = String(req.body?.emoji || '').trim();
+      if (!messageId) return res.status(400).json({ error: 'messageId required.' });
+      if (!emoji) return res.status(400).json({ error: 'Emoji required.' });
+      const msg = await FriendMessage.findById(messageId);
+      if (!msg) return res.status(404).json({ error: 'Message not found.' });
+      // Remove previous reaction by this user (if any)
+      msg.reactions = (msg.reactions || []).filter(r => r.user !== me.uid);
+      // Add new reaction
+      msg.reactions.push({ user: me.uid, emoji });
+      await msg.save();
+      return res.json({ ok: true, message: await mapMessageForClient(FriendProfile, msg, me.uid) });
+    } catch (error) {
+      console.error('friends react message error', error);
+      return res.status(500).json({ error: 'Failed to react to message.' });
+    }
+  });
   const onlineByUid = new Map();
   const lastSeenByUid = new Map();
 

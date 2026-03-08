@@ -1,3 +1,110 @@
+/* Modern chat message bubble */
+.friends-msg {
+  background: #fff;
+  color: #232a34;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(30,40,60,0.06);
+  padding: 12px 16px 8px 16px;
+  margin: 10px 0 4px 0;
+  max-width: 80vw;
+  word-break: break-word;
+  position: relative;
+  border: 1px solid #e3eaf2;
+  transition: box-shadow 0.18s, background 0.18s;
+}
+.friends-msg.me {
+  background: #e3f2fd;
+  color: #1976d2;
+  margin-left: auto;
+  border: 1.5px solid #90caf9;
+}
+.friends-msg-meta {
+  font-size: 0.85rem;
+  color: #607d8b;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.friends-msg-reactions {
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+}
+.friends-msg-reaction {
+  background: #f7fafc;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 1.1em;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 4px rgba(30,40,60,0.04);
+}
+
+/* Modern context menu for messages */
+.friends-msg-menu {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(30,40,60,0.18);
+  border: 1px solid #e0e0e0;
+  min-width: 140px;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+}
+.friends-msg-menu button {
+  background: none;
+  border: none;
+  color: #232a34;
+  font-size: 1rem;
+  padding: 10px 18px;
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+.friends-msg-menu button:hover, .friends-msg-menu button:focus {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+/* Modern emoji picker */
+.friends-emoji-picker {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(30,40,60,0.18);
+  border: 1px solid #e0e0e0;
+  padding: 10px 12px 6px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  z-index: 10000;
+}
+.friends-emoji-picker button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 8px;
+  transition: background 0.16s;
+}
+.friends-emoji-picker button:hover, .friends-emoji-picker button:focus {
+  background: #e3f2fd;
+}
+
+@media (max-width: 700px) {
+  .friends-msg {
+    max-width: 96vw;
+    font-size: 1.01rem;
+    padding: 10px 10px 7px 12px;
+  }
+  .friends-msg-menu, .friends-emoji-picker {
+    min-width: 120px;
+    font-size: 0.98rem;
+    padding: 7px 2px 5px 2px;
+  }
+}
 .friends-mobile-back {
   color: var(--friends-back-btn, var(--friends-accent, #1976d2));
   background: none;
