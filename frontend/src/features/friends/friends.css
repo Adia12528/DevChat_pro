@@ -141,6 +141,27 @@
   }
 }
 /* Mute Notification Duration Modal */
+.friends-mute-modal button,
+.friends-disappear-modal button {
+  color: var(--modal-btn-text, var(--modal-text, #fff));
+  background: #232a34;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.friends-mute-modal button.active,
+.friends-mute-modal button:focus,
+.friends-disappear-modal button.active,
+.friends-disappear-modal button:focus {
+  background: var(--accent, #4fa3ff);
+  color: var(--modal-btn-text-active, var(--modal-text, #fff));
+}
+.friends-mute-modal button:hover,
+.friends-disappear-modal button:hover {
+  background: #34495e;
+}
 .friends-mute-modal {
   width: 95vw;
   max-width: 400px;
