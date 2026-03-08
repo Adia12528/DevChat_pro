@@ -114,16 +114,25 @@
   gap: 0.25rem;
   margin-left: 0.4em;
 }
-.friends-contact-mute-icon svg,
-.friends-contact-disappear-icon svg {
+.friends-contact-mute-icon svg {
   vertical-align: middle;
   display: inline-block;
 }
 .friends-contact-mute-icon {
   margin-right: 2px;
 }
+.friends-contact-mute-icon svg {
+  /* Use theme accent or warning color for mute */
+  fill: var(--friends-mute, var(--accent, #ff9800));
+  stroke: var(--friends-mute, var(--accent, #ff9800));
+}
 .friends-contact-disappear-icon {
   margin-right: 2px;
+}
+.friends-contact-disappear-icon svg {
+  /* Use theme accent or purple for disappear */
+  fill: var(--friends-disappear, var(--accent, #8e24aa));
+  stroke: var(--friends-disappear, var(--accent, #8e24aa));
 }
 @media (max-width: 600px) {
   .friends-contact-icons svg {
@@ -154,7 +163,7 @@
 }
 .friends-mute-options button {
   background: #232a34;
-  color: #fff;
+  color: var(--modal-btn-text, var(--modal-text, #fff));
   border: none;
   border-radius: 8px;
   padding: 0.5rem 1.1rem;
@@ -162,10 +171,11 @@
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
 }
+
 .friends-mute-options button.active,
 .friends-mute-options button:focus {
   background: var(--accent, #4fa3ff);
-  color: #fff;
+  color: var(--modal-btn-text-active, var(--modal-text, #fff));
 }
 .friends-mute-options button:hover {
   background: #34495e;
@@ -204,7 +214,7 @@
 }
 .friends-disappear-options button {
   background: #232a34;
-  color: #fff;
+  color: var(--modal-btn-text, var(--modal-text, #fff));
   border: none;
   border-radius: 8px;
   padding: 0.5rem 1.1rem;
@@ -212,10 +222,11 @@
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
 }
+
 .friends-disappear-options button.active,
 .friends-disappear-options button:focus {
   background: var(--accent, #4fa3ff);
-  color: #fff;
+  color: var(--modal-btn-text-active, var(--modal-text, #fff));
 }
 .friends-disappear-options button:hover {
   background: #34495e;
