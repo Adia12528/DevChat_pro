@@ -1366,7 +1366,75 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   };
 
   return (
-    <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
+    <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}> 
+      {/* Disappearing Message Timer Modal - always rendered at root level */}
+      {showDisappearModal && (
+        <div className="friends-modal-overlay" style={{zIndex:2000}} onClick={handleCloseDisappearModal}>
+          <div
+            className="friends-modal friends-disappear-modal"
+            style={{
+              minWidth: 0,
+              width: '92%',
+              maxWidth: 340,
+              margin: '8vh auto',
+              padding: '18px 16px',
+              borderRadius: 14,
+              boxShadow: '0 2px 16px 0 rgba(0,0,0,0.13)',
+              background: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{fontSize: '1.1rem', marginBottom: 10, textAlign: 'center'}}>Set Disappearing Messages</h2>
+            <div style={{display:'flex',flexDirection:'column',width:'100%',gap:8}}>
+              <button onClick={() => handleSetDisappearTimer(1)} className={disappearTimer===1 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>1 min</button>
+              <button onClick={() => handleSetDisappearTimer(5)} className={disappearTimer===5 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>5 min</button>
+              <button onClick={() => handleSetDisappearTimer(10)} className={disappearTimer===10 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>10 min</button>
+              <button onClick={() => handleSetDisappearTimer(30)} className={disappearTimer===30 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>30 min</button>
+              <button onClick={() => handleSetDisappearTimer(60)} className={disappearTimer===60 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>1 hour</button>
+              <button onClick={() => handleSetDisappearTimer(null)} className={!disappearTimer ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>Off</button>
+            </div>
+            <button className="friends-modal-close" style={{marginTop:12}} onClick={handleCloseDisappearModal}>Close</button>
+          </div>
+        </div>
+      )}
+      {/* Mute Notification Duration Modal - always rendered at root level */}
+      {showMuteModal && (
+        <div className="friends-modal-overlay" style={{zIndex:2000}} onClick={handleCloseMuteModal}>
+          <div
+            className="friends-modal friends-mute-modal"
+            style={{
+              minWidth: 0,
+              width: '92%',
+              maxWidth: 340,
+              margin: '8vh auto',
+              padding: '18px 16px',
+              borderRadius: 14,
+              boxShadow: '0 2px 16px 0 rgba(0,0,0,0.13)',
+              background: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 style={{fontSize: '1.1rem', marginBottom: 10, textAlign: 'center'}}>Mute Notifications</h2>
+            <div style={{display:'flex',flexDirection:'column',width:'100%',gap:8}}>
+              <button onClick={() => handleSetMuteDuration(15)} className={muteDuration===15 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>15 min</button>
+              <button onClick={() => handleSetMuteDuration(60)} className={muteDuration===60 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>1 hour</button>
+              <button onClick={() => handleSetMuteDuration(240)} className={muteDuration===240 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>4 hours</button>
+              <button onClick={() => handleSetMuteDuration(1440)} className={muteDuration===1440 ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>1 day</button>
+              <button onClick={() => handleSetMuteDuration('always')} className={muteDuration==='always' ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>Always</button>
+              <button onClick={() => handleSetMuteDuration(null)} className={!muteDuration ? 'active' : ''} style={{padding:'8px',borderRadius:8,fontSize:15,width:'100%'}}>Off</button>
+            </div>
+            <button className="friends-modal-close" style={{marginTop:12}} onClick={handleCloseMuteModal}>Close</button>
+          </div>
+        </div>
+      )}
       <aside className="friends-side">
 
         <header className="friends-side-header">
