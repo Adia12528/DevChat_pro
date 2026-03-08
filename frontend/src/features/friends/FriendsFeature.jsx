@@ -27,7 +27,8 @@ import {
   acceptFriendRequest,
   rejectFriendRequest,
   removeFriend,
-  updateContactPreferences
+  updateContactPreferences,
+  deleteConversationMessages
 } from './friendsApi';
 
 
@@ -286,6 +287,9 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
 
 // --- FriendsWorkspace Component ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+    // Per-contact mute/disappear state
+    const [contactMuteMap, setContactMuteMap] = useState({}); // { [contactId]: { muteDuration } }
+    const [contactDisappearMap, setContactDisappearMap] = useState({}); // { [contactId]: { disappearTimer } }
   // Notify user of incoming message (sound + desktop notification)
   const notifyIncomingMessage = (contact, message) => {
     // Play notification sound
@@ -394,6 +398,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [settingsNameDraft, setSettingsNameDraft] = useState(profile.displayName || '');
   const [settingsBioDraft, setSettingsBioDraft] = useState(profile.bio || '');
   const [settingsThemeDraft, setSettingsThemeDraft] = useState('light');
@@ -404,7 +409,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [isInputMenuOpen, setIsInputMenuOpen] = useState(false);
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [isMute, setIsMute] = useState(false);
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [muteDuration, setMuteDuration] = useState(null); // in minutes, or 'always', or null for off
   const [isDisappearing, setIsDisappearing] = useState(false);
+  const [showDisappearModal, setShowDisappearModal] = useState(false);
+  const [disappearTimer, setDisappearTimer] = useState(null); // in minutes
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [loadingOlderByContact, setLoadingOlderByContact] = useState({});
   const [hasMoreByContact, setHasMoreByContact] = useState({});
@@ -616,21 +625,54 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 
 
 
+  const [isClearChatConfirmOpen, setIsClearChatConfirmOpen] = useState(false);
   const handleClearChat = () => {
-    if (window.confirm('Clear all messages in this chat?')) {
-      setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
-    }
+    setIsClearChatConfirmOpen(true);
     setIsHeaderMenuOpen(false);
+  };
+
+  const handleConfirmClearChat = async () => {
+    if (!selectedContactId) return;
+    try {
+      await deleteConversationMessages(authToken, selectedContactId);
+      setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
+    } catch (e) {
+      setError(e.message || 'Failed to clear chat.');
+    }
+    setIsClearChatConfirmOpen(false);
+  };
+
+  const handleCancelClearChat = () => {
+    setIsClearChatConfirmOpen(false);
   };
 
   const handleToggleMute = () => {
-    setIsMute((prev) => !prev);
+    setShowMuteModal(true);
     setIsHeaderMenuOpen(false);
   };
 
+  const handleCloseMuteModal = () => setShowMuteModal(false);
+
+  const handleSetMuteDuration = (duration) => {
+    setMuteDuration(duration);
+    setIsMute(duration !== null && duration !== 'off');
+    setShowMuteModal(false);
+    // TODO: Save mute duration to backend/contact preferences if needed
+  };
+
+
   const handleToggleDisappearing = () => {
-    setIsDisappearing((prev) => !prev);
+    setShowDisappearModal(true);
     setIsHeaderMenuOpen(false);
+  };
+
+  const handleCloseDisappearModal = () => setShowDisappearModal(false);
+
+  const handleSetDisappearTimer = (minutes) => {
+    setDisappearTimer(minutes);
+    setIsDisappearing(minutes !== null);
+    setShowDisappearModal(false);
+    // TODO: Save timer to backend/contact preferences if needed
   };
 
   const handleShowMedia = () => {
@@ -639,6 +681,28 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   };
 
   const handleCloseMediaModal = () => setShowMediaModal(false);
+
+  // Extract media, links, docs from messages
+  const mediaMessages = useMemo(() => {
+    if (!selectedContactId || !messagesByContact[selectedContactId]) return [];
+    return messagesByContact[selectedContactId].filter(
+      (msg) => msg.mediaUrl || msg.imageUrl || msg.fileType?.startsWith('image/')
+    );
+  }, [selectedContactId, messagesByContact]);
+
+  const linkMessages = useMemo(() => {
+    if (!selectedContactId || !messagesByContact[selectedContactId]) return [];
+    return messagesByContact[selectedContactId].filter(
+      (msg) => /https?:\/\//i.test(msg.text || '')
+    );
+  }, [selectedContactId, messagesByContact]);
+
+  const docMessages = useMemo(() => {
+    if (!selectedContactId || !messagesByContact[selectedContactId]) return [];
+    return messagesByContact[selectedContactId].filter(
+      (msg) => msg.fileType && !msg.fileType.startsWith('image/')
+    );
+  }, [selectedContactId, messagesByContact]);
 
   const timelineItems = useMemo(() => {
     const items = [];
@@ -1028,6 +1092,18 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     }
   };
 
+  // Theme switching logic
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settingsThemeDraft === 'dark') {
+      root.classList.add('friends-dark-theme');
+      root.classList.remove('friends-light-theme');
+    } else {
+      root.classList.add('friends-light-theme');
+      root.classList.remove('friends-dark-theme');
+    }
+  }, [settingsThemeDraft]);
+
   const handleSaveSettings = async () => {
     try {
       setSettingsError('');
@@ -1041,6 +1117,15 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
         bio: settingsBioDraft
       });
       await onProfileRefresh();
+      // Apply theme immediately on save
+      const root = document.documentElement;
+      if (settingsThemeDraft === 'dark') {
+        root.classList.add('friends-dark-theme');
+        root.classList.remove('friends-light-theme');
+      } else {
+        root.classList.add('friends-light-theme');
+        root.classList.remove('friends-dark-theme');
+      }
       setSettingsSavedMessage('Settings saved successfully.');
     } catch (e) {
       setSettingsError(e.message || 'Unable to save settings.');
@@ -1268,37 +1353,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   return (
     <div className={`friends-shell ${isMobileLayout ? `mobile-${mobilePane}` : ''}`}>
       <aside className="friends-side">
-        {/* Friend Requests Section */}
-        <div className="friends-requests-section">
-          <h5>Requests</h5>
-          {requestsError ? <div className="friends-error">{requestsError}</div> : null}
-          {incomingRequests.length === 0 && outgoingRequests.length === 0 ? (
-            <div className="friends-empty-list">No friend requests</div>
-          ) : null}
-          {incomingRequests.length > 0 ? (
-            <div className="friends-incoming-requests">
-              <strong>Incoming</strong>
-              {incomingRequests.map((req) => (
-                <div key={req._id} className="friends-request-card">
-                  <span>From: {req.fromUid}</span>
-                  <button onClick={() => handleAcceptRequest(req._id)}>Accept</button>
-                  <button onClick={() => handleRejectRequest(req._id)}>Reject</button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {outgoingRequests.length > 0 ? (
-            <div className="friends-outgoing-requests">
-              <strong>Outgoing</strong>
-              {outgoingRequests.map((req) => (
-                <div key={req._id} className="friends-request-card">
-                  <span>To: {req.toUid}</span>
-                  <span>Status: {req.status}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+
         <header className="friends-side-header">
           <div className="friends-menu-wrap" ref={menuRef}>
             <button
@@ -1313,6 +1368,19 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             </button>
             {isMenuOpen ? (
               <div className="friends-menu-dropdown" role="menu" aria-label="Dashboard menu">
+                <button
+                  type="button"
+                  className="friends-menu-item"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setIsRequestsModalOpen(true);
+                  }}
+                >
+                  Requests
+                  {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
+                    <span className="friends-request-badge-menu">{incomingRequests.length + outgoingRequests.length}</span>
+                  )}
+                </button>
                 <button
                   type="button"
                   className="friends-menu-item"
@@ -1345,6 +1413,42 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 </button>
               </div>
             ) : null}
+                {/* Requests Modal */}
+                {isRequestsModalOpen && (
+                  <div className="friends-modal-overlay" onClick={() => setIsRequestsModalOpen(false)}>
+                    <div className="friends-modal friends-requests-modal" onClick={e => e.stopPropagation()}>
+                      <h2>Friend Requests</h2>
+                      {requestsError ? <div className="friends-error">{requestsError}</div> : null}
+                      {incomingRequests.length === 0 && outgoingRequests.length === 0 ? (
+                        <div className="friends-empty-list">No friend requests</div>
+                      ) : null}
+                      {incomingRequests.length > 0 && (
+                        <div className="friends-incoming-requests">
+                          <strong>Incoming</strong>
+                          {incomingRequests.map((req) => (
+                            <div key={req._id} className="friends-request-card">
+                              <span>From: {req.fromUid}</span>
+                              <button onClick={() => handleAcceptRequest(req._id)}>Accept</button>
+                              <button onClick={() => handleRejectRequest(req._id)}>Reject</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {outgoingRequests.length > 0 && (
+                        <div className="friends-outgoing-requests">
+                          <strong>Outgoing</strong>
+                          {outgoingRequests.map((req) => (
+                            <div key={req._id} className="friends-request-card">
+                              <span>To: {req.toUid}</span>
+                              <span>Status: {req.status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button className="friends-modal-close" onClick={() => setIsRequestsModalOpen(false)}>Close</button>
+                    </div>
+                  </div>
+                )}
           </div>
 
           <div className="friends-self-meta">
@@ -1374,12 +1478,17 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           {filteredContacts.map((contact) => {
             const listReceipt = getListReceipt(contact.lastMessage);
             const listReceiptClass = contact.lastMessage?.deliveryStatus === 'queued' ? 'queued' : '';
+            const mute = contactMuteMap[contact.uniqueId]?.muteDuration;
+            const disappear = contactDisappearMap[contact.uniqueId]?.disappearTimer;
             return (
-              <button
+              <div
                 key={contact.uniqueId}
                 className={`friends-contact ${selectedContactId === contact.uniqueId ? 'active' : ''}`}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectContact(contact.uniqueId)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleSelectContact(contact.uniqueId); }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="friends-contact-avatar" aria-hidden="true">
                   {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
@@ -1389,6 +1498,18 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   <div className="friends-contact-top">
                     <span className="friends-contact-name">{contact.displayName || contact.uniqueId}</span>
                     <span className="friends-contact-time">{formatChatTime(contact.lastMessage?.createdAt || contact.updatedAt)}</span>
+                    <span className="friends-contact-icons">
+                      {mute && mute !== null && mute !== 'off' && (
+                        <span className="friends-contact-mute-icon" title="Muted">
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 8v4h4l5 5V3L7 8H3z" fill="#888"/><line x1="2" y1="2" x2="18" y2="18" stroke="#e53935" strokeWidth="2"/></svg>
+                        </span>
+                      )}
+                      {disappear && disappear !== null && (
+                        <span className="friends-contact-disappear-icon" title="Disappearing Messages Enabled">
+                          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#8e24aa" strokeWidth="2"/><path d="M10 5v5l3 3" stroke="#8e24aa" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </span>
+                      )}
+                    </span>
                   </div>
 
                   <div className="friends-contact-bottom">
@@ -1415,12 +1536,12 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                       {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
                     </span>
                     {/* Remove friend button */}
-                    <button className="friends-remove-btn" onClick={() => handleRemoveFriend(contact.uniqueId)}>
+                    <button className="friends-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveFriend(contact.uniqueId); }}>
                       Remove
                     </button>
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -1432,6 +1553,73 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
         onTouchEnd={handleChatTouchEnd}
       >
         <header className="friends-chat-header">
+          {/* Media/Links/Docs Modal */}
+          {showMediaModal && (
+            <div className="friends-modal-overlay" onClick={handleCloseMediaModal}>
+              <div className="friends-modal friends-media-modal" onClick={e => e.stopPropagation()}>
+                <h2>Media, Links & Docs</h2>
+                <div className="friends-media-sections">
+                  <div className="friends-media-section">
+                    <h4>Media</h4>
+                    {mediaMessages.length === 0 ? <div className="friends-empty-list">No media shared</div> : (
+                      <div className="friends-media-list">
+                        {mediaMessages.map((msg) => (
+                          <div key={msg.id || msg._id} className="friends-media-item">
+                            {msg.mediaUrl || msg.imageUrl ? (
+                              <img src={msg.mediaUrl || msg.imageUrl} alt="media" style={{maxWidth:'100px',maxHeight:'100px',borderRadius:'8px'}} />
+                            ) : null}
+                            {msg.fileName && <div className="friends-media-filename">{msg.fileName}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="friends-media-section">
+                    <h4>Links</h4>
+                    {linkMessages.length === 0 ? <div className="friends-empty-list">No links shared</div> : (
+                      <ul className="friends-link-list">
+                        {linkMessages.map((msg) => (
+                          <li key={msg.id || msg._id} className="friends-link-item">
+                            <a href={msg.text.match(/https?:\/\/[\w\-._~:/?#[\]@!$&'()*+,;=%]+/g)?.[0] || '#'} target="_blank" rel="noopener noreferrer">
+                              {msg.text.match(/https?:\/\/[\w\-._~:/?#[\]@!$&'()*+,;=%]+/g)?.[0] || msg.text}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="friends-media-section">
+                    <h4>Docs</h4>
+                    {docMessages.length === 0 ? <div className="friends-empty-list">No documents shared</div> : (
+                      <ul className="friends-doc-list">
+                        {docMessages.map((msg) => (
+                          <li key={msg.id || msg._id} className="friends-doc-item">
+                            <a href={msg.mediaUrl || msg.fileUrl} target="_blank" rel="noopener noreferrer">
+                              {msg.fileName || 'Document'}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+                <button className="friends-modal-close" onClick={handleCloseMediaModal}>Close</button>
+              </div>
+            </div>
+          )}
+          {/* Clear Chat Confirmation Modal */}
+          {isClearChatConfirmOpen && (
+            <div className="friends-modal-overlay" onClick={handleCancelClearChat}>
+              <div className="friends-modal friends-clear-chat-modal" onClick={e => e.stopPropagation()}>
+                <h3>Clear Chat</h3>
+                <p>Are you sure you want to delete all messages in this chat? This cannot be undone.</p>
+                <div className="friends-modal-actions">
+                  <button className="friends-modal-btn danger" onClick={handleConfirmClearChat}>Clear</button>
+                  <button className="friends-modal-btn" onClick={handleCancelClearChat}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="friends-chat-header-main">
             {isMobileLayout && mobilePane === 'chat' ? (
               <button
@@ -1473,29 +1661,63 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </button>
                   {isHeaderMenuOpen && (
                     <div className="friends-header-menu-dropdown" role="menu">
-                      <button type="button" onClick={handleClearChat}>
+                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleClearChat(); }}>
                         <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="4" width="14" height="14" rx="4" fill="#ffebee" stroke="#e53935" strokeWidth="1.2"/><path d="M8 8l6 6M14 8l-6 6" stroke="#e53935" strokeWidth="1.5" strokeLinecap="round"/></svg>
                         </span>
                         Clear Chat
                       </button>
-                      <button type="button" onClick={handleShowMedia}>
+                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleShowMedia(); }}>
                         <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="12" rx="3" fill="#e3f2fd" stroke="#1976d2" strokeWidth="1.2"/><circle cx="8" cy="11" r="2" fill="#90caf9"/><rect x="11" y="12" width="5" height="3" rx="1.5" fill="#1976d2" opacity=".3"/></svg>
                         </span>
                         Media, Links, Docs
                       </button>
-                      <button type="button" onClick={handleToggleDisappearing}>
+                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleToggleDisappearing(); }}>
                         <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><path d="M7 11a4 4 0 018 0c0 2.21-1.79 4-4 4s-4-1.79-4-4z" fill="#8e24aa" opacity=".2"/><path d="M11 7v4l2 2" stroke="#8e24aa" strokeWidth="1.5" strokeLinecap="round"/></svg>
                         </span>
-                        {isDisappearing ? 'Disable' : 'Enable'} Disappearing Messages
+                        {disappearTimer ? `Disappearing: ${disappearTimer} min` : 'Set Disappearing Messages'}
+                                {/* Disappearing Message Timer Modal */}
+                                {showDisappearModal && (
+                                  <div className="friends-modal-overlay" onClick={handleCloseDisappearModal}>
+                                    <div className="friends-modal friends-disappear-modal" onClick={e => e.stopPropagation()}>
+                                      <h2>Set Disappearing Messages</h2>
+                                      <div className="friends-disappear-options">
+                                        <button onClick={() => handleSetDisappearTimer(1)} className={disappearTimer===1 ? 'active' : ''}>1 min</button>
+                                        <button onClick={() => handleSetDisappearTimer(5)} className={disappearTimer===5 ? 'active' : ''}>5 min</button>
+                                        <button onClick={() => handleSetDisappearTimer(10)} className={disappearTimer===10 ? 'active' : ''}>10 min</button>
+                                        <button onClick={() => handleSetDisappearTimer(30)} className={disappearTimer===30 ? 'active' : ''}>30 min</button>
+                                        <button onClick={() => handleSetDisappearTimer(60)} className={disappearTimer===60 ? 'active' : ''}>1 hour</button>
+                                        <button onClick={() => handleSetDisappearTimer(null)} className={!disappearTimer ? 'active' : ''}>Off</button>
+                                      </div>
+                                      <button className="friends-modal-close" onClick={handleCloseDisappearModal}>Close</button>
+                                    </div>
+                                  </div>
+                                )}
                       </button>
-                      <button type="button" onClick={handleToggleMute}>
+                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleToggleMute(); }}>
                         <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="7" width="6" height="8" rx="2" fill="#e8f5e9" stroke="#43a047" strokeWidth="1.2"/><rect x="10" y="9" width="6" height="4" rx="2" fill="#43a047" opacity=".3"/><path d="M16 7l2 2m0 0l-2 2m2-2H14" stroke="#e53935" strokeWidth="1.2" strokeLinecap="round"/></svg>
                         </span>
-                        {isMute ? 'Unmute' : 'Mute'} Notifications
+                        {muteDuration === 'always' ? 'Muted: Always' : muteDuration ? `Muted: ${muteDuration} min` : 'Mute Notifications'}
+                                {/* Mute Notification Duration Modal */}
+                                {showMuteModal && (
+                                  <div className="friends-modal-overlay" onClick={handleCloseMuteModal}>
+                                    <div className="friends-modal friends-mute-modal" onClick={e => e.stopPropagation()}>
+                                      <h2>Mute Notifications</h2>
+                                      <div className="friends-mute-options">
+                                        <button onClick={() => handleSetMuteDuration(15)} className={muteDuration===15 ? 'active' : ''}>15 min</button>
+                                        <button onClick={() => handleSetMuteDuration(60)} className={muteDuration===60 ? 'active' : ''}>1 hour</button>
+                                        <button onClick={() => handleSetMuteDuration(240)} className={muteDuration===240 ? 'active' : ''}>4 hours</button>
+                                        <button onClick={() => handleSetMuteDuration(1440)} className={muteDuration===1440 ? 'active' : ''}>1 day</button>
+                                        <button onClick={() => handleSetMuteDuration('always')} className={muteDuration==='always' ? 'active' : ''}>Always</button>
+                                        <button onClick={() => handleSetMuteDuration(null)} className={!muteDuration ? 'active' : ''}>Off</button>
+                                      </div>
+                                      <button className="friends-modal-close" onClick={handleCloseMuteModal}>Close</button>
+                                    </div>
+                                  </div>
+                                )}
                       </button>
                     </div>
                   )}
@@ -1828,6 +2050,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 };
 
 // --- Main FriendsFeature Component ---
+
 function FriendsFeature({ onSwitchToClassic }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [authToken, setAuthToken] = useState('');
@@ -1836,34 +2059,46 @@ function FriendsFeature({ onSwitchToClassic }) {
   const [phoneState, setPhoneState] = useState('idle');
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const recaptchaRef = useRef(null);
 
   const refreshProfile = async (token) => {
     const idToken = token || authToken;
     if (!idToken) return;
-    const data = await fetchFriendsProfile(idToken);
-    setProfile(data.profile);
+    setIsLoading(true);
+    try {
+      const data = await fetchFriendsProfile(idToken);
+      setProfile(data.profile);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     if (!isFirebaseConfigured || !friendsAuth) return undefined;
 
+    setIsLoading(true);
     const unsub = onAuthStateChanged(friendsAuth, async (nextUser) => {
       setFirebaseUser(nextUser);
       if (!nextUser) {
         setAuthToken('');
         setProfile(null);
+        setIsLoading(false);
         return;
       }
       try {
+        setIsLoading(true);
         const token = await nextUser.getIdToken(true);
         setAuthToken(token);
       } catch (e) {
         setError(e.message || 'Failed to get auth token');
+      } finally {
+        setIsLoading(false);
       }
     });
 
+    setIsLoading(false);
     return () => unsub();
   }, []);
 
@@ -1904,6 +2139,7 @@ function FriendsFeature({ onSwitchToClassic }) {
       return;
     }
     setError('');
+    setIsLoading(true);
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(friendsAuth, provider);
@@ -1917,11 +2153,14 @@ function FriendsFeature({ onSwitchToClassic }) {
           return;
         } catch (redirectError) {
           setError(mapFirebaseAuthError(redirectError));
+          setIsLoading(false);
           return;
         }
       }
 
       setError(mapFirebaseAuthError(e));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1941,6 +2180,7 @@ function FriendsFeature({ onSwitchToClassic }) {
       return;
     }
     setError('');
+    setIsLoading(true);
     try {
       setPhoneState('sending');
       if (!recaptchaRef.current) {
@@ -1955,13 +2195,17 @@ function FriendsFeature({ onSwitchToClassic }) {
     } catch (e) {
       setPhoneState('idle');
       setError(mapFirebaseAuthError(e));
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handlePhoneConfirm = async (code) => {
     setError('');
+    setIsLoading(true);
     if (!confirmationResult) {
       setError('Send OTP first.');
+      setIsLoading(false);
       return;
     }
     try {
@@ -1969,11 +2213,14 @@ function FriendsFeature({ onSwitchToClassic }) {
       setPhoneState('verified');
     } catch (e) {
       setError(mapFirebaseAuthError(e));
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleLogout = async () => {
     setError('');
+    setIsLoading(true);
     try {
       if (friendsAuth) await signOut(friendsAuth);
       setProfile(null);
@@ -1985,6 +2232,8 @@ function FriendsFeature({ onSwitchToClassic }) {
       }
     } catch (e) {
       setError(e.message || 'Logout failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -2008,6 +2257,15 @@ function FriendsFeature({ onSwitchToClassic }) {
 
         <h3 className="friends-title">Friends Login</h3>
         <p className="friends-error">Missing Firebase client configuration in frontend env.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="friends-loading" style={{ textAlign: 'center', padding: '2rem' }}>
+        <div className="friends-spinner" style={{ margin: '1rem auto', width: 40, height: 40, border: '4px solid #ccc', borderTop: '4px solid #1976d2', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div>Loading, please wait...</div>
       </div>
     );
   }

@@ -1,3 +1,8 @@
+// Delete all messages in a conversation for the user
+export const deleteConversationMessages = (token, contactUniqueId) =>
+  request(`/api/friends/messages/${encodeURIComponent(contactUniqueId)}/delete`, token, {
+    method: 'POST'
+  });
 // Friend request APIs
 export const sendFriendRequest = (token, toUniqueId) =>
   request('/api/friends/request', token, {
