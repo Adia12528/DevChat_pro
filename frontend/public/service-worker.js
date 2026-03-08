@@ -1,6 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
-const CACHE_NAME = 'devchat-pro-v2.2.0-b1772505530758';
+// Dynamically injected by build script or fallback
+importScripts('version.js');
+const CACHE_NAME = (typeof CACHE_VERSION !== 'undefined') ? CACHE_VERSION : 'devchat-pro-v-unknown';
 const urlsToCache = [
   '/',
   '/static/css/main.css',
@@ -28,6 +30,29 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
+// Always clear old caches on activation
+self.addEventListener('activate', (event) => {
+  console.log('[ServiceWorker] Activating version:', CACHE_NAME);
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[ServiceWorker] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => {
+      return self.clients.claim();
+    })
+  );
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage({ type: 'FORCE_RELOAD' });
+    });
+  });
+});
 // Always check for updates and claim clients on every activation
 self.addEventListener('activate', (event) => {
   console.log('[ServiceWorker] Activating version:', CACHE_NAME);
