@@ -287,9 +287,25 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
 
 // --- FriendsWorkspace Component ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+    // --- State declarations (contacts must be first if referenced below) ---
+    const [contacts, setContacts] = useState([]);
+    // Friends modal open state
+    const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
     // Per-contact mute/disappear state
     const [contactMuteMap, setContactMuteMap] = useState({}); // { [contactId]: { muteDuration } }
     const [contactDisappearMap, setContactDisappearMap] = useState({}); // { [contactId]: { disappearTimer } }
+
+    // Friends modal and search hooks (must be at top level)
+    const [friendsSearch, setFriendsSearch] = useState("");
+    const filteredFriends = useMemo(() => {
+      const search = friendsSearch.trim().toLowerCase();
+      if (!search) return contacts;
+      return contacts.filter(
+        c => (c.displayName || c.uniqueId || "").toLowerCase().includes(search) ||
+             (c.email || "").toLowerCase().includes(search) ||
+             (c.phoneNumber || "").toLowerCase().includes(search)
+      );
+    }, [friendsSearch, contacts]);
   // Notify user of incoming message (sound + desktop notification)
   const notifyIncomingMessage = (contact, message) => {
     // Play notification sound
@@ -379,7 +395,6 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [requestsError, setRequestsError] = useState('');
-  const [contacts, setContacts] = useState([]);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [messagesByContact, setMessagesByContact] = useState({});
   const [chatSearchInput, setChatSearchInput] = useState('');
@@ -1385,12 +1400,72 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   type="button"
                   className="friends-menu-item"
                   onClick={() => {
+                    setIsFriendsModalOpen(true);
+                  }}
+                >
+                  Friends
+                </button>
+                <button
+                  type="button"
+                  className="friends-menu-item"
+                  onClick={() => {
                     setIsMenuOpen(false);
                     setIsProfileModalOpen(true);
                   }}
                 >
                   Profile
                 </button>
+                {/* Friends Modal rendered outside the menu dropdown */}
+                {isFriendsModalOpen && (
+                  <div className="friends-modal-backdrop" onClick={() => setIsFriendsModalOpen(false)}>
+                    <div className="friends-modal friends-friends-modal" onClick={e => e.stopPropagation()}>
+                      <h2>All Friends</h2>
+                      <input
+                        className="friends-list-search"
+                        type="text"
+                        placeholder="Search friends..."
+                        value={friendsSearch}
+                        onChange={e => setFriendsSearch(e.target.value)}
+                        style={{marginBottom: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #ccd6dd', width: '100%'}}
+                        autoFocus
+                      />
+                      <div className="friends-list-modal">
+                        {filteredFriends.length === 0 ? (
+                          <div className="friends-empty">No friends found.</div>
+                        ) : (
+                          filteredFriends.map((contact) => (
+                            <div key={contact.uniqueId} className="friends-list-card">
+                              <div className="friends-list-avatar">
+                                {contact.photoURL ? (
+                                  <img src={contact.photoURL} alt={contact.displayName || contact.uniqueId} />
+                                ) : (
+                                  <span>{(contact.displayName || contact.uniqueId)[0]?.toUpperCase()}</span>
+                                )}
+                                <span className={`friends-list-status ${contact.online ? 'online' : 'offline'}`}></span>
+                              </div>
+                              <div className="friends-list-meta">
+                                <strong>{contact.displayName || contact.uniqueId}</strong>
+                                <small>{contact.email || contact.phoneNumber || contact.uniqueId}</small>
+                              </div>
+                              <button
+                                className="friends-remove-btn"
+                                onClick={() => {
+                                  if(window.confirm(`Remove ${contact.displayName || contact.uniqueId}?`)) handleRemoveFriend(contact.uniqueId);
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="friends-add-modal-actions">
+                        <button type="button" onClick={() => setIsFriendsModalOpen(false)}>Close</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                      
                 <button
                   type="button"
                   className="friends-menu-item"
@@ -1535,10 +1610,6 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                       <span className={`friends-presence-dot ${contact.online ? 'online' : 'offline'}`} title={contact.online ? 'Online' : 'Offline'} />
                       {contact.unreadCount > 0 ? <span className="friends-unread-badge">{contact.unreadCount}</span> : null}
                     </span>
-                    {/* Remove friend button */}
-                    <button className="friends-remove-btn" onClick={e => { e.stopPropagation(); handleRemoveFriend(contact.uniqueId); }}>
-                      Remove
-                    </button>
                   </div>
                 </div>
               </div>
@@ -1655,69 +1726,60 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                     type="button"
                     className="friends-header-menu-btn"
                     aria-label="Chat options"
+                    aria-haspopup="true"
+                    aria-expanded={isHeaderMenuOpen}
+                    tabIndex={0}
                     onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
+                    style={{ borderRadius: 8, border: 'none', background: 'transparent', padding: 6, cursor: 'pointer', outline: isHeaderMenuOpen ? '2px solid #1976d2' : 'none' }}
                   >
                     &#8942;
                   </button>
                   {isHeaderMenuOpen && (
-                    <div className="friends-header-menu-dropdown" role="menu">
-                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleClearChat(); }}>
-                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                    <div
+                      className="friends-header-menu-dropdown improved"
+                      role="menu"
+                      aria-label="Chat options menu"
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 36,
+                        minWidth: 210,
+                        background: '#fff',
+                        borderRadius: 12,
+                        boxShadow: '0 4px 24px 0 rgba(0,0,0,0.13)',
+                        zIndex: 100,
+                        padding: 0,
+                        border: '1px solid #e0e0e0',
+                        overflow: 'hidden',
+                        animation: 'fadeIn .18s cubic-bezier(.4,0,.2,1)'
+                      }}
+                    >
+                      <button type="button" role="menuitem" title="Clear all messages in this chat" style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 18px',background:'none',border:'none',cursor:'pointer',fontSize:15}} onClick={() => { setIsHeaderMenuOpen(false); handleClearChat(); }} onMouseOver={e=>e.currentTarget.style.background='#f5f5f5'} onMouseOut={e=>e.currentTarget.style.background='none'}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,minWidth:32}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="4" width="14" height="14" rx="4" fill="#ffebee" stroke="#e53935" strokeWidth="1.2"/><path d="M8 8l6 6M14 8l-6 6" stroke="#e53935" strokeWidth="1.5" strokeLinecap="round"/></svg>
                         </span>
-                        Clear Chat
+                        <span style={{marginTop:6,display:'block',width:'100%',textAlign:'center',whiteSpace:'normal',overflowWrap:'break-word',wordBreak:'break-word',lineHeight:'20px',fontWeight:500}}>Clear Chat</span>
                       </button>
-                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleShowMedia(); }}>
-                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                      <div style={{height:1,background:'#ececec',margin:'0 10px'}} />
+                      <button type="button" role="menuitem" title="View all media, links, and documents" style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 18px',background:'none',border:'none',cursor:'pointer',fontSize:15}} onClick={() => { setIsHeaderMenuOpen(false); handleShowMedia(); }} onMouseOver={e=>e.currentTarget.style.background='#f5f5f5'} onMouseOut={e=>e.currentTarget.style.background='none'}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,minWidth:32}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="12" rx="3" fill="#e3f2fd" stroke="#1976d2" strokeWidth="1.2"/><circle cx="8" cy="11" r="2" fill="#90caf9"/><rect x="11" y="12" width="5" height="3" rx="1.5" fill="#1976d2" opacity=".3"/></svg>
                         </span>
-                        Media, Links, Docs
+                        <span style={{marginTop:6,display:'block',width:'100%',textAlign:'center',whiteSpace:'normal',overflowWrap:'break-word',wordBreak:'break-word',lineHeight:'20px',fontWeight:500}}>Media, Links, Docs</span>
                       </button>
-                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleToggleDisappearing(); }}>
-                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                      <div style={{height:1,background:'#ececec',margin:'0 10px'}} />
+                      <button type="button" role="menuitem" title="Set disappearing messages timer" style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 18px',background:'none',border:'none',cursor:'pointer',fontSize:15}} onClick={() => { handleToggleDisappearing(); }} onMouseOver={e=>e.currentTarget.style.background='#f5f5f5'} onMouseOut={e=>e.currentTarget.style.background='none'}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,minWidth:32}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="10" fill="#f3e5f5" stroke="#8e24aa" strokeWidth="1.2"/><path d="M7 11a4 4 0 018 0c0 2.21-1.79 4-4 4s-4-1.79-4-4z" fill="#8e24aa" opacity=".2"/><path d="M11 7v4l2 2" stroke="#8e24aa" strokeWidth="1.5" strokeLinecap="round"/></svg>
                         </span>
-                        {disappearTimer ? `Disappearing: ${disappearTimer} min` : 'Set Disappearing Messages'}
-                                {/* Disappearing Message Timer Modal */}
-                                {showDisappearModal && (
-                                  <div className="friends-modal-overlay" onClick={handleCloseDisappearModal}>
-                                    <div className="friends-modal friends-disappear-modal" onClick={e => e.stopPropagation()}>
-                                      <h2>Set Disappearing Messages</h2>
-                                      <div className="friends-disappear-options">
-                                        <button onClick={() => handleSetDisappearTimer(1)} className={disappearTimer===1 ? 'active' : ''}>1 min</button>
-                                        <button onClick={() => handleSetDisappearTimer(5)} className={disappearTimer===5 ? 'active' : ''}>5 min</button>
-                                        <button onClick={() => handleSetDisappearTimer(10)} className={disappearTimer===10 ? 'active' : ''}>10 min</button>
-                                        <button onClick={() => handleSetDisappearTimer(30)} className={disappearTimer===30 ? 'active' : ''}>30 min</button>
-                                        <button onClick={() => handleSetDisappearTimer(60)} className={disappearTimer===60 ? 'active' : ''}>1 hour</button>
-                                        <button onClick={() => handleSetDisappearTimer(null)} className={!disappearTimer ? 'active' : ''}>Off</button>
-                                      </div>
-                                      <button className="friends-modal-close" onClick={handleCloseDisappearModal}>Close</button>
-                                    </div>
-                                  </div>
-                                )}
+                        <span style={{marginTop:6,display:'block',width:'100%',textAlign:'center',whiteSpace:'normal',overflowWrap:'break-word',wordBreak:'break-word',lineHeight:'20px',fontWeight:500}}>{disappearTimer ? `Disappearing: ${disappearTimer} min` : 'Set Disappearing Messages'}</span>
                       </button>
-                      <button type="button" onClick={() => { setIsHeaderMenuOpen(false); handleToggleMute(); }}>
-                        <span aria-hidden="true" style={{display:'flex',alignItems:'center'}}>
+                      <div style={{height:1,background:'#ececec',margin:'0 10px'}} />
+                      <button type="button" role="menuitem" title="Mute notifications for this chat" style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'10px 18px',background:'none',border:'none',cursor:'pointer',fontSize:15}} onClick={() => { handleToggleMute(); }} onMouseOver={e=>e.currentTarget.style.background='#f5f5f5'} onMouseOut={e=>e.currentTarget.style.background='none'}>
+                        <span aria-hidden="true" style={{display:'flex',alignItems:'center',justifyContent:'center',width:32,minWidth:32}}>
                           <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="4" y="7" width="6" height="8" rx="2" fill="#e8f5e9" stroke="#43a047" strokeWidth="1.2"/><rect x="10" y="9" width="6" height="4" rx="2" fill="#43a047" opacity=".3"/><path d="M16 7l2 2m0 0l-2 2m2-2H14" stroke="#e53935" strokeWidth="1.2" strokeLinecap="round"/></svg>
                         </span>
-                        {muteDuration === 'always' ? 'Muted: Always' : muteDuration ? `Muted: ${muteDuration} min` : 'Mute Notifications'}
-                                {/* Mute Notification Duration Modal */}
-                                {showMuteModal && (
-                                  <div className="friends-modal-overlay" onClick={handleCloseMuteModal}>
-                                    <div className="friends-modal friends-mute-modal" onClick={e => e.stopPropagation()}>
-                                      <h2>Mute Notifications</h2>
-                                      <div className="friends-mute-options">
-                                        <button onClick={() => handleSetMuteDuration(15)} className={muteDuration===15 ? 'active' : ''}>15 min</button>
-                                        <button onClick={() => handleSetMuteDuration(60)} className={muteDuration===60 ? 'active' : ''}>1 hour</button>
-                                        <button onClick={() => handleSetMuteDuration(240)} className={muteDuration===240 ? 'active' : ''}>4 hours</button>
-                                        <button onClick={() => handleSetMuteDuration(1440)} className={muteDuration===1440 ? 'active' : ''}>1 day</button>
-                                        <button onClick={() => handleSetMuteDuration('always')} className={muteDuration==='always' ? 'active' : ''}>Always</button>
-                                        <button onClick={() => handleSetMuteDuration(null)} className={!muteDuration ? 'active' : ''}>Off</button>
-                                      </div>
-                                      <button className="friends-modal-close" onClick={handleCloseMuteModal}>Close</button>
-                                    </div>
-                                  </div>
-                                )}
+                        <span style={{marginTop:6,display:'block',width:'100%',textAlign:'center',whiteSpace:'normal',overflowWrap:'break-word',wordBreak:'break-word',lineHeight:'20px',fontWeight:500}}>{muteDuration === 'always' ? 'Muted: Always' : muteDuration ? `Muted: ${muteDuration} min` : 'Mute Notifications'}</span>
                       </button>
                     </div>
                   )}
@@ -1847,14 +1909,19 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
         )}
       </section>
 
-      <button
-        type="button"
-        className="friends-fab"
-        onClick={handleOpenAddModal}
-        aria-label="Add people"
-      >
-        +
-      </button>
+
+
+      {/* Show + button only in mobile-list area or when no chat is open on desktop */}
+      {((isMobileLayout && mobilePane === 'list') || (!isMobileLayout && !selectedContact)) && (
+        <button
+          type="button"
+          className="friends-fab"
+          onClick={handleOpenAddModal}
+          aria-label="Add people"
+        >
+          +
+        </button>
+      )}
 
       {isAddModalOpen ? (
         <div className="friends-modal-backdrop" role="presentation" onClick={() => setIsAddModalOpen(false)}>

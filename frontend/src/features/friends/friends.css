@@ -1,3 +1,73 @@
+/* Friends List Modal Enhancements */
+.friends-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.friends-list-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #f7fafc;
+  border: 1px solid #d8d2ca;
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.friends-list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e3f2fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #1976d2;
+  position: relative;
+  overflow: hidden;
+}
+.friends-list-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.friends-list-status {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+.friends-list-status.online {
+  background: #43a047;
+}
+.friends-list-status.offline {
+  background: #b0bec5;
+}
+.friends-list-meta {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.friends-list-meta strong {
+  font-size: 1rem;
+  color: #1976d2;
+}
+.friends-list-meta small {
+  color: #607d8b;
+  font-size: 0.85rem;
+}
+.friends-list-search {
+  margin-bottom: 10px;
+}
 /* Mobile chat layout fix */
 @media (max-width: 700px) {
   .friends-main {
@@ -1510,8 +1580,12 @@
   border: 1px solid #ffb74d;
 }
 
+
 .friends-msg {
-  max-width: min(78%, 560px);
+  display: inline-block;
+  min-width: 48px;
+  max-width: 90vw;
+  width: fit-content;
   border-radius: 14px;
   padding: 9px 11px;
   border: 1px solid #d8d2ca;
@@ -1519,6 +1593,8 @@
   color: #1a2329;
   font-weight: 500;
   justify-self: start;
+  word-break: break-word;
+  white-space: pre-line;
   animation: friendsMessageIn 140ms ease-out;
 }
 
