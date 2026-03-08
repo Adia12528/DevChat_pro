@@ -1,120 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import RecordRTC from 'recordrtc';
-  // --- Voice recording state and logic ---
-  const [isRecording, setIsRecording] = useState(false);
-  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
-  const [recordedAudioURL, setRecordedAudioURL] = useState(null);
-  const [recorder, setRecorder] = useState(null);
-  const [recordingError, setRecordingError] = useState('');
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const mediaStreamRef = useRef(null);
-
-  // Start recording handler
-  const handleStartVoiceRecording = async () => {
-    setRecordingError('');
-    setIsRecordingModalOpen(true);
-    setIsPreviewing(false);
-    setRecordedAudioURL(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      const newRecorder = new RecordRTC(stream, {
-        type: 'audio',
-        mimeType: 'audio/webm',
-        recorderType: RecordRTC.StereoAudioRecorder,
-        numberOfAudioChannels: 1,
-        desiredSampRate: 16000
-      });
-      newRecorder.startRecording();
-      setRecorder(newRecorder);
-      setIsRecording(true);
-    } catch (err) {
-      setRecordingError('Could not access microphone. Please allow mic access.');
-      setIsRecording(false);
-      setIsRecordingModalOpen(false);
-    }
-  };
-
-  // Stop recording handler
-  const handleStopVoiceRecording = () => {
-    if (recorder) {
-      recorder.stopRecording(() => {
-        const blob = recorder.getBlob();
-        const url = URL.createObjectURL(blob);
-        setRecordedAudioURL(url);
-        setIsPreviewing(true);
-        setIsRecording(false);
-        setRecorder(null);
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach(track => track.stop());
-          mediaStreamRef.current = null;
-        }
-      });
-    }
-  };
-
-  // Cancel recording handler
-  const handleCancelVoiceRecording = () => {
-    setIsRecording(false);
-    setIsRecordingModalOpen(false);
-    setRecordedAudioURL(null);
-    setRecorder(null);
-    setIsPreviewing(false);
-    setRecordingError('');
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
-  };
-
-  // Confirm/send voice message handler
-  const handleSendVoiceMessage = async () => {
-    if (!recorder && !recordedAudioURL) return;
-    setRecordingError('');
-    try {
-      // Fetch the blob from the recordedAudioURL
-      let blob;
-      if (recorder && recorder.getBlob) {
-        blob = recorder.getBlob();
-      } else if (recordedAudioURL) {
-        const response = await fetch(recordedAudioURL);
-        blob = await response.blob();
-      }
-      if (!blob) throw new Error('No audio data to send.');
-
-      // Upload audio to backend
-      const formData = new FormData();
-      formData.append('audio', blob, 'voice-message.webm');
-      const uploadRes = await fetch('/api/upload/audio', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await uploadRes.json();
-      if (data.url) {
-        // Send audio message
-        await sendMessage(authToken, {
-          toUniqueId: selectedContact.uniqueId,
-          text: '',
-          type: 'audio',
-          fileUrl: data.url,
-          fileName: 'voice-message.webm',
-          fileSize: blob.size
-        });
-        showToast('Voice message sent!', 'success');
-      } else {
-        showToast('Audio upload failed', 'error');
-        setRecordingError('Audio upload failed.');
-        return;
-      }
-    } catch (err) {
-      setRecordingError('Failed to send voice message.');
-      showToast('Failed to send voice message', 'error');
-    } finally {
-      setIsRecordingModalOpen(false);
-      setIsPreviewing(false);
-      setRecordedAudioURL(null);
-    }
-  };
 // For emoji picker, you may use a library like emoji-mart or keep the existing logic
 import { io } from 'socket.io-client';
 // --- LoginPanel: must be defined before FriendsFeature uses it ---
@@ -206,7 +90,6 @@ import {
   signOut
 } from 'firebase/auth';
 import './friends.css';
-import { useToast } from './toast';
 import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
 import {
   addContact,
@@ -223,7 +106,6 @@ import {
 
 // --- FriendsWorkspace: Move all friend request logic here ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
-  const { showToast, Toast } = useToast();
     // Notify user of incoming message (sound + desktop notification)
     const notifyIncomingMessage = (contact, message) => {
       // Play notification sound
@@ -714,73 +596,33 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
     const handleUploadImage = (e) => {
       const file = e.target.files && e.target.files[0];
       if (file && selectedContact) {
-        // Upload image to backend
-        const formData = new FormData();
-        formData.append('image', file);
-        fetch('/api/upload/image', {
-          method: 'POST',
-          body: formData
-        })
-          .then(res => res.json())
-          .then(data => {
-            if (data.url) {
-              // Send image message
-              sendMessage(authToken, {
-                toUniqueId: selectedContact.uniqueId,
-                text: '',
-                type: 'image',
-                fileUrl: data.url,
-                fileName: file.name,
-                fileSize: file.size
-              });
-              showToast('Image uploaded!', 'success');
-            } else {
-              showToast('Upload failed', 'error');
-            }
-          })
-          .catch(() => showToast('Upload failed', 'error'));
+        // TODO: Implement image upload logic here
+        alert(`Image upload: ${file.name}`);
       }
       setIsInputMenuOpen(false);
       e.target.value = '';
     };
 
-
     const handleClearChat = () => {
-      setIsHeaderMenuOpen(false);
-      if (!selectedContactId) return;
       if (window.confirm('Clear all messages in this chat?')) {
         setMessagesByContact((prev) => ({ ...prev, [selectedContactId]: [] }));
-        showToast('Chat cleared', 'success');
-      } else {
-        showToast('Cancelled', 'info');
       }
+      setIsHeaderMenuOpen(false);
     };
-
 
     const handleToggleMute = () => {
+      setIsMute((prev) => !prev);
       setIsHeaderMenuOpen(false);
-      setIsMute((prev) => {
-        const next = !prev;
-        showToast(next ? 'Notifications muted' : 'Notifications unmuted', 'info');
-        return next;
-      });
     };
-
 
     const handleToggleDisappearing = () => {
+      setIsDisappearing((prev) => !prev);
       setIsHeaderMenuOpen(false);
-      setIsDisappearing((prev) => {
-        const next = !prev;
-        showToast(next ? 'Disappearing messages enabled' : 'Disappearing messages disabled', 'info');
-        return next;
-      });
     };
 
-
     const handleShowMedia = () => {
-      setIsHeaderMenuOpen(false);
       setShowMediaModal(true);
-      showToast('Media, links, and docs opened', 'info');
+      setIsHeaderMenuOpen(false);
     };
 
     const handleCloseMediaModal = () => setShowMediaModal(false);
@@ -1779,17 +1621,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
             const msg = item.message;
             return (
               <article key={item.id} className={`friends-msg ${msg.isMine ? 'me' : ''}`}>
-                <div>
-                  {msg.type === 'image' && msg.fileUrl ? (
-                    <img src={msg.fileUrl} alt={msg.fileName || 'Image'} style={{ maxWidth: '220px', borderRadius: '12px', marginBottom: '6px' }} />
-                  ) : null}
-                  {msg.type === 'audio' && msg.fileUrl ? (
-                    <audio controls src={msg.fileUrl} style={{ width: '220px', marginBottom: '6px', display: 'block' }}>
-                      Your browser does not support the audio element.
-                    </audio>
-                  ) : null}
-                  {msg.text}
-                </div>
+                <div>{msg.text}</div>
                 <div className="friends-msg-meta">
                   <span>{formatChatTime(msg.createdAt)} • {getFriendlyRemaining(msg.expiresAt)}</span>
                   {msg.isMine ? (() => {
@@ -1892,49 +1724,6 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
               <button type="button" onClick={handleSendMessage} disabled={!selectedContact || !message.trim()}>
                 Send
               </button>
-              {/* Voice recorder button */}
-              <button
-                type="button"
-                className="friends-voice-btn"
-                aria-label="Record voice message"
-                title="Record voice message"
-                disabled={!selectedContact}
-                onClick={handleStartVoiceRecording}
-              >
-                {/* Microphone SVG icon */}
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <rect width="28" height="28" rx="14" fill="#f3e5f5" />
-                  <rect x="10" y="6" width="8" height="12" rx="4" fill="#8e24aa" />
-                  <rect x="13" y="20" width="2" height="4" rx="1" fill="#8e24aa" />
-                  <rect x="9" y="22" width="10" height="2" rx="1" fill="#ce93d8" />
-                </svg>
-              </button>
-                    {/* Voice recording modal */}
-                    {isRecordingModalOpen && (
-                      <div className="friends-modal-backdrop" role="presentation" onClick={handleCancelVoiceRecording}>
-                        <div className="friends-profile-modal" role="dialog" aria-label="Record voice message" onClick={e => e.stopPropagation()}>
-                          <h4>Voice Message</h4>
-                          {recordingError && <div className="friends-error">{recordingError}</div>}
-                          {!isPreviewing ? (
-                            <>
-                              <p>{isRecording ? 'Recording... Speak now.' : 'Preparing to record.'}</p>
-                              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                                <button type="button" onClick={handleStopVoiceRecording} disabled={!isRecording}>Stop</button>
-                                <button type="button" className="secondary" onClick={handleCancelVoiceRecording}>Cancel</button>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <audio controls src={recordedAudioURL} style={{ width: '100%', margin: '12px 0' }} />
-                              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                                <button type="button" onClick={handleSendVoiceMessage}>Send</button>
-                                <button type="button" className="secondary" onClick={handleCancelVoiceRecording}>Cancel</button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
               {/* Hidden file/image inputs */}
               <input type="file" accept="image/*" style={{ display: 'none' }} ref={imageInputRef} onChange={handleUploadImage} />
               <input type="file" style={{ display: 'none' }} ref={fileInputRef} onChange={handleUploadFile} />
@@ -1948,8 +1737,6 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
           </div>
         )}
 
-        {/* Toast notification */}
-        <Toast />
         {/* Media/Links/Docs Modal */}
         {showMediaModal && (
           <div className="friends-modal-backdrop" role="presentation" onClick={handleCloseMediaModal}>
