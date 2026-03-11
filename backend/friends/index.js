@@ -1,26 +1,5 @@
-  // Delete a single message by ID
-  router.delete('/messages/:messageId', authRequired, async (req, res) => {
-    try {
-      const me = await ensureProfile(FriendProfile, req.firebaseUser);
-      const messageId = req.params.messageId;
-      if (!messageId) return res.status(400).json({ error: 'messageId required.' });
-      const msg = await FriendMessage.findById(messageId);
-      if (!msg) return res.status(404).json({ error: 'Message not found.' });
-      if (msg.fromUid !== me.uid) return res.status(403).json({ error: 'Not authorized to delete this message.' });
-      // Restrict deleting to within 12 hours of creation
-      const created = new Date(msg.createdAt).getTime();
-      const now = Date.now();
-      if ((now - created) > 12 * 60 * 60 * 1000) {
-        return res.status(403).json({ error: 'Deleting is only allowed within 12 hours of sending.' });
-      }
-      await msg.deleteOne();
-      return res.json({ ok: true });
-    } catch (error) {
-      console.error('friends delete message error', error);
-      return res.status(500).json({ error: 'Failed to delete message.' });
-    }
-  });
 const express = require('express');
+// ...existing code...
 const admin = require('firebase-admin');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -396,7 +375,31 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   const { FriendRequest } = getModels(mongoose);
   const authRequired = friendsAuthMiddleware(enabled);
 
+  // Router must be initialized after dependencies
   const router = express.Router();
+
+  // Delete a single message by ID
+  router.delete('/messages/:messageId', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const messageId = req.params.messageId;
+      if (!messageId) return res.status(400).json({ error: 'messageId required.' });
+      const msg = await FriendMessage.findById(messageId);
+      if (!msg) return res.status(404).json({ error: 'Message not found.' });
+      if (msg.fromUid !== me.uid) return res.status(403).json({ error: 'Not authorized to delete this message.' });
+      // Restrict deleting to within 12 hours of creation
+      const created = new Date(msg.createdAt).getTime();
+      const now = Date.now();
+      if ((now - created) > 12 * 60 * 60 * 1000) {
+        return res.status(403).json({ error: 'Deleting is only allowed within 12 hours of sending.' });
+      }
+      await msg.deleteOne();
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends delete message error', error);
+      return res.status(500).json({ error: 'Failed to delete message.' });
+    }
+  });
 
   // Edit a message
   router.put('/messages/:messageId/edit', authRequired, async (req, res) => {
@@ -424,6 +427,13 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       return res.status(500).json({ error: 'Failed to edit message.' });
     }
   });
+
+  // ...existing code for other routes...
+
+  return router;
+};
+
+module.exports = setupFriendsFeature;
 
   // React to a message
   router.post('/messages/:messageId/react', authRequired, async (req, res) => {

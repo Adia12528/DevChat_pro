@@ -1,4 +1,6 @@
-﻿
+﻿// --- FRIENDS FEATURE: Edit Message REST endpoint ---
+// (Moved below app initialization)
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -110,6 +112,7 @@ app.get('/healthz', (req, res) => {
     });
 });
 
+// --- FRIENDS FEATURE: Edit Message REST endpoint ---
 app.get('/cors-debug', (req, res) => {
     res.json({
         message: 'CORS debug endpoint',
