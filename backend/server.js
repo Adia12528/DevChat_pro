@@ -1,4 +1,33 @@
-﻿
+﻿// --- FRIENDS FEATURE: Edit Message REST endpoint ---
+app.put('/api/friends/messages/:id/edit', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization || '';
+        const token = authHeader.replace(/^Bearer /, '');
+        // TODO: Replace with your real auth logic
+        // For now, assume sender is in req.body.sender or req.user (if you have auth middleware)
+        const sender = req.user?.uniqueId || req.body.sender || null;
+        if (!sender) return res.status(401).json({ error: 'Unauthorized: missing sender' });
+
+        const messageId = req.params.id;
+        const { text } = req.body;
+        if (!text || !text.trim()) return res.status(400).json({ error: 'Text required' });
+
+        const message = await Message.findById(messageId);
+        if (!message) return res.status(404).json({ error: 'Message not found' });
+        if (message.sender !== sender) return res.status(403).json({ error: 'Forbidden: not your message' });
+
+        if (!message.originalText) message.originalText = message.text;
+        message.text = text.trim();
+        message.edited = true;
+        message.editedAt = new Date();
+        const updatedMessage = await message.save();
+        res.json(serializeMessage(updatedMessage));
+    } catch (err) {
+        console.error('Edit message error:', err);
+        res.status(500).json({ error: 'Failed to edit message' });
+    }
+});
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');

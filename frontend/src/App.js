@@ -128,6 +128,36 @@ function AppContent() {
   const [room, setRoom] = useState('');
   const [showChat, setShowChat] = useState(false);
   const [entryMode, setEntryMode] = useState(() => sessionStorage.getItem('devchatEntryMode') || 'classic');
+
+  // Auto-login for DevRoom
+  useEffect(() => {
+    // Only run on login screen
+    if (showChat) return;
+    // Only for DevRoom login (not friends)
+    if (entryMode !== 'classic') return;
+    try {
+      const autoLoginRaw = window.localStorage.getItem('devRoom_autoLogin');
+      if (autoLoginRaw) {
+        const { username: autoUsername, roomId: autoRoomId } = JSON.parse(autoLoginRaw);
+        if (autoUsername && autoRoomId) {
+          setUsername(autoUsername);
+          setRoom(autoRoomId);
+          // Remove credentials for security
+          window.localStorage.removeItem('devRoom_autoLogin');
+          // Wait for state to update, then trigger joinRoom
+          setTimeout(() => {
+            if (typeof joinRoom === 'function') {
+              joinRoom();
+            } else {
+              // fallback: try to click the join button if present
+              const btn = document.querySelector('.join-btn');
+              if (btn) btn.click();
+            }
+          }, 200);
+        }
+      }
+    } catch (e) {}
+  }, [showChat, entryMode]);
   const [message, setMessage] = useState('');
   const [chat, setChat] = useState([]);
   const [connected, setConnected] = useState(false);
@@ -6411,7 +6441,7 @@ function AppContent() {
               className={`entry-mode-btn ${entryMode === 'classic' ? 'active' : ''}`}
               onClick={() => setEntryMode('classic')}
             >
-              Username + Room
+              DevRoom Login
             </button>
             <button
               type="button"

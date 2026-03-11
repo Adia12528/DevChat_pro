@@ -28,7 +28,9 @@ import {
   rejectFriendRequest,
   removeFriend,
   updateContactPreferences,
-  deleteConversationMessages
+  deleteConversationMessages,
+  editMessage,
+  reactToMessage
 } from './friendsApi';
 
 
@@ -287,6 +289,11 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
 
 // --- FriendsWorkspace Component ---
 const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+  // Dev Room modal state
+  const [isDevRoomModalOpen, setIsDevRoomModalOpen] = useState(false);
+  const [devRoomId, setDevRoomId] = useState(() => window.localStorage.getItem('devRoom_lastRoomId') || '');
+  const [devRoomError, setDevRoomError] = useState('');
+  const [devRoomLoading, setDevRoomLoading] = useState(false);
     // --- State declarations (contacts must be first if referenced below) ---
     const [contacts, setContacts] = useState([]);
     // Friends modal open state
@@ -436,6 +443,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [addBy, setAddBy] = useState('email');
 
+
   const typingStopTimerRef = useRef(null);
   const lastNotifyAtRef = useRef({});
   const typingActiveRef = useRef(false);
@@ -447,6 +455,19 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   const firstUnreadDividerRef = useRef(null);
   const shouldAutoScrollUnreadRef = useRef(false);
   const swipeStartRef = useRef(null);
+  // Header menu ref for click-away
+  const headerMenuRef = useRef(null);
+  // Auto-close header menu on outside click
+  useEffect(() => {
+    if (!isHeaderMenuOpen) return;
+    function handleClick(e) {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target)) {
+        setIsHeaderMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isHeaderMenuOpen]);
 
 
   const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
@@ -1498,6 +1519,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   <div className="friends-modal-backdrop" onClick={() => setIsFriendsModalOpen(false)}>
                     <div className="friends-modal friends-friends-modal" onClick={e => e.stopPropagation()}>
                       <h2>All Friends</h2>
+
                       <input
                         className="friends-list-search"
                         type="text"
@@ -1544,6 +1566,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </div>
                 )}
                       
+                {/* Dev Room menu item removed. Dev Room button will be outside menu. */}
                 <button
                   type="button"
                   className="friends-menu-item"
@@ -1554,6 +1577,118 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 >
                   Settings
                 </button>
+
+                {/* Dev Room Modal will be rendered at the root, not here */}
+                      {/* Persistent Dev Room button (always visible, outside menu) */}
+                      <button
+                        type="button"
+                        className="friends-devroom-btn"
+                        style={{
+                          position: 'fixed',
+                          bottom: 24,
+                          right: 24,
+                          zIndex: 2100,
+                          padding: window.innerWidth <= 600 ? '10px 16px' : '12px 22px',
+                          borderRadius: 12,
+                          background: '#1976d2',
+                          color: '#fff',
+                          fontWeight: 600,
+                          fontSize: window.innerWidth <= 600 ? 15 : 17,
+                          boxShadow: '0 2px 12px 0 rgba(0,0,0,0.13)',
+                          border: 'none',
+                          cursor: 'pointer',
+                          width: window.innerWidth <= 480 ? '90vw' : undefined,
+                          left: window.innerWidth <= 480 ? '5vw' : undefined,
+                          right: window.innerWidth <= 480 ? undefined : 24,
+                          bottom: window.innerWidth <= 480 ? 16 : 24
+                        }}
+                        onClick={() => setIsDevRoomModalOpen(true)}
+                      >
+                        Dev Room
+                      </button>
+
+                      {/* Dev Room Modal rendered at root level */}
+                      {isDevRoomModalOpen && (
+                        <div className="friends-modal-backdrop" onClick={() => setIsDevRoomModalOpen(false)}>
+                          <div
+                            className="friends-modal friends-devroom-modal"
+                            style={{ minWidth: 0, width: '92%', maxWidth: 340, margin: '12vh auto', padding: '18px 16px', borderRadius: 14, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.13)', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <h2 style={{ fontSize: '1.1rem', marginBottom: 10, textAlign: 'center' }}>Dev Room Login</h2>
+                            <div style={{ width: '100%', marginBottom: 10 }}>
+                              <label style={{ fontWeight: 500, fontSize: 14 }}>Username</label>
+                              <input
+                                type="text"
+                                value={profile.displayName || profile.uniqueId || profile.email || ''}
+                                readOnly
+                                style={{ width: '100%', marginBottom: 8, padding: '8px', borderRadius: 8, border: '1px solid #ccd6dd', background: '#f5f5f5' }}
+                              />
+                            </div>
+                            <div style={{ width: '100%', marginBottom: 10 }}>
+                              <label style={{ fontWeight: 500, fontSize: 14 }}>Room ID</label>
+                              <input
+                                type="text"
+                                value={devRoomId}
+                                onChange={e => setDevRoomId(e.target.value)}
+                                placeholder="Enter Room ID"
+                                style={{ width: '100%', marginBottom: 4, padding: '8px', borderRadius: 8, border: '1px solid #ccd6dd' }}
+                                autoFocus
+                              />
+                            </div>
+                            <div style={{ width: '100%', marginBottom: 10, display: 'flex', alignItems: 'center' }}>
+                              <input
+                                id="devroom-remember"
+                                type="checkbox"
+                                checked={!!window.localStorage.getItem('devRoom_rememberRoomId')}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    window.localStorage.setItem('devRoom_rememberRoomId', '1');
+                                    window.localStorage.setItem('devRoom_lastRoomId', devRoomId);
+                                  } else {
+                                    window.localStorage.removeItem('devRoom_rememberRoomId');
+                                    window.localStorage.removeItem('devRoom_lastRoomId');
+                                  }
+                                }}
+                                style={{ marginRight: 6 }}
+                              />
+                              <label htmlFor="devroom-remember" style={{ fontSize: 13, cursor: 'pointer' }}>Remember last Room ID</label>
+                            </div>
+                            <button
+                              style={{ width: '100%', padding: '10px', borderRadius: 8, background: '#1976d2', color: '#fff', fontWeight: 600, fontSize: 16, marginBottom: 6 }}
+                              disabled={devRoomLoading || !devRoomId}
+                              onClick={async () => {
+                                setDevRoomError('');
+                                setDevRoomLoading(true);
+                                try {
+                                  const username = profile.displayName || profile.uniqueId || profile.email || '';
+                                  if (window.localStorage.getItem('devRoom_rememberRoomId')) {
+                                    window.localStorage.setItem('devRoom_lastRoomId', devRoomId);
+                                  }
+                                  // 1. Logout from friends (Firebase)
+                                  if (window.friendsAuth && typeof window.friendsAuth.signOut === 'function') {
+                                    await window.friendsAuth.signOut();
+                                  } else if (typeof signOut === 'function' && friendsAuth) {
+                                    await signOut(friendsAuth);
+                                  }
+                                  // 2. Set credentials for Dev Room
+                                  window.localStorage.setItem('devRoom_autoLogin', JSON.stringify({ username, roomId: devRoomId }));
+                                  // 3. Redirect to login page for Dev Room
+                                  window.location.href = '/login';
+                                } catch (err) {
+                                  setDevRoomError('Login failed. Please try again.');
+                                } finally {
+                                  setDevRoomLoading(false);
+                                }
+                              }}
+                            >
+                              {devRoomLoading ? 'Logging in...' : 'Enter Dev Room'}
+                            </button>
+                            {devRoomError && <div style={{ color: '#e53935', fontSize: 14, marginTop: 2 }}>{devRoomError}</div>}
+                            <button className="friends-modal-close" style={{ marginTop: 8 }} onClick={() => setIsDevRoomModalOpen(false)}>Close</button>
+                          </div>
+                        </div>
+                      )}
                 <button
                   type="button"
                   className="friends-menu-item"
@@ -1799,7 +1934,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </small>
                 </div>
                 {/* Header menu (three dots) */}
-                <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                <div style={{ marginLeft: 'auto', position: 'relative' }} ref={headerMenuRef}>
                   <button
                     type="button"
                     className="friends-header-menu-btn"
@@ -2013,24 +2148,23 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   </div>
                   {/* Context menu */}
                   {contextMenu.open && contextMenu.msgId === msg.id && (
-                    <div
-                      className="friends-msg-menu"
-                      style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, zIndex: 9999, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #0002', minWidth: 120 }}
-                      onMouseLeave={() => setContextMenu({ ...contextMenu, open: false })}
-                    >
-                      {msg.isMine && <button onClick={() => { setEditingMsgId(msg.id); setContextMenu({ ...contextMenu, open: false }); }}>Edit</button>}
-                      {msg.isMine && <button onClick={() => handleDelete(msg)}>Delete</button>}
-                      <button onClick={() => setEmojiPickerMsgId(msg.id)}>React</button>
-                    </div>
+                    <MsgContextMenu
+                      contextMenu={contextMenu}
+                      onEdit={() => { setEditingMsgId(msg.id); setContextMenu({ ...contextMenu, open: false }); }}
+                      onDelete={() => handleDelete(msg)}
+                      onReact={() => setEmojiPickerMsgId(msg.id)}
+                      isMine={msg.isMine}
+                      onClose={() => setContextMenu({ ...contextMenu, open: false })}
+                    />
                   )}
+
                   {/* Emoji picker */}
                   {emojiPickerMsgId === msg.id && (
-                    <div className="friends-emoji-picker" style={{ position: 'fixed', top: contextMenu.y + 30, left: contextMenu.x, zIndex: 10000, background: '#fff', border: '1px solid #ccc', borderRadius: 8, boxShadow: '0 2px 8px #0002', padding: 8 }}>
-                      {["👍","😂","❤️","😮","😢","😡","🎉","🙏"].map(emoji => (
-                        <button key={emoji} style={{ fontSize: 22, margin: 2 }} onClick={() => handleReact(msg, emoji)}>{emoji}</button>
-                      ))}
-                      <button style={{ marginLeft: 8 }} onClick={() => setEmojiPickerMsgId(null)}>Close</button>
-                    </div>
+                    <EmojiPickerFixed
+                      contextMenu={contextMenu}
+                      onClose={() => setEmojiPickerMsgId(null)}
+                      onReact={emoji => handleReact(msg, emoji)}
+                    />
                   )}
                 </article>
               );
@@ -2217,6 +2351,14 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 </div>
               ))}
             </div>
+            {/* Suggestions for users who have already joined but are not yet friends */}
+            <div className="friends-suggestions-label">Suggestions</div>
+            <FriendsSuggestions
+              authToken={authToken}
+              contacts={contacts}
+              onSendFriendRequest={handleSendFriendRequest}
+              onClose={() => setIsAddModalOpen(false)}
+            />
             <div className="friends-add-modal-actions">
               <button
                 type="button"
@@ -2311,6 +2453,67 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     </div>
   );
 };
+
+function FriendsSuggestions({ authToken, contacts, onSendFriendRequest, onClose }) {
+  const [suggested, setSuggested] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchSuggestions() {
+      setLoading(true);
+      setError('');
+      try {
+        // Fetch users who have joined but are not yet friends
+        // Exclude current contacts and self
+        const res = await searchUsers(authToken, '');
+        let users = res.users || [];
+        const contactIds = new Set(contacts.map(c => c.uniqueId));
+        // Try to find selfId from contacts, fallback to empty string
+        const selfId = contacts.find(c => c.isSelf)?.uniqueId || '';
+        users = users.filter(u => !contactIds.has(u.uniqueId) && u.uniqueId !== selfId);
+        if (isMounted) setSuggested(users);
+      } catch (e) {
+        if (isMounted) setError('Could not load suggestions');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    fetchSuggestions();
+    return () => { isMounted = false; };
+  }, [authToken, contacts]);
+
+  if (loading) return <div className="friends-suggestions-loading">Loading suggestions...</div>;
+  if (error) return <div className="friends-suggestions-error">{error}</div>;
+  if (!suggested.length) return <div className="friends-suggestions-empty">No suggestions available</div>;
+
+  return (
+    <div className="friends-suggestions-list">
+      {suggested.map(user => (
+        <div className="friends-suggestion-card" key={user.uniqueId}>
+          <div className="friends-suggestion-avatar">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName || user.uniqueId} />
+            ) : (
+              <span>{(user.displayName || user.uniqueId)[0]?.toUpperCase()}</span>
+            )}
+          </div>
+          <div className="friends-suggestion-meta">
+            <strong>{user.displayName || user.uniqueId}</strong>
+            <small>{user.email || user.phoneNumber || user.uniqueId}</small>
+          </div>
+          <button
+            className="friends-suggestion-add-btn"
+            onClick={() => { onSendFriendRequest(user.uniqueId); onClose(); }}
+          >
+            Add Friend
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // --- Main FriendsFeature Component ---
 
@@ -2554,6 +2757,125 @@ function FriendsFeature({ onSwitchToClassic }) {
       socket={socket}
       onProfileRefresh={() => refreshProfile()}
     />
+  );
+}
+
+// --- EmojiPickerFixed Helper Component ---
+function EmojiPickerFixed({ contextMenu, onClose, onReact }) {
+  // Position the picker near the context menu, but keep it in viewport
+  const pickerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!pickerRef.current || !contextMenu) return;
+    const picker = pickerRef.current;
+    const { innerWidth, innerHeight } = window;
+    let top = contextMenu.y;
+    let left = contextMenu.x;
+    const rect = picker.getBoundingClientRect();
+    if (top + rect.height > innerHeight) top = innerHeight - rect.height - 8;
+    if (left + rect.width > innerWidth) left = innerWidth - rect.width - 8;
+    picker.style.top = `${Math.max(0, top)}px`;
+    picker.style.left = `${Math.max(0, left)}px`;
+  }, [contextMenu]);
+
+  // Click-away to close picker
+  React.useEffect(() => {
+    function handleClick(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  // Simple emoji list (can be replaced with a full picker)
+  const emojis = ['😀','😂','😍','😎','😢','👍','🙏','🎉','🔥','❤️','😡','😮','😅','😇','🤔','🙌','🥳','😏','😭','😬'];
+
+  return (
+    <div
+      ref={pickerRef}
+      className="friends-emoji-picker-fixed"
+      style={{
+        position: 'fixed',
+        zIndex: 10000,
+        background: '#fff',
+        border: '1px solid #ccc',
+        borderRadius: 10,
+        boxShadow: '0 2px 12px #0002',
+        padding: 8,
+        minWidth: 180,
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+      }}
+      tabIndex={-1}
+    >
+      {emojis.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          className="friends-emoji-btn"
+          style={{ fontSize: 22, padding: 4, border: 'none', background: 'none', cursor: 'pointer' }}
+          onClick={() => { onReact(emoji); onClose(); }}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
+// --- Modern, viewport-aware context menu for messages ---
+function MsgContextMenu({ contextMenu, onEdit, onDelete, onReact, isMine, onClose }) {
+  const menuRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!menuRef.current || !contextMenu) return;
+    const menu = menuRef.current;
+    const { innerWidth, innerHeight } = window;
+    let top = contextMenu.y;
+    let left = contextMenu.x;
+    const rect = menu.getBoundingClientRect();
+    if (top + rect.height > innerHeight) top = innerHeight - rect.height - 8;
+    if (left + rect.width > innerWidth) left = innerWidth - rect.width - 8;
+    menu.style.top = `${Math.max(0, top)}px`;
+    menu.style.left = `${Math.max(0, left)}px`;
+  }, [contextMenu]);
+
+  // Click-away to close
+  React.useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="friends-msg-menu"
+      style={{
+        position: 'fixed',
+        minWidth: 140,
+        padding: 0,
+        background: '#fff',
+        borderRadius: 14,
+        boxShadow: '0 8px 32px rgba(30,40,60,0.18)',
+        border: '1px solid #e0e0e0',
+        zIndex: 9999,
+        overflow: 'hidden',
+        animation: 'fadeInMenu 0.18s',
+      }}
+      tabIndex={-1}
+    >
+      {isMine && <button onClick={onEdit} style={{borderBottom:'1px solid #f0f0f0'}}>Edit</button>}
+      {isMine && <button onClick={onDelete} style={{borderBottom:'1px solid #f0f0f0'}}>Delete</button>}
+      <button onClick={onReact}>React</button>
+    </div>
   );
 }
 
