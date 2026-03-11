@@ -1,3 +1,25 @@
+  // Delete a single message by ID
+  router.delete('/messages/:messageId', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const messageId = req.params.messageId;
+      if (!messageId) return res.status(400).json({ error: 'messageId required.' });
+      const msg = await FriendMessage.findById(messageId);
+      if (!msg) return res.status(404).json({ error: 'Message not found.' });
+      if (msg.fromUid !== me.uid) return res.status(403).json({ error: 'Not authorized to delete this message.' });
+      // Restrict deleting to within 12 hours of creation
+      const created = new Date(msg.createdAt).getTime();
+      const now = Date.now();
+      if ((now - created) > 12 * 60 * 60 * 1000) {
+        return res.status(403).json({ error: 'Deleting is only allowed within 12 hours of sending.' });
+      }
+      await msg.deleteOne();
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends delete message error', error);
+      return res.status(500).json({ error: 'Failed to delete message.' });
+    }
+  });
 const express = require('express');
 const admin = require('firebase-admin');
 
@@ -387,6 +409,12 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       const msg = await FriendMessage.findById(messageId);
       if (!msg) return res.status(404).json({ error: 'Message not found.' });
       if (msg.fromUid !== me.uid) return res.status(403).json({ error: 'Not authorized to edit this message.' });
+      // Restrict editing to within 12 hours of creation
+      const created = new Date(msg.createdAt).getTime();
+      const now = Date.now();
+      if ((now - created) > 12 * 60 * 60 * 1000) {
+        return res.status(403).json({ error: 'Editing is only allowed within 12 hours of sending.' });
+      }
       msg.text = newText;
       msg.editedAt = new Date();
       await msg.save();

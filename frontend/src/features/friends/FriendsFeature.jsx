@@ -30,7 +30,8 @@ import {
   updateContactPreferences,
   deleteConversationMessages,
   editMessage,
-  reactToMessage
+  reactToMessage,
+  deleteMessage
 } from './friendsApi';
 
 
@@ -2149,7 +2150,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                   {/* Context menu */}
                   {contextMenu.open && contextMenu.msgId === msg.id && (
                     <MsgContextMenu
-                      contextMenu={contextMenu}
+                      contextMenu={{ ...contextMenu, msg }}
                       onEdit={() => { setEditingMsgId(msg.id); setContextMenu({ ...contextMenu, open: false }); }}
                       onDelete={() => handleDelete(msg)}
                       onReact={() => setEmojiPickerMsgId(msg.id)}
@@ -2854,6 +2855,16 @@ function MsgContextMenu({ contextMenu, onEdit, onDelete, onReact, isMine, onClos
     return () => document.removeEventListener('mousedown', handleClick);
   }, [onClose]);
 
+  // Find the message object by msgId from contextMenu
+  // This assumes you have access to the messages array or a way to get the message by ID
+  // We'll use a workaround: pass the message object itself as contextMenu.msg if possible
+  const msg = contextMenu.msg || null;
+  let canEditOrReact = false;
+  if (msg && msg.createdAt) {
+    const created = new Date(msg.createdAt).getTime();
+    const now = Date.now();
+    canEditOrReact = (now - created) < 12 * 60 * 60 * 1000; // 12 hours in ms
+  }
   return (
     <div
       ref={menuRef}
@@ -2872,9 +2883,10 @@ function MsgContextMenu({ contextMenu, onEdit, onDelete, onReact, isMine, onClos
       }}
       tabIndex={-1}
     >
-      {isMine && <button onClick={onEdit} style={{borderBottom:'1px solid #f0f0f0'}}>Edit</button>}
-      {isMine && <button onClick={onDelete} style={{borderBottom:'1px solid #f0f0f0'}}>Delete</button>}
+      {isMine && canEditOrReact && <button onClick={onEdit} style={{borderBottom:'1px solid #f0f0f0'}}>Edit</button>}
+      {isMine && canEditOrReact && <button onClick={onDelete} style={{borderBottom:'1px solid #f0f0f0'}}>Delete</button>}
       <button onClick={onReact}>React</button>
+      {(!canEditOrReact) && <div style={{padding:'8px',color:'#aaa',fontSize:13}}>Edit/Delete disabled after 12h</div>}
     </div>
   );
 }
