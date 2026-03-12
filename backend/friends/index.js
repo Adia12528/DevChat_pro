@@ -431,9 +431,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   // ...existing code for other routes...
 
   return router;
-};
 
-module.exports = setupFriendsFeature;
 
   // React to a message
   router.post('/messages/:messageId/react', authRequired, async (req, res) => {
