@@ -371,6 +371,11 @@ const buildContactWithStats = async ({ FriendMessage, meUid, contact }) => {
 
 const setupFriendsFeature = ({ app, io, mongoose }) => {
   const enabled = initializeFirebaseAdmin();
+  if (!enabled) {
+    console.warn('[FRIENDS] Firebase Admin not enabled. Friends API will NOT be available.');
+  } else {
+    console.log('[FRIENDS] Firebase Admin enabled. Mounting /api/friends routes.');
+  }
   const { FriendProfile, FriendMessage } = getModels(mongoose);
   const { FriendRequest } = getModels(mongoose);
   const authRequired = friendsAuthMiddleware(enabled);
@@ -904,9 +909,10 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
     }
   });
 
-  app.use('/api/user', userRouter);
 
+  app.use('/api/user', userRouter);
   app.use('/api/friends', router);
+  console.log('[FRIENDS] /api/friends route mounted.');
 
   const friendsNsp = io.of('/friends');
 
