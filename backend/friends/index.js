@@ -950,11 +950,25 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       const firebaseUser = socket.data.firebaseUser;
       const me = await ensureProfile(FriendProfile, firebaseUser);
 
+
       socket.data.profile = me;
       socket.join(`user:${me.uid}`);
       setUserOnline(me.uid);
       const allowTypingEvent = createSimpleRateLimiter({ limit: 20, windowMs: 10 * 1000 });
       const allowSendEvent = createSimpleRateLimiter({ limit: 12, windowMs: 10 * 1000 });
+
+      // Emit all available users (excluding current friends and self) to this client
+      const allUsers = await FriendProfile.find({
+        uniqueId: { $nin: [me.uniqueId, ...(me.contacts || [])] }
+      }).lean();
+      socket.emit('users:all', allUsers.map(u => ({
+        uid: u.uid,
+        uniqueId: u.uniqueId,
+        displayName: u.displayName,
+        photoURL: u.photoURL,
+        email: u.email,
+        phoneNumber: u.phoneNumber
+      })));
 
       for (const contactUniqueId of me.contacts || []) {
         const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId }).lean();

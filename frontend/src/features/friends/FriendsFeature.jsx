@@ -2505,7 +2505,8 @@ function FriendsSuggestions({ authToken, contacts, onSendFriendRequest, onClose 
   // Get socket from context or window (if available)
   const socket = window.friendsSocket || null;
 
-  // Helper to fetch suggestions
+
+  // Helper to fetch suggestions (API fallback)
   const fetchSuggestions = async (isMounted = true) => {
     setLoading(true);
     setError('');
@@ -2526,13 +2527,22 @@ function FriendsSuggestions({ authToken, contacts, onSendFriendRequest, onClose 
   useEffect(() => {
     let isMounted = true;
     fetchSuggestions(isMounted);
-    // Listen for real-time new user event
     if (socket) {
+      // Listen for real-time new user event
       const onNewUser = () => fetchSuggestions(isMounted);
       socket.on('users:new_user', onNewUser);
+      // Listen for all users event (on connect)
+      const onAllUsers = (users) => {
+        const contactIds = new Set(contacts.map(c => c.uniqueId));
+        const selfId = contacts.find(c => c.isSelf)?.uniqueId || '';
+        const filtered = (users || []).filter(u => !contactIds.has(u.uniqueId) && u.uniqueId !== selfId);
+        if (isMounted) setSuggested(filtered);
+      };
+      socket.on('users:all', onAllUsers);
       return () => {
         isMounted = false;
         socket.off('users:new_user', onNewUser);
+        socket.off('users:all', onAllUsers);
       };
     }
     return () => { isMounted = false; };
