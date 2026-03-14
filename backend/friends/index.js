@@ -699,6 +699,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
 
   const searchHandler = async (req, res) => {
     try {
+      const start = Date.now();
       const me = await ensureProfile(FriendProfile, req.firebaseUser);
       const q = String(req.body?.query || req.query?.query || '').trim();
       // Always exclude self and current friends
@@ -727,6 +728,8 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
           .limit(15)
           .lean();
       }
+      const elapsed = Date.now() - start;
+      console.log(`[FRIENDS] /search took ${elapsed}ms, returned ${users.length} users`);
       return res.json({ users: users.map(toPublicProfile) });
     } catch (error) {
       console.error('friends search error', error);
