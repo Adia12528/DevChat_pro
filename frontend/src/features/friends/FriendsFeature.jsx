@@ -1587,7 +1587,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                         style={{
                           position: 'fixed',
                           bottom: 24,
-                          right: 24,
+                          left: 24,
                           zIndex: 2100,
                           padding: window.innerWidth <= 600 ? '10px 16px' : '12px 22px',
                           borderRadius: 12,
@@ -1599,8 +1599,8 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                           border: 'none',
                           cursor: 'pointer',
                           width: window.innerWidth <= 480 ? '90vw' : undefined,
-                          left: window.innerWidth <= 480 ? '5vw' : undefined,
-                          right: window.innerWidth <= 480 ? undefined : 24,
+                          left: window.innerWidth <= 480 ? '5vw' : 24,
+                          right: undefined,
                           bottom: window.innerWidth <= 480 ? 16 : 24
                         }}
                         onClick={() => setIsDevRoomModalOpen(true)}
