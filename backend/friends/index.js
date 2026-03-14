@@ -435,7 +435,9 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
 
   // ...existing code for other routes...
 
-  return router;
+  // Mount the router on /api/friends
+  app.use('/api/friends', router);
+  // Do not return the router
 
 
   // React to a message
