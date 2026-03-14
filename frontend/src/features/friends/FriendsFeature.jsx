@@ -2495,35 +2495,48 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   );
 };
 
+import { useContext } from 'react';
+
 function FriendsSuggestions({ authToken, contacts, onSendFriendRequest, onClose }) {
   const [suggested, setSuggested] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Get socket from context or window (if available)
+  const socket = window.friendsSocket || null;
+
+  // Helper to fetch suggestions
+  const fetchSuggestions = async (isMounted = true) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await searchUsers(authToken, '');
+      let users = res.users || [];
+      const contactIds = new Set(contacts.map(c => c.uniqueId));
+      const selfId = contacts.find(c => c.isSelf)?.uniqueId || '';
+      users = users.filter(u => !contactIds.has(u.uniqueId) && u.uniqueId !== selfId);
+      if (isMounted) setSuggested(users);
+    } catch (e) {
+      if (isMounted) setError('Could not load suggestions');
+    } finally {
+      if (isMounted) setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
-    async function fetchSuggestions() {
-      setLoading(true);
-      setError('');
-      try {
-        // Fetch users who have joined but are not yet friends
-        // Exclude current contacts and self
-        const res = await searchUsers(authToken, '');
-        let users = res.users || [];
-        const contactIds = new Set(contacts.map(c => c.uniqueId));
-        // Try to find selfId from contacts, fallback to empty string
-        const selfId = contacts.find(c => c.isSelf)?.uniqueId || '';
-        users = users.filter(u => !contactIds.has(u.uniqueId) && u.uniqueId !== selfId);
-        if (isMounted) setSuggested(users);
-      } catch (e) {
-        if (isMounted) setError('Could not load suggestions');
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+    fetchSuggestions(isMounted);
+    // Listen for real-time new user event
+    if (socket) {
+      const onNewUser = () => fetchSuggestions(isMounted);
+      socket.on('users:new_user', onNewUser);
+      return () => {
+        isMounted = false;
+        socket.off('users:new_user', onNewUser);
+      };
     }
-    fetchSuggestions();
     return () => { isMounted = false; };
-  }, [authToken, contacts]);
+  }, [authToken, contacts, socket]);
 
   if (loading) return <div className="friends-suggestions-loading">Loading suggestions...</div>;
   if (error) return <div className="friends-suggestions-error">{error}</div>;

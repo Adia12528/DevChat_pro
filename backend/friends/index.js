@@ -277,6 +277,15 @@ const ensureProfile = async (FriendProfile, firebaseUser) => {
       photoURL: firebaseUser.picture || '',
       contacts: []
     });
+    // Emit a global event for new user registration
+    if (typeof global !== 'undefined' && global.friendsNsp) {
+      global.friendsNsp.emit('users:new_user', {
+        uid: profile.uid,
+        uniqueId: profile.uniqueId,
+        displayName: profile.displayName,
+        photoURL: profile.photoURL
+      });
+    }
   } else {
     let changed = false;
     if (!profile.email && firebaseUser.email) {
@@ -917,6 +926,8 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   console.log('[FRIENDS] /api/friends route mounted.');
 
   const friendsNsp = io.of('/friends');
+  // Make friendsNsp globally accessible for ensureProfile
+  global.friendsNsp = friendsNsp;
 
   friendsNsp.use(async (socket, next) => {
     if (!enabled) {
