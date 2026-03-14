@@ -1721,6 +1721,36 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 <button
                   type="button"
                   className="friends-menu-item"
+                  onClick={async () => {
+                    setIsMenuOpen(false);
+                    // Invite/share logic
+                    const shareData = {
+                      title: 'Join me on DevChat!',
+                      text: 'Let’s chat and collaborate on DevChat. It’s free and secure! Click to join:',
+                      url: window.location.origin || 'https://your-devchat-url.com'
+                    };
+                    if (navigator.share) {
+                      try {
+                        await navigator.share(shareData);
+                      } catch (e) {
+                        // User cancelled or error
+                      }
+                    } else {
+                      // Fallback: copy to clipboard
+                      try {
+                        await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+                        alert('Invite link copied to clipboard!');
+                      } catch {
+                        window.prompt('Copy this invite link:', `${shareData.text} ${shareData.url}`);
+                      }
+                    }
+                  }}
+                >
+                  Invite Friends
+                </button>
+                <button
+                  type="button"
+                  className="friends-menu-item"
                   onClick={() => {
                     setIsMenuOpen(false);
                     onLogout();
