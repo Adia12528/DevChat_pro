@@ -1527,7 +1527,15 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                         placeholder="Search friends..."
                         value={friendsSearch}
                         onChange={e => setFriendsSearch(e.target.value)}
-                        style={{marginBottom: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #ccd6dd', width: '100%'}}
+                        style={{
+                          marginBottom: 12,
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid #ccd6dd',
+                          width: '100%',
+                          background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+                          color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                        }}
                         autoFocus
                       />
                       <div className="friends-list-modal">
@@ -1623,7 +1631,15 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                                 type="text"
                                 value={profile.displayName || profile.uniqueId || profile.email || ''}
                                 readOnly
-                                style={{ width: '100%', marginBottom: 8, padding: '8px', borderRadius: 8, border: '1px solid #ccd6dd', background: '#f5f5f5' }}
+                                style={{
+                                  width: '100%',
+                                  marginBottom: 8,
+                                  padding: '8px',
+                                  borderRadius: 8,
+                                  border: '1px solid #ccd6dd',
+                                  background: settingsThemeDraft === 'dark' ? '#23272f' : '#f5f5f5',
+                                  color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                                }}
                               />
                             </div>
                             <div style={{ width: '100%', marginBottom: 10 }}>
@@ -1633,7 +1649,15 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                                 value={devRoomId}
                                 onChange={e => setDevRoomId(e.target.value)}
                                 placeholder="Enter Room ID"
-                                style={{ width: '100%', marginBottom: 4, padding: '8px', borderRadius: 8, border: '1px solid #ccd6dd' }}
+                                style={{
+                                  width: '100%',
+                                  marginBottom: 4,
+                                  padding: '8px',
+                                  borderRadius: 8,
+                                  border: '1px solid #ccd6dd',
+                                  background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+                                  color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                                }}
                                 autoFocus
                               />
                             </div>
@@ -1651,7 +1675,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                                     window.localStorage.removeItem('devRoom_lastRoomId');
                                   }
                                 }}
-                                style={{ marginRight: 6 }}
+                                style={{
+                                  marginRight: 6,
+                                  background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+                                  color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                                }}
                               />
                               <label htmlFor="devroom-remember" style={{ fontSize: 13, cursor: 'pointer' }}>Remember last Room ID</label>
                             </div>
@@ -1754,6 +1782,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             value={chatSearchInput}
             onChange={(e) => setChatSearchInput(e.target.value)}
             aria-label="Search chats"
+            style={{
+              background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+              color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+            }}
           />
         </div>
 
@@ -2407,6 +2439,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 value={settingsNameDraft}
                 onChange={(e) => setSettingsNameDraft(e.target.value)}
                 placeholder="Display name"
+                style={{
+                  background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+                  color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                }}
               />
             </div>
 
@@ -2416,6 +2452,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 value={settingsBioDraft}
                 onChange={(e) => setSettingsBioDraft(e.target.value)}
                 placeholder="Bio"
+                style={{
+                  background: settingsThemeDraft === 'dark' ? '#23272f' : '#fff',
+                  color: settingsThemeDraft === 'dark' ? '#f5f5f5' : '#222'
+                }}
               />
             </div>
 
