@@ -2389,6 +2389,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             <FriendsSuggestions
               authToken={authToken}
               contacts={contacts}
+              socket={socket}
               onSendFriendRequest={handleSendFriendRequest}
               onClose={() => setIsAddModalOpen(false)}
             />
@@ -2497,13 +2498,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 
 import { useContext } from 'react';
 
-function FriendsSuggestions({ authToken, contacts, onSendFriendRequest, onClose }) {
+
+function FriendsSuggestions({ authToken, contacts, socket, onSendFriendRequest, onClose }) {
   const [suggested, setSuggested] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Get socket from context or window (if available)
-  const socket = window.friendsSocket || null;
 
 
   // Helper to fetch suggestions (API fallback)
