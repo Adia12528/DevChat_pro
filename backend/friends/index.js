@@ -620,6 +620,11 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       friendsNsp.to(`user:${target.uid}`).emit('friends:removed', {
         fromUniqueId: me.uniqueId
       });
+      // Real-time suggestions update for both users
+      if (global.friendsNsp) {
+        global.friendsNsp.to(`user:${me.uid}`).emit('users:refresh');
+        global.friendsNsp.to(`user:${target.uid}`).emit('users:refresh');
+      }
       return res.json({ ok: true });
     } catch (error) {
       console.error('friends remove error', error);
@@ -696,25 +701,32 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
     try {
       const me = await ensureProfile(FriendProfile, req.firebaseUser);
       const q = String(req.body?.query || req.query?.query || '').trim();
-      if (!q) return res.json({ users: [] });
-
-      const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      const users = await FriendProfile.find({
-        $and: [
-          { uniqueId: { $ne: me.uniqueId } },
-          {
-            $or: [
-              { uniqueId: regex },
-              { displayName: regex },
-              { email: regex },
-              { phoneNumber: regex }
-            ]
-          }
-        ]
-      })
-        .limit(15)
-        .lean();
-
+      // Always exclude self and current friends
+      const excludeIds = [me.uniqueId, ...(me.contacts || [])];
+      let users = [];
+      if (!q) {
+        // No query: return all users except self and friends, up to 30
+        users = await FriendProfile.find({ uniqueId: { $nin: excludeIds } })
+          .limit(30)
+          .lean();
+      } else {
+        const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        users = await FriendProfile.find({
+          $and: [
+            { uniqueId: { $nin: excludeIds } },
+            {
+              $or: [
+                { uniqueId: regex },
+                { displayName: regex },
+                { email: regex },
+                { phoneNumber: regex }
+              ]
+            }
+          ]
+        })
+          .limit(15)
+          .lean();
+      }
       return res.json({ users: users.map(toPublicProfile) });
     } catch (error) {
       console.error('friends search error', error);
@@ -742,7 +754,11 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       target.contacts = Array.from(new Set([...(target.contacts || []), me.uniqueId]));
       await me.save();
       await target.save();
-
+      // Real-time suggestions update for both users
+      if (global.friendsNsp) {
+        global.friendsNsp.to(`user:${me.uid}`).emit('users:refresh');
+        global.friendsNsp.to(`user:${target.uid}`).emit('users:refresh');
+      }
       return res.json({ added: toPublicProfile(target) });
     } catch (error) {
       console.error('friends add contact error', error);

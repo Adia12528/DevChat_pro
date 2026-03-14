@@ -471,7 +471,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   }, [isHeaderMenuOpen]);
 
 
-  const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️'];
+  const quickEmojis = ['😀', '😂', '😍', '👍', '🙏', '🎉', '🔥', '❤️','😡','😮','😅','😇','🤔','🙌','🥳','😏','😭','😬'];
 
   const queueStorageKey = useMemo(
     () => `friends_pending_queue_${profile.uniqueId || 'anonymous'}`,
@@ -2501,7 +2501,7 @@ import { useContext } from 'react';
 
 function FriendsSuggestions({ authToken, contacts, socket, onSendFriendRequest, onClose }) {
   const [suggested, setSuggested] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
 
@@ -2536,38 +2536,51 @@ function FriendsSuggestions({ authToken, contacts, socket, onSendFriendRequest, 
         const selfId = contacts.find(c => c.isSelf)?.uniqueId || '';
         const filtered = (users || []).filter(u => !contactIds.has(u.uniqueId) && u.uniqueId !== selfId);
         if (isMounted) setSuggested(filtered);
+        if (isMounted) setLoading(false);
       };
       socket.on('users:all', onAllUsers);
+      // Listen for users:refresh event for real-time suggestions
+      const onRefresh = () => fetchSuggestions(isMounted);
+      socket.on('users:refresh', onRefresh);
       return () => {
         isMounted = false;
         socket.off('users:new_user', onNewUser);
         socket.off('users:all', onAllUsers);
+        socket.off('users:refresh', onRefresh);
       };
     }
     return () => { isMounted = false; };
   }, [authToken, contacts, socket]);
 
-  if (loading) return <div className="friends-suggestions-loading">Loading suggestions...</div>;
+  if (loading) {
+    return (
+      <div className="friends-suggestions-loading" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem 0', minHeight: 120 }}>
+        <div className="friends-spinner" style={{ margin: '1rem', width: 40, height: 40, border: '4px solid #ccc', borderTop: '4px solid #1976d2', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontSize: 16, color: '#555', marginTop: 8 }}>Finding suggestions...</div>
+      </div>
+    );
+  }
   if (error) return <div className="friends-suggestions-error">{error}</div>;
-  if (!suggested.length) return <div className="friends-suggestions-empty">No suggestions available</div>;
+  if (!loading && !suggested.length) return <div className="friends-suggestions-empty">No suggestions available</div>;
 
   return (
-    <div className="friends-suggestions-list">
+    <div className="friends-suggestions-list" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', padding: '1rem 0' }}>
       {suggested.map(user => (
-        <div className="friends-suggestion-card" key={user.uniqueId}>
-          <div className="friends-suggestion-avatar">
+        <div className="friends-suggestion-card" key={user.uniqueId} style={{ minWidth: 220, maxWidth: 320, flex: '1 1 220px', background: '#fff', borderRadius: 10, boxShadow: '0 2px 8px #0001', margin: 4, padding: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="friends-suggestion-avatar" style={{ width: 48, height: 48, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 600, overflow: 'hidden' }}>
             {user.photoURL ? (
-              <img src={user.photoURL} alt={user.displayName || user.uniqueId} />
+              <img src={user.photoURL} alt={user.displayName || user.uniqueId} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <span>{(user.displayName || user.uniqueId)[0]?.toUpperCase()}</span>
             )}
           </div>
-          <div className="friends-suggestion-meta">
-            <strong>{user.displayName || user.uniqueId}</strong>
-            <small>{user.email || user.phoneNumber || user.uniqueId}</small>
+          <div className="friends-suggestion-meta" style={{ flex: 1 }}>
+            <strong style={{ fontSize: 16 }}>{user.displayName || user.uniqueId}</strong>
+            <div style={{ fontSize: 13, color: '#888' }}>{user.email || user.phoneNumber || user.uniqueId}</div>
           </div>
           <button
             className="friends-suggestion-add-btn"
+            style={{ padding: '8px 14px', borderRadius: 6, background: '#1976d2', color: '#fff', border: 'none', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s' }}
             onClick={() => { onSendFriendRequest(user.uniqueId); onClose(); }}
           >
             Add Friend
@@ -2950,6 +2963,7 @@ function MsgContextMenu({ contextMenu, onEdit, onDelete, onReact, isMine, onClos
       {isMine && canEditOrReact && <button onClick={onDelete} style={{borderBottom:'1px solid #f0f0f0'}}>Delete</button>}
       <button onClick={onReact}>React</button>
       {(!canEditOrReact) && <div style={{padding:'8px',color:'#aaa',fontSize:13}}>Edit/Delete disabled after 12h</div>}
+      
     </div>
   );
 }
