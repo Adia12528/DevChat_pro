@@ -296,7 +296,8 @@ const ensureProfile = async (FriendProfile, firebaseUser) => {
       profile.phoneNumber = firebaseUser.phone_number;
       changed = true;
     }
-    if (!profile.photoURL && firebaseUser.picture) {
+    // Always overwrite photoURL with Gmail photo if present
+    if (firebaseUser.picture && profile.photoURL !== firebaseUser.picture) {
       profile.photoURL = firebaseUser.picture;
       changed = true;
     }

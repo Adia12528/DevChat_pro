@@ -1467,8 +1467,8 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
               <div className="friends-menu-dropdown" role="menu" aria-label="Dashboard menu">
                 <div className="friends-menu-profile-section">
                   <div className="friends-menu-profile-avatar-enhanced">
-                    {profile.photoUrl ? (
-                      <img src={profile.photoUrl} alt="Profile" />
+                    {profile.photoURL ? (
+                      <img src={profile.photoURL} alt="Profile" />
                     ) : (
                       <span>{(profile.displayName || profile.uniqueId || 'U').slice(0,2).toUpperCase()}</span>
                     )}
@@ -1812,7 +1812,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 style={{ cursor: 'pointer' }}
               >
                 <div className="friends-contact-avatar" aria-hidden="true">
-                  {(contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()}
+                  {contact.photoURL ? (
+                    <img src={contact.photoURL} alt={contact.displayName || contact.uniqueId} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                  ) : (
+                    (contact.displayName || contact.uniqueId || 'FR').slice(0, 2).toUpperCase()
+                  )}
                 </div>
 
                 <div className="friends-contact-content">
