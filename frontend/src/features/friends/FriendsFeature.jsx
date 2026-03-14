@@ -2105,7 +2105,26 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                 await reactToMessage(authToken, msg.id, emoji);
                 setEmojiPickerMsgId(null);
                 setContextMenu({ ...contextMenu, open: false });
-                await loadMessages(selectedContactId, { reset: true });
+                // Optimistically update reactions in UI
+                setMessagesByContact((prev) => {
+                  const current = prev[selectedContactId] || [];
+                  return {
+                    ...prev,
+                    [selectedContactId]: current.map((m) => {
+                      if (m.id !== msg.id) return m;
+                      // Add or update the reaction for this emoji
+                      let reactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
+                      const idx = reactions.findIndex((r) => r.emoji === emoji);
+                      if (idx >= 0) {
+                        // Increment count if already exists
+                        reactions[idx] = { ...reactions[idx], count: (reactions[idx].count || 1) + 1 };
+                      } else {
+                        reactions.push({ emoji, count: 1 });
+                      }
+                      return { ...m, reactions };
+                    })
+                  };
+                });
               } catch (e) {
                 setError(e.message || 'React failed');
                 setEmojiPickerMsgId(null);
