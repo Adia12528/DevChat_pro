@@ -2558,6 +2558,7 @@ function FriendsFeature({ onSwitchToClassic }) {
         setIsLoading(true);
         const token = await nextUser.getIdToken(true);
         setAuthToken(token);
+        refreshProfile(token); // Fetch profile immediately with fresh token
       } catch (e) {
         setError(e.message || 'Failed to get auth token');
       } finally {
