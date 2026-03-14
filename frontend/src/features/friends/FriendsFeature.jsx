@@ -2132,24 +2132,41 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             };
             const handleReact = async (msg, emoji) => {
               try {
+                // Check if user already reacted with this emoji
+                const userId = profile?.uniqueId;
+                const userReacted = Array.isArray(msg.reactions)
+                  ? msg.reactions.some(r => r.emoji === emoji && Array.isArray(r.users) && r.users.includes(userId))
+                  : false;
                 await reactToMessage(authToken, msg.id, emoji);
                 setEmojiPickerMsgId(null);
                 setContextMenu({ ...contextMenu, open: false });
-                // Optimistically update reactions in UI
                 setMessagesByContact((prev) => {
                   const current = prev[selectedContactId] || [];
                   return {
                     ...prev,
                     [selectedContactId]: current.map((m) => {
                       if (m.id !== msg.id) return m;
-                      // Add or update the reaction for this emoji
                       let reactions = Array.isArray(m.reactions) ? [...m.reactions] : [];
                       const idx = reactions.findIndex((r) => r.emoji === emoji);
                       if (idx >= 0) {
-                        // Increment count if already exists
-                        reactions[idx] = { ...reactions[idx], count: (reactions[idx].count || 1) + 1 };
+                        // If user already reacted, remove their reaction
+                        let users = Array.isArray(reactions[idx].users) ? [...reactions[idx].users] : [];
+                        if (users.includes(userId)) {
+                          users = users.filter(u => u !== userId);
+                          const newCount = Math.max((reactions[idx].count || users.length + 1) - 1, 0);
+                          if (newCount === 0 || users.length === 0) {
+                            reactions.splice(idx, 1);
+                          } else {
+                            reactions[idx] = { ...reactions[idx], count: newCount, users };
+                          }
+                        } else {
+                          // Add user to users array and increment count
+                          users.push(userId);
+                          reactions[idx] = { ...reactions[idx], count: (reactions[idx].count || users.length), users };
+                        }
                       } else {
-                        reactions.push({ emoji, count: 1 });
+                        // Add new reaction with this user
+                        reactions.push({ emoji, count: 1, users: [userId] });
                       }
                       return { ...m, reactions };
                     })
