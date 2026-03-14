@@ -4819,6 +4819,17 @@ useEffect(() => {
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('[DEBUG] getUserMedia constraints:', constraints);
+        if (stream) {
+          console.log('[DEBUG] Acquired media stream:', {
+            audioTracks: stream.getAudioTracks().map(t => t.label),
+            videoTracks: stream.getVideoTracks().map(t => t.label),
+            audioTrackCount: stream.getAudioTracks().length,
+            videoTrackCount: stream.getVideoTracks().length
+          });
+        } else {
+          console.warn('[DEBUG] No media stream acquired!');
+        }
       } catch (mediaErr) {
         // Fallback to lower quality if optimal fails
         console.warn('⚠️ [CALLER] Optimal constraints failed, trying fallback...');
@@ -4834,6 +4845,12 @@ useEffect(() => {
       debugLog('📹 [CALLER] Got media stream:', {
         audio: stream.getAudioTracks().length,
         video: stream.getVideoTracks().length
+      });
+      console.log('[DEBUG] [CALLER] Got media stream:', {
+        audio: stream.getAudioTracks().length,
+        video: stream.getVideoTracks().length,
+        audioLabels: stream.getAudioTracks().map(t => t.label),
+        videoLabels: stream.getVideoTracks().map(t => t.label)
       });
       // Ensure all tracks are enabled
       stream.getTracks().forEach((track) => {
