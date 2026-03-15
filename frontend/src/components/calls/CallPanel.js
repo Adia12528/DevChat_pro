@@ -49,6 +49,14 @@ const CallPanel = ({
   audioSettings,
   onAudioSettingChange,
 }) => {
+  // Ensure remote video element always gets the latest remoteStream
+  useEffect(() => {
+    if (remoteVideoRef && remoteVideoRef.current && remoteStream) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+    }
+  }, [remoteStream, remoteVideoRef]);
   // Responsive: update device lists on mount
   useEffect(() => {
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
@@ -560,28 +568,9 @@ const CallPanel = ({
               </button>
             </div>
             <div className="sidebar-content">
-              <div className="settings-section">
-                <h4>Video Quality</h4>
-                <div className="quality-options">
-                  {qualityOptions.map(({ label, value }) => (
-                    <button 
-                      key={value}
-                      className={`quality-option ${videoQuality === value ? 'active' : ''}`}
-                      onClick={() => handleVideoQualitySelect(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               {callType === 'video' && (
                 <div className="settings-section">
-                  <h4>Camera Device</h4>
-                  {cameraStatusToast?.message && (
-                    <div className={`call-camera-toast ${cameraStatusToast.type === 'error' ? 'error' : cameraStatusToast.type === 'info' ? 'info' : 'success'}`} role="status" aria-live="polite">
-                      {cameraStatusToast.message}
-                    </div>
-                  )}
+                  <h4>Camera</h4>
                   <div className="call-camera-selector">
                     <select
                       value={selectedCameraId || 'default'}
@@ -594,15 +583,6 @@ const CallPanel = ({
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="call-camera-refresh"
-                      onClick={() => onRefreshCameraDevices?.()}
-                      title="Refresh cameras"
-                      aria-label="Refresh cameras"
-                    >
-                      <RefreshCw size={14} className={isRefreshingCameras ? 'spin' : ''} />
-                    </button>
                   </div>
                 </div>
               )}
@@ -631,52 +611,6 @@ const CallPanel = ({
                       <option key={device.deviceId} value={device.deviceId}>{device.label || 'Speaker'}</option>
                     ))}
                   </select>
-                </div>
-                <div className="setting-item">
-                  <span>Noise Cancellation</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={audioSettings?.noiseSuppression !== false}
-                      onChange={(event) => onAudioSettingChange?.('noiseSuppression', event.target.checked)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <span>Echo Cancellation</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={audioSettings?.echoCancellation !== false}
-                      onChange={(event) => onAudioSettingChange?.('echoCancellation', event.target.checked)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <span>Auto Gain Control</span>
-                  <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={audioSettings?.autoGainControl !== false}
-                      onChange={(event) => onAudioSettingChange?.('autoGainControl', event.target.checked)}
-                    />
-                    <span className="toggle-slider" />
-                  </label>
-                </div>
-              </div>
-              <div className="settings-section">
-                <h4>Layout</h4>
-                <div className="layout-options">
-                  <button className={`layout-option ${layout === 'grid' ? 'active' : ''}`} onClick={() => setLayout('grid')}>
-                    <Grid size={20} />
-                    <span>Grid</span>
-                  </button>
-                  <button className={`layout-option ${layout === 'spotlight' ? 'active' : ''}`} onClick={() => setLayout('spotlight')}>
-                    <PieChart size={20} />
-                    <span>Spotlight</span>
-                  </button>
                 </div>
               </div>
             </div>

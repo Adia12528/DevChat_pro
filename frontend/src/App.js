@@ -1083,17 +1083,37 @@ function AppContent() {
           deviceId: d.deviceId,
           label: d.label || `External Speaker ${i + 1}`
         }));
-      setVideoInputDevices(cameras);
+      // Sort cameras so integrated camera is always first if present
+      const sortedCameras = [...cameras].sort((a, b) => {
+        const aInt = a.label.toLowerCase().includes('integrated') ? -1 : 0;
+        const bInt = b.label.toLowerCase().includes('integrated') ? -1 : 0;
+        return bInt - aInt;
+      });
+      setVideoInputDevices(sortedCameras);
       setAudioInputDevices(microphones);
       setAudioOutputDevices(speakers);
 
-      if (selectedVideoInputId && !cameras.some(device => device.deviceId === selectedVideoInputId)) {
-        setSelectedVideoInputId('');
+
+      // Set default camera, mic, and speaker to integrated device if available, else first
+      if ((!selectedVideoInputId || !sortedCameras.some(device => device.deviceId === selectedVideoInputId)) && sortedCameras.length > 0) {
+        const defaultCameraId = sortedCameras[0].deviceId;
+        setSelectedVideoInputId(defaultCameraId);
+        localStorage.setItem('devchatPreferredCameraId', defaultCameraId);
       }
 
-      if (selectedAudioInputId && !microphones.some(device => device.deviceId === selectedAudioInputId)) {
-        setSelectedAudioInputId('');
-        setStreamPanelSettings(prev => ({ ...prev, microphoneId: 'default' }));
+      if ((!selectedAudioInputId || !microphones.some(device => device.deviceId === selectedAudioInputId)) && microphones.length > 0) {
+        const integratedMic = microphones.find(mic => mic.label.toLowerCase().includes('integrated'));
+        const defaultMicId = integratedMic ? integratedMic.deviceId : microphones[0].deviceId;
+        setSelectedAudioInputId(defaultMicId);
+        setStreamPanelSettings(prev => ({ ...prev, microphoneId: defaultMicId }));
+        localStorage.setItem('devchatPreferredMicrophoneId', defaultMicId);
+      }
+
+      if ((!audioOutputDevice || !speakers.some(device => device.deviceId === audioOutputDevice)) && speakers.length > 0) {
+        const integratedSpeaker = speakers.find(spk => spk.label.toLowerCase().includes('integrated'));
+        const defaultSpeakerId = integratedSpeaker ? integratedSpeaker.deviceId : speakers[0].deviceId;
+        setAudioOutputDevice(defaultSpeakerId);
+        localStorage.setItem('devchatPreferredAudioOutput', defaultSpeakerId);
       }
 
       return { ok: true, skipped: false, cameraCount: cameras.length };
