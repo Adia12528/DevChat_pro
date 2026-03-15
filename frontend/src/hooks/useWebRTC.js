@@ -140,36 +140,21 @@ export const useWebRTC = (username, socketRef) => {
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch {
-        // Fallback: try first available audio input device
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const firstMic = devices.find(d => d.kind === 'audioinput');
-        if (firstMic) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            audio: { deviceId: { exact: firstMic.deviceId } },
-            video: constraints.video || false
-          });
-        } else {
-          stream = await navigator.mediaDevices.getUserMedia(
-            getFallbackMediaConstraints(type)
-          );
-        }
+        stream = await navigator.mediaDevices.getUserMedia(
+          getFallbackMediaConstraints(type)
+        );
       }
 
-      // Force-enable all audio tracks
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        console.warn('No audio tracks found in local stream! Voice will not be transmitted.');
-      } else {
-        audioTracks.forEach(track => {
-          track.enabled = true;
-        });
-      }
+      // Force enable all audio tracks
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        console.log('[WebRTC] startCall: Enabling local audio track', track);
+      });
 
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(targetUser);
-      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -211,25 +196,18 @@ export const useWebRTC = (username, socketRef) => {
         connectionInfo: runtimeConnectionInfo
       });
 
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      // Force-enable all audio tracks
-      const audioTracks = stream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        console.warn('No audio tracks found in local stream! Voice will not be transmitted.');
-      } else {
-        audioTracks.forEach(track => {
-          track.enabled = true;
-        });
-      }
-
+      // Force enable all audio tracks
+      stream.getAudioTracks().forEach(track => {
+        track.enabled = true;
+        console.log('[WebRTC] answerCall: Enabling local audio track', track);
+      });
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(incomingCall.from);
-      
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -297,6 +275,7 @@ export const useWebRTC = (username, socketRef) => {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
+        console.log('[WebRTC] toggleMute: audioTrack.enabled =', audioTrack.enabled);
       }
     }
   }, []);
