@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Mic, Volume2, Wifi, Camera, RefreshCw } from 'lucide-react';
+// No icons needed
 import { useEnhancedCall } from '../../hooks/useEnhancedcall';
 import { detectDevices } from '../../utils/settings';
 
@@ -13,52 +13,22 @@ const CallSettings = ({ onClose, callHook }) => {
     updateCallSettings,
     savePreferredDevices,
   } = callApi;
-  const [localSettings, setLocalSettings] = useState(settings || {});
-  const [cameraDevices, setCameraDevices] = useState([]);
-  const [isLoadingCameras, setIsLoadingCameras] = useState(false);
+  // No local settings or device lists needed for defaults
 
-  useEffect(() => {
-    setLocalSettings(settings || {});
-  }, [settings]);
 
-  const handleChange = (key, value) => {
-    setLocalSettings(prev => ({ ...prev, [key]: value }));
-  };
 
-  const loadCameraDevices = async () => {
-    setIsLoadingCameras(true);
-    try {
-      const deviceList = await detectDevices({
-        requestPermission: true,
-        requestAudio: false,
-        requestVideo: true,
-      });
-      setCameraDevices(deviceList.cameras || []);
-    } catch (error) {
-      console.error('Failed to load cameras:', error);
-      setCameraDevices([]);
-    } finally {
-      setIsLoadingCameras(false);
-    }
-  };
 
-  const handleCameraChange = (deviceId) => {
-    if (typeof setActiveDevices === 'function') {
-      setActiveDevices((prev) => ({ ...prev, camera: deviceId }));
-    }
-  };
 
-  const handleSave = () => {
-    updateCallSettings(localSettings);
-    if (typeof savePreferredDevices === 'function') {
-      savePreferredDevices();
-    }
+
+
+
+
+  // Only close action needed
+  const handleClose = () => {
     onClose();
   };
 
-  useEffect(() => {
-    loadCameraDevices();
-  }, []);
+
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -74,177 +44,17 @@ const CallSettings = ({ onClose, callHook }) => {
     };
   }, [onClose]);
 
-  const content = (
-    <div className="settings-panel-overlay" onClick={onClose}>
-      <div className="settings-panel call-settings-panel" style={{ zIndex: 26001 }} onClick={(event) => event.stopPropagation()}>
-        <div className="settings-header">
-          <h2>Call Settings</h2>
-          <button className="close-btn" onClick={onClose} type="button">
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="settings-content">
-        <div className="settings-section">
-          <h3>
-            <Camera size={18} />
-            Camera Device
-          </h3>
-
-          <div className="device-selector">
-            <select
-              value={activeDevices?.camera || 'system'}
-              onChange={(e) => handleCameraChange(e.target.value)}
-              disabled={isLoadingCameras}
-            >
-              <option value="system">System Default</option>
-              {cameraDevices.map((camera) => (
-                <option key={camera.deviceId} value={camera.deviceId}>
-                  {camera.label}
-                </option>
-              ))}
-            </select>
-
-            <button
-              className="btn-refresh"
-              onClick={loadCameraDevices}
-              type="button"
-              disabled={isLoadingCameras}
-              aria-label="Refresh camera list"
-              title="Refresh camera list"
-            >
-              <RefreshCw size={16} className={isLoadingCameras ? 'spin' : ''} />
-            </button>
-          </div>
-
-          <p className="call-settings-note">Camera preference is applied immediately when possible, and always on next call start.</p>
-        </div>
-
-        <div className="settings-section">
-          <h3>
-            <Mic size={18} />
-            Audio Settings
-          </h3>
-          
-          <div className="setting-item">
-            <label>Echo Cancellation</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={localSettings.echoCancellation !== false}
-                onChange={(e) => handleChange('echoCancellation', e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <label>Noise Suppression</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={localSettings.noiseSuppression !== false}
-                onChange={(e) => handleChange('noiseSuppression', e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <label>Auto Gain Control</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={localSettings.autoGainControl !== false}
-                onChange={(e) => handleChange('autoGainControl', e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-
-          <div className="setting-item">
-            <label>Stereo Audio</label>
-            <div className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={!!localSettings.stereoAudio}
-                onChange={(e) => handleChange('stereoAudio', e.target.checked)}
-              />
-              <span className="toggle-slider"></span>
-            </div>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>
-            <Volume2 size={18} />
-            Video Quality
-          </h3>
-
-          <div className="setting-item">
-            <label>Video Quality</label>
-            <select 
-              value={localSettings.videoQuality || 'auto'}
-              onChange={(e) => handleChange('videoQuality', e.target.value)}
-            >
-              <option value="auto">Auto</option>
-              <option value="low">Low (360p)</option>
-              <option value="medium">Medium (480p)</option>
-              <option value="high">High (720p)</option>
-              <option value="ultra">Ultra (1080p)</option>
-            </select>
-          </div>
-
-          <div className="setting-item">
-            <label>Max Frame Rate</label>
-            <select 
-              value={String(localSettings.frameRate || 30)}
-              onChange={(e) => handleChange('frameRate', parseInt(e.target.value))}
-            >
-              <option value="15">15 fps</option>
-              <option value="24">24 fps</option>
-              <option value="30">30 fps</option>
-              <option value="48">48 fps</option>
-              <option value="60">60 fps</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <h3>
-            <Wifi size={18} />
-            Network
-          </h3>
-
-          <div className="setting-item">
-            <label>Bandwidth Limit</label>
-            <select 
-              value={String(localSettings.bandwidthLimit ?? 0)}
-              onChange={(e) => handleChange('bandwidthLimit', parseInt(e.target.value))}
-            >
-              <option value="0">Unlimited</option>
-              <option value="500">500 kbps</option>
-              <option value="1000">1 Mbps</option>
-              <option value="2000">2 Mbps</option>
-              <option value="5000">5 Mbps</option>
-            </select>
-          </div>
-        </div>
-
-          <div className="settings-actions">
-            <button className="btn-secondary" onClick={onClose} type="button">Cancel</button>
-            <button className="btn-primary" onClick={handleSave} type="button">Save Changes</button>
-          </div>
-        </div>
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={handleClose}>
+      <div style={{ background: '#fff', padding: 24, borderRadius: 8, minWidth: 240, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} onClick={e => e.stopPropagation()}>
+        <h2 style={{ margin: 0, marginBottom: 12, fontSize: 20 }}>Call Settings</h2>
+        <p style={{ marginBottom: 20 }}>All call settings use system defaults for maximum compatibility.</p>
+        <button onClick={handleClose} style={{ padding: '6px 18px', border: 'none', borderRadius: 4, background: '#007bff', color: '#fff', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Close</button>
       </div>
     </div>
   );
 
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  return createPortal(content, document.body);
+  // No portal needed for simplicity
 };
 
 export default CallSettings;

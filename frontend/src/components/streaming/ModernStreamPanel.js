@@ -1,167 +1,39 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { 
-  Radio, Users, MessageSquare, Heart, ThumbsUp, 
-  Share2, Settings, Mic, MicOff, Camera, CameraOff,
-  MonitorUp, ScreenShareOff, X,
-  Clock, Wifi
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React from 'react';
+import { Mic, MicOff, Camera, CameraOff, MonitorUp, ScreenShareOff, PhoneOff } from 'lucide-react';
+import { motion } from 'framer-motion';
 import '../../styles/index.css';
 
 const ModernStreamPanel = ({
-  isHost,
   stream,
-  streamSource,
   isMuted,
   isVideoOff,
-  viewerCount,
   onToggleMute,
   onToggleVideo,
   onEndStream,
-  onSwitchSource,
-  streamTitle = "Untitled Stream",
-  streamerName,
-  streamThumbnail,
-  viewers = [],
-  chatMessages = [],
-  onSendChat,
-  onReact,
-  streamQuality = '1080p',
-  streamDuration = 0,
-  likes = 0,
-  shares = 0,
-  onSettingsChange,
-  cameraDevices = [],
-  selectedCameraId = '',
-  microphoneDevices = [],
-  selectedMicrophoneId = 'default',
-  audioOutputDevices = [],
-  selectedAudioOutput = 'default',
-  streamSettings
 }) => {
-  const [showChat, setShowChat] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
-  const [isMobileLayout, setIsMobileLayout] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [mobileTrayLevel, setMobileTrayLevel] = useState('medium');
-  const [showTrayHint, setShowTrayHint] = useState(false);
-  const [chatMessage, setChatMessage] = useState('');
-  const [layout, setLayout] = useState('cinema');
-  const [reactions, setReactions] = useState([]);
-  const [selectedQuality, setSelectedQuality] = useState(streamSettings?.quality || streamQuality || '1080p');
-  const [selectedMicrophone, setSelectedMicrophone] = useState(selectedMicrophoneId || streamSettings?.microphoneId || 'default');
-  const [selectedCamera, setSelectedCamera] = useState(selectedCameraId || 'default');
-  const [selectedSpeaker, setSelectedSpeaker] = useState(selectedAudioOutput || 'default');
-  const [noiseSuppression, setNoiseSuppression] = useState(streamSettings?.noiseSuppression ?? true);
-  const [slowMode, setSlowMode] = useState(streamSettings?.slowMode ?? false);
-  const [subOnlyMode, setSubOnlyMode] = useState(streamSettings?.subOnlyMode ?? false);
-  const [lastChatSentAt, setLastChatSentAt] = useState(0);
-  const [fallbackCameraDevices, setFallbackCameraDevices] = useState([]);
-  const [fallbackMicrophoneDevices, setFallbackMicrophoneDevices] = useState([]);
-  const [fallbackAudioOutputs, setFallbackAudioOutputs] = useState([]);
-  const streamVideoRef = useRef(null);
-  const trayTouchStartYRef = useRef(null);
-  const activePolicyBadges = [
-    ...(slowMode ? ['Slow Mode'] : []),
-    ...(subOnlyMode ? ['Sub-only'] : [])
-  ];
-
-  useEffect(() => {
-    if (!streamVideoRef.current) return;
-    if (stream) {
-      streamVideoRef.current.srcObject = stream;
-      const playPromise = streamVideoRef.current.play?.();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {});
-      }
-    } else {
-      streamVideoRef.current.srcObject = null;
-    }
-  }, [stream]);
-
-  useEffect(() => {
-    setSelectedQuality(streamQuality || '1080p');
-  }, [streamQuality]);
-
-  useEffect(() => {
-    if (!streamSettings) return;
-    setSelectedQuality(streamSettings.quality || streamQuality || '1080p');
-    setSelectedMicrophone(streamSettings.microphoneId || selectedMicrophoneId || 'default');
-    setNoiseSuppression(streamSettings.noiseSuppression ?? true);
-    setSlowMode(streamSettings.slowMode ?? false);
-    setSubOnlyMode(streamSettings.subOnlyMode ?? false);
-  }, [streamSettings, streamQuality, selectedMicrophoneId]);
-
-  useEffect(() => {
-    setSelectedCamera(selectedCameraId || 'default');
-  }, [selectedCameraId]);
-
-  useEffect(() => {
-    setSelectedSpeaker(selectedAudioOutput || 'default');
-  }, [selectedAudioOutput]);
-
-  useEffect(() => {
-    setSelectedMicrophone(selectedMicrophoneId || 'default');
-  }, [selectedMicrophoneId]);
-
-  useEffect(() => {
-    const loadDeviceOptions = async () => {
-      if (!showSettings || !navigator.mediaDevices?.enumerateDevices) return;
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cameras = devices
-          .filter((device) => device.kind === 'videoinput')
-          .map((device, index) => ({
-            deviceId: device.deviceId,
-            label: device.label || `External Camera ${index + 1}`
-          }));
-        const microphones = devices
-          .filter((device) => device.kind === 'audioinput')
-          .map((device, index) => ({
-            deviceId: device.deviceId,
-            label: device.label || `External Microphone ${index + 1}`
-          }));
-        const outputs = devices
-          .filter((device) => device.kind === 'audiooutput')
-          .map((device, index) => ({
-            deviceId: device.deviceId,
-            label: device.label || `External Speaker ${index + 1}`
-          }));
-        setFallbackCameraDevices(cameras);
-        setFallbackMicrophoneDevices(microphones);
-        setFallbackAudioOutputs(outputs);
-      } catch (error) {
-        setFallbackCameraDevices([]);
-        setFallbackMicrophoneDevices([]);
-        setFallbackAudioOutputs([]);
-      }
-    };
-
-    loadDeviceOptions();
-  }, [showSettings]);
-
-  useEffect(() => {
-    const mediaElement = streamVideoRef.current;
-    if (!mediaElement || typeof mediaElement.setSinkId !== 'function') return;
-    mediaElement.setSinkId(selectedSpeaker || 'default').catch(() => {});
-  }, [selectedSpeaker, stream]);
-
-  const availableCameraOptions = [
-    { deviceId: 'default', label: 'Default Camera' },
-    ...(cameraDevices.length > 0 ? cameraDevices : fallbackCameraDevices).filter((device) => !!device?.deviceId)
-  ];
-
-  const availableSpeakerOptions = [
-    { deviceId: 'default', label: 'Default Speaker' },
-    ...(audioOutputDevices.length > 0 ? audioOutputDevices : fallbackAudioOutputs).filter((device) => !!device?.deviceId)
-  ];
-
-  const availableMicrophoneOptions = [
-    { deviceId: 'default', label: 'Default Microphone' },
-    ...(microphoneDevices.length > 0 ? microphoneDevices : fallbackMicrophoneDevices).filter((device) => !!device?.deviceId)
-  ];
+  // Only basic controls and default device are shown. No advanced settings.
+  return (
+    <motion.div className="modern-stream-panel">
+      <div className="stream-video-wrapper">
+        {stream ? (
+          <video ref={el => { if (el) el.srcObject = stream; }} className="stream-video" autoPlay playsInline muted={isMuted} />
+        ) : (
+          <div className="stream-video-placeholder">No Stream</div>
+        )}
+      </div>
+      <div className="modern-stream-controls">
+        <button className={`main-control ${isMuted ? 'active' : ''}`} onClick={onToggleMute} title={isMuted ? 'Unmute' : 'Mute'}>
+          {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+        </button>
+        <button className={`main-control ${isVideoOff ? 'active' : ''}`} onClick={onToggleVideo} title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}>
+          {isVideoOff ? <CameraOff size={24} /> : <Camera size={24} />}
+        </button>
+        <button className="main-control end-stream" onClick={onEndStream} title="End Stream">
+          <PhoneOff size={24} />
+        </button>
+      </div>
+    </motion.div>
+  );
 
   const formatDuration = (seconds) => {
     const hrs = Math.floor(seconds / 3600);

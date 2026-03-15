@@ -367,6 +367,18 @@ function AppContent() {
     localStorage.getItem('devchatPreferredAudioOutput') || 'default'
   );
 
+  // Default to first available mic/speaker if none selected
+  useEffect(() => {
+    if (audioInputDevices.length > 0 && !selectedAudioInputId) {
+      setSelectedAudioInputId(audioInputDevices[0].deviceId);
+    }
+  }, [audioInputDevices, selectedAudioInputId]);
+  useEffect(() => {
+    if (audioOutputDevices.length > 0 && (!audioOutputDevice || audioOutputDevice === 'default')) {
+      setAudioOutputDevice(audioOutputDevices[0].deviceId);
+    }
+  }, [audioOutputDevices, audioOutputDevice]);
+
   const normalizeDevicePreferenceId = useCallback((value) => {
     if (!value || value === 'default' || value === 'system') return '';
     return value;
@@ -6539,11 +6551,11 @@ function AppContent() {
             </>
           )}
           <div className="livestream-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="livestream-header-row">
               <Radio size={24} color="var(--error)" className="pulse-animation" />
-              <h2 style={{ color: 'var(--txt)', margin: 0, fontSize: '18px' }}>{isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}</h2>
+              <h2 className="livestream-header-title">{isStreamHost ? "🔴 You are Live" : `Watching: ${currentStreamRoom}`}</h2>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="livestream-header-row">
               {isMobileView && (
                 <button
                   className={`menu-toggle ${unreadNotificationCount > 0 ? 'has-notification' : ''}`}
@@ -6559,7 +6571,7 @@ function AppContent() {
                   {unreadNotificationCount > 0 && <span className={`menu-toggle-dot ${hasNewNotificationPulse ? 'pulse' : ''}`} aria-hidden="true" />}
                 </button>
               )}
-              <button onClick={handleLeaveStream} style={{ background: 'var(--error)', padding: '8px 16px', borderRadius: '8px', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Leave Stream</button>
+              <button onClick={handleLeaveStream} className="leave-stream-btn">Leave Stream</button>
             </div>
           </div>
           <div style={{ height: 'calc(100vh - 60px)', marginTop: '60px' }}>
@@ -7283,7 +7295,7 @@ function AppContent() {
             onToggleMinimize={toggleCallMinimize}
             localVideoRef={setLocalVideoElement}
             remoteVideoRef={setRemoteVideoElement}
-            formatDuration={formatCallDuration}
+            remoteAudioRef={setRemoteAudioElement}
             localStream={localStream}
             remoteStream={remoteStream}
             remoteIsScreenSharing={remoteIsScreenSharing}
@@ -7296,6 +7308,12 @@ function AppContent() {
             cameraStatusToast={inCallCameraToast}
             selectedVideoQuality={streamPanelSettings.quality}
             onVideoQualityChange={handleInCallVideoQualityChange}
+            audioInputDevices={audioInputDevices}
+            audioOutputDevices={audioOutputDevices}
+            selectedAudioInputId={selectedAudioInputId}
+            selectedAudioOutput={audioOutputDevice}
+            onMicrophoneChange={setSelectedAudioInputId}
+            onSpeakerChange={setAudioOutputDevice}
             audioSettings={{
               noiseSuppression: enhancedCallSettings?.noiseSuppression !== false,
               echoCancellation: enhancedCallSettings?.echoCancellation !== false,

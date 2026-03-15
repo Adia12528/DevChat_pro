@@ -135,13 +135,34 @@ export const useWebRTC = (username, socketRef) => {
         connectionInfo: runtimeConnectionInfo
       });
 
+
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia(
-          getFallbackMediaConstraints(type)
-        );
+        // Fallback: try first available audio input device
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const firstMic = devices.find(d => d.kind === 'audioinput');
+        if (firstMic) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { deviceId: { exact: firstMic.deviceId } },
+            video: constraints.video || false
+          });
+        } else {
+          stream = await navigator.mediaDevices.getUserMedia(
+            getFallbackMediaConstraints(type)
+          );
+        }
+      }
+
+      // Force-enable all audio tracks
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        console.warn('No audio tracks found in local stream! Voice will not be transmitted.');
+      } else {
+        audioTracks.forEach(track => {
+          track.enabled = true;
+        });
       }
 
       setLocalStream(stream);
@@ -191,6 +212,17 @@ export const useWebRTC = (username, socketRef) => {
       });
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Force-enable all audio tracks
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        console.warn('No audio tracks found in local stream! Voice will not be transmitted.');
+      } else {
+        audioTracks.forEach(track => {
+          track.enabled = true;
+        });
+      }
+
       setLocalStream(stream);
       localStreamRef.current = stream;
 
