@@ -66,22 +66,23 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     pc.ontrack = (event) => {
       console.log('Remote track received:', event.track.kind);
-      
-      if (!remoteStream) {
-        const stream = new MediaStream();
-        setRemoteStream(stream);
-      }
-
-      if (event.streams && event.streams[0]) {
-        setRemoteStream(event.streams[0]);
-      } else {
-        remoteStream?.addTrack(event.track);
-      }
+      // Always use a single MediaStream instance for remoteStream
+      setRemoteStream(prevStream => {
+        let stream = prevStream;
+        if (event.streams && event.streams[0]) {
+          stream = event.streams[0];
+        } else if (!stream) {
+          stream = new MediaStream();
+        }
+        if (event.track && !stream.getTracks().includes(event.track)) {
+          stream.addTrack(event.track);
+        }
+        return stream;
+      });
     };
 
     pc.onconnectionstatechange = () => {
       console.log('Connection state:', pc.connectionState);
-      
       if (pc.connectionState === 'connected') {
         setCallError(null);
         setCallState('active');
@@ -95,7 +96,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     pc.oniceconnectionstatechange = () => {
       console.log('ICE state:', pc.iceConnectionState);
-      
       if (pc.iceConnectionState === 'failed') {
         setCallError('Network connection failed');
       }
@@ -103,9 +103,14 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [socket, username, remoteStream]);
+  }, [socket, username]);
 
   const startCall = useCallback(async (type, targetUser) => {
+    // Prevent call loop: only allow call if idle
+    if (callState !== 'idle') {
+      console.warn('Call already in progress, not starting another.');
+      return;
+    }
     try {
       setCallType(type);
       setCallPeer(targetUser);
@@ -113,7 +118,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       setCallError(null);
 
       const constraints = getCallConstraints(type);
-      
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
@@ -122,7 +126,6 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
 
       const pc = createPeerConnection(targetUser);
-
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -159,15 +162,14 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
   const answerCall = useCallback(async () => {
     if (!incomingCall) return;
-
+    // Set callState to active early to prevent call loop
+    setCallState('active');
     try {
       setCallType(incomingCall.callType);
       setCallPeer(incomingCall.from);
-      setCallState('active');
       setIncomingCall(null);
 
       const constraints = getCallConstraints(incomingCall.callType);
-      
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
@@ -176,9 +178,7 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
 
       const pc = createPeerConnection(incomingCall.from);
-
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });

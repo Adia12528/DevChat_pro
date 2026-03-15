@@ -39,7 +39,8 @@ export const getAdaptiveMediaConstraints = ({ callType, userAgent, connectionInf
   const videoConstraints = {
     width: { ideal: isSlowConnection ? 640 : isMobile ? 1280 : 1920 },
     height: { ideal: isSlowConnection ? 480 : isMobile ? 720 : 1080 },
-    frameRate: { ideal: isSlowConnection ? 15 : 30 }
+    frameRate: { ideal: isSlowConnection ? 15 : 30 },
+    facingMode: { ideal: 'user' } // Always prefer front camera on mobile
   };
 
   return {
