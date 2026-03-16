@@ -117,9 +117,31 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       setCallState('calling');
       setCallError(null);
 
-      const constraints = getCallConstraints(type);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Force basic constraints for compatibility
+      const constraints = { video: true, audio: true };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        console.error('[CallManager] getUserMedia failed (startCall):', err);
+        setCallError('Camera/mic access denied or unavailable');
+        setCallState('idle');
+        return;
+      }
       setLocalStream(stream);
+
+      // Log local stream tracks for debugging
+      const localVideoTracks = stream.getVideoTracks();
+      const localAudioTracks = stream.getAudioTracks();
+      console.log('[CallManager] Local stream video tracks:', localVideoTracks);
+      console.log('[CallManager] Local stream audio tracks:', localAudioTracks);
+      if (localVideoTracks.length > 0) {
+        localVideoTracks.forEach((track, i) => {
+          console.log(`[CallManager] Local video track[${i}]: id=${track.id}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
+        });
+      } else {
+        console.warn('[CallManager] No local video tracks found!');
+      }
 
       if (localVideoRef.current && type === 'video') {
         localVideoRef.current.srcObject = stream;
@@ -169,8 +191,17 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       setCallPeer(incomingCall.from);
       setIncomingCall(null);
 
-      const constraints = getCallConstraints(incomingCall.callType);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Force basic constraints for compatibility
+      const constraints = { video: true, audio: true };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        console.error('[CallManager] getUserMedia failed (answerCall):', err);
+        setCallError('Camera/mic access denied or unavailable');
+        endCall();
+        return;
+      }
       setLocalStream(stream);
 
       if (localVideoRef.current && incomingCall.callType === 'video') {
@@ -315,7 +346,9 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     const handleCallOffer = (data) => {
       if (callState !== 'idle') {
+        console.log('[CallManager] Received call:offer while not idle, sending busy. Current callState:', callState);
         socket.emit('call:busy', { to: data.from, from: username });
+        // Never show incoming call modal if not idle
         return;
       }
       setIncomingCall(data);
