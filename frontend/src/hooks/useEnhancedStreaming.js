@@ -14,7 +14,7 @@ export const useEnhancedCall = (socket, username) => {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const mediaStreamRef = useRef(null);
-
+z
   // Load devices on mount
   useEffect(() => {
     const loadDevices = async () => {

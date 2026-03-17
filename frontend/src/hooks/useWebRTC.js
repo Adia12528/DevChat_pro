@@ -135,7 +135,6 @@ export const useWebRTC = (username, socketRef) => {
         connectionInfo: runtimeConnectionInfo
       });
 
-
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -145,16 +144,11 @@ export const useWebRTC = (username, socketRef) => {
         );
       }
 
-      // Force enable all audio tracks
-      stream.getAudioTracks().forEach(track => {
-        track.enabled = true;
-        console.log('[WebRTC] startCall: Enabling local audio track', track);
-      });
-
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(targetUser);
+      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -196,18 +190,14 @@ export const useWebRTC = (username, socketRef) => {
         connectionInfo: runtimeConnectionInfo
       });
 
-
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      // Force enable all audio tracks
-      stream.getAudioTracks().forEach(track => {
-        track.enabled = true;
-        console.log('[WebRTC] answerCall: Enabling local audio track', track);
-      });
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(incomingCall.from);
+      
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -275,7 +265,6 @@ export const useWebRTC = (username, socketRef) => {
       if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         setIsMuted(!audioTrack.enabled);
-        console.log('[WebRTC] toggleMute: audioTrack.enabled =', audioTrack.enabled);
       }
     }
   }, []);

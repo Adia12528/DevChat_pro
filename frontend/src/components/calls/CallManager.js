@@ -66,23 +66,22 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     pc.ontrack = (event) => {
       console.log('Remote track received:', event.track.kind);
-      // Always use a single MediaStream instance for remoteStream
-      setRemoteStream(prevStream => {
-        let stream = prevStream;
-        if (event.streams && event.streams[0]) {
-          stream = event.streams[0];
-        } else if (!stream) {
-          stream = new MediaStream();
-        }
-        if (event.track && !stream.getTracks().includes(event.track)) {
-          stream.addTrack(event.track);
-        }
-        return stream;
-      });
+      
+      if (!remoteStream) {
+        const stream = new MediaStream();
+        setRemoteStream(stream);
+      }
+
+      if (event.streams && event.streams[0]) {
+        setRemoteStream(event.streams[0]);
+      } else {
+        remoteStream?.addTrack(event.track);
+      }
     };
 
     pc.onconnectionstatechange = () => {
       console.log('Connection state:', pc.connectionState);
+      
       if (pc.connectionState === 'connected') {
         setCallError(null);
         setCallState('active');
@@ -96,6 +95,7 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     pc.oniceconnectionstatechange = () => {
       console.log('ICE state:', pc.iceConnectionState);
+      
       if (pc.iceConnectionState === 'failed') {
         setCallError('Network connection failed');
       }
@@ -103,51 +103,26 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, [socket, username]);
+  }, [socket, username, remoteStream]);
 
   const startCall = useCallback(async (type, targetUser) => {
-    // Prevent call loop: only allow call if idle
-    if (callState !== 'idle') {
-      console.warn('Call already in progress, not starting another.');
-      return;
-    }
     try {
       setCallType(type);
       setCallPeer(targetUser);
       setCallState('calling');
       setCallError(null);
 
-      // Force basic constraints for compatibility
-      const constraints = { video: true, audio: true };
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (err) {
-        console.error('[CallManager] getUserMedia failed (startCall):', err);
-        setCallError('Camera/mic access denied or unavailable');
-        setCallState('idle');
-        return;
-      }
+      const constraints = getCallConstraints(type);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
-
-      // Log local stream tracks for debugging
-      const localVideoTracks = stream.getVideoTracks();
-      const localAudioTracks = stream.getAudioTracks();
-      console.log('[CallManager] Local stream video tracks:', localVideoTracks);
-      console.log('[CallManager] Local stream audio tracks:', localAudioTracks);
-      if (localVideoTracks.length > 0) {
-        localVideoTracks.forEach((track, i) => {
-          console.log(`[CallManager] Local video track[${i}]: id=${track.id}, enabled=${track.enabled}, muted=${track.muted}, readyState=${track.readyState}`);
-        });
-      } else {
-        console.warn('[CallManager] No local video tracks found!');
-      }
 
       if (localVideoRef.current && type === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
       const pc = createPeerConnection(targetUser);
+
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -159,7 +134,7 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await waitForIceGatheringComplete(pc);
+      await waitForIceGatheringCzomplete(pc);
 
       socket.emit('call:offer', {
         to: targetUser,
@@ -184,24 +159,16 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
   const answerCall = useCallback(async () => {
     if (!incomingCall) return;
-    // Set callState to active early to prevent call loop
-    setCallState('active');
+
     try {
       setCallType(incomingCall.callType);
       setCallPeer(incomingCall.from);
+      setCallState('active');
       setIncomingCall(null);
 
-      // Force basic constraints for compatibility
-      const constraints = { video: true, audio: true };
-      let stream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (err) {
-        console.error('[CallManager] getUserMedia failed (answerCall):', err);
-        setCallError('Camera/mic access denied or unavailable');
-        endCall();
-        return;
-      }
+      const constraints = getCallConstraints(incomingCall.callType);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
 
       if (localVideoRef.current && incomingCall.callType === 'video') {
@@ -209,7 +176,9 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
       }
 
       const pc = createPeerConnection(incomingCall.from);
+
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -346,9 +315,7 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
     const handleCallOffer = (data) => {
       if (callState !== 'idle') {
-        console.log('[CallManager] Received call:offer while not idle, sending busy. Current callState:', callState);
         socket.emit('call:busy', { to: data.from, from: username });
-        // Never show incoming call modal if not idle
         return;
       }
       setIncomingCall(data);

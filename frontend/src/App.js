@@ -673,7 +673,6 @@ function AppContent() {
     if (activeLocalStream) {
       activeLocalStream.getAudioTracks().forEach(track => {
         track.enabled = !isMuted;
-        console.log('[App] useEffect: Setting local audio track.enabled =', !isMuted, track);
       });
     }
 
@@ -681,7 +680,6 @@ function AppContent() {
     if (viewerLocalStream && viewerLocalStream !== activeLocalStream) {
       viewerLocalStream.getAudioTracks().forEach(track => {
         track.enabled = !isMuted;
-        console.log('[App] useEffect: Setting viewer audio track.enabled =', !isMuted, track);
       });
     }
   }, [localStream, isMuted]);
@@ -1083,37 +1081,17 @@ function AppContent() {
           deviceId: d.deviceId,
           label: d.label || `External Speaker ${i + 1}`
         }));
-      // Sort cameras so integrated camera is always first if present
-      const sortedCameras = [...cameras].sort((a, b) => {
-        const aInt = a.label.toLowerCase().includes('integrated') ? -1 : 0;
-        const bInt = b.label.toLowerCase().includes('integrated') ? -1 : 0;
-        return bInt - aInt;
-      });
-      setVideoInputDevices(sortedCameras);
+      setVideoInputDevices(cameras);
       setAudioInputDevices(microphones);
       setAudioOutputDevices(speakers);
 
-
-      // Set default camera, mic, and speaker to integrated device if available, else first
-      if ((!selectedVideoInputId || !sortedCameras.some(device => device.deviceId === selectedVideoInputId)) && sortedCameras.length > 0) {
-        const defaultCameraId = sortedCameras[0].deviceId;
-        setSelectedVideoInputId(defaultCameraId);
-        localStorage.setItem('devchatPreferredCameraId', defaultCameraId);
+      if (selectedVideoInputId && !cameras.some(device => device.deviceId === selectedVideoInputId)) {
+        setSelectedVideoInputId('');
       }
 
-      if ((!selectedAudioInputId || !microphones.some(device => device.deviceId === selectedAudioInputId)) && microphones.length > 0) {
-        const integratedMic = microphones.find(mic => mic.label.toLowerCase().includes('integrated'));
-        const defaultMicId = integratedMic ? integratedMic.deviceId : microphones[0].deviceId;
-        setSelectedAudioInputId(defaultMicId);
-        setStreamPanelSettings(prev => ({ ...prev, microphoneId: defaultMicId }));
-        localStorage.setItem('devchatPreferredMicrophoneId', defaultMicId);
-      }
-
-      if ((!audioOutputDevice || !speakers.some(device => device.deviceId === audioOutputDevice)) && speakers.length > 0) {
-        const integratedSpeaker = speakers.find(spk => spk.label.toLowerCase().includes('integrated'));
-        const defaultSpeakerId = integratedSpeaker ? integratedSpeaker.deviceId : speakers[0].deviceId;
-        setAudioOutputDevice(defaultSpeakerId);
-        localStorage.setItem('devchatPreferredAudioOutput', defaultSpeakerId);
+      if (selectedAudioInputId && !microphones.some(device => device.deviceId === selectedAudioInputId)) {
+        setSelectedAudioInputId('');
+        setStreamPanelSettings(prev => ({ ...prev, microphoneId: 'default' }));
       }
 
       return { ok: true, skipped: false, cameraCount: cameras.length };
@@ -1133,7 +1111,7 @@ function AppContent() {
     return {
       effectiveType: conn?.effectiveType,
       downlink: conn?.downlink,
-      rtt: conn?.rtt,
+      rtt: conn?.rttz,
       saveData: conn?.saveData
     };
   }, []);
@@ -7318,12 +7296,6 @@ function AppContent() {
             cameraStatusToast={inCallCameraToast}
             selectedVideoQuality={streamPanelSettings.quality}
             onVideoQualityChange={handleInCallVideoQualityChange}
-            audioInputDevices={audioInputDevices}
-            selectedAudioInputId={selectedAudioInputId}
-            onAudioInputChange={setSelectedAudioInputId}
-            audioOutputDevices={audioOutputDevices}
-            selectedAudioOutputId={audioOutputDevice}
-            onAudioOutputChange={setAudioOutputDevice}
             audioSettings={{
               noiseSuppression: enhancedCallSettings?.noiseSuppression !== false,
               echoCancellation: enhancedCallSettings?.echoCancellation !== false,
