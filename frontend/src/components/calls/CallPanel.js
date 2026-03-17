@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, 
   Maximize2, Minimize2, Users, Settings, Volume2, 
@@ -43,6 +44,8 @@ const CallPanel = ({
   audioSettings,
   onAudioSettingChange,
 }) => {
+  // Ref for remote audio element
+  const remoteAudioRef = useRef(null);
   const [showControls, setShowControls] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -163,6 +166,15 @@ const CallPanel = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Ensure remote audio is always played (fixes mobile voice issue)
+  useEffect(() => {
+    if (remoteAudioRef.current && remoteStream) {
+      if (remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream;
+      }
+    }
+  }, [remoteStream]);
+
   if (isCallMinimized) {
     return (
       <motion.div
@@ -207,6 +219,16 @@ const CallPanel = ({
   }
 
   return (
+    <>
+      {/* Hidden audio element for remote audio playback (mobile fix) */}
+      {remoteStream && (
+        <audio
+          ref={remoteAudioRef}
+          autoPlay
+          playsInline
+          style={{ display: 'none' }}
+        />
+      )}
     <motion.div 
       className={`modern-call-container ${isPerformanceLite ? 'performance-lite' : ''}`}
       initial={{ opacity: 0 }}
@@ -602,6 +624,7 @@ const CallPanel = ({
         )}
       </AnimatePresence>
     </motion.div>
+    </>
   );
 };
 
