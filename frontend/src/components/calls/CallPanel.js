@@ -50,6 +50,7 @@ const CallPanel = ({
     if (localVideoRef && localVideoRef.current && localStream) {
       if (localVideoRef.current.srcObject !== localStream) {
         localVideoRef.current.srcObject = localStream;
+        console.log('[CallPanel] Set localVideoRef srcObject:', localStream, localStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
       }
     }
   }, [localStream, localVideoRef]);
@@ -58,6 +59,7 @@ const CallPanel = ({
     if (remoteVideoRef && remoteVideoRef.current && remoteStream) {
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
+        console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
       }
     }
   }, [remoteStream, remoteVideoRef]);

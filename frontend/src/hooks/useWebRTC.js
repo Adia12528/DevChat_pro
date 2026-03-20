@@ -108,6 +108,10 @@ export const useWebRTC = (username, socketRef) => {
         stream.addTrack(event.track);
         // Force update to trigger React re-render
         setRemoteStream(new MediaStream(stream.getTracks()));
+        console.log('[WebRTC][ontrack] Added track:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
+        console.log('[WebRTC][ontrack] Remote stream tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
+      } else {
+        console.log('[WebRTC][ontrack] Track already present or missing:', event.track?.kind, event.track?.id);
       }
     };
 
@@ -125,6 +129,8 @@ export const useWebRTC = (username, socketRef) => {
     };
 
     peerConnectionRef.current = pc;
+    // Debug: log when peer connection is created
+    console.log('[WebRTC] PeerConnection created:', pc);
     return pc;
   }, [iceServersConfig, socketRef]);
 
