@@ -44,6 +44,23 @@ const CallPanel = ({
   audioSettings,
   onAudioSettingChange,
 }) => {
+
+  // Ensure local and remote video elements always update srcObject
+  useEffect(() => {
+    if (localVideoRef && localVideoRef.current && localStream) {
+      if (localVideoRef.current.srcObject !== localStream) {
+        localVideoRef.current.srcObject = localStream;
+      }
+    }
+  }, [localStream, localVideoRef]);
+
+  useEffect(() => {
+    if (remoteVideoRef && remoteVideoRef.current && remoteStream) {
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
+    }
+  }, [remoteStream, remoteVideoRef]);
   // Ref for remote audio element
   const remoteAudioRef = useRef(null);
   const [showControls, setShowControls] = useState(true);

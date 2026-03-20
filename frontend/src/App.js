@@ -121,6 +121,8 @@ const LOCAL_PREVIEW_SIZES = [
 ];
 
 function AppContent() {
+    // Store a pending join if socket is not connected
+    const pendingJoinRef = useRef(null);
   const { settings: appSettings, updateSettings } = useSettings();
 
   // ==================== CORE STATES ====================
@@ -128,6 +130,7 @@ function AppContent() {
   const [room, setRoom] = useState('');
   const [showChat, setShowChat] = useState(false);
   const [entryMode, setEntryMode] = useState(() => sessionStorage.getItem('devchatEntryMode') || 'classic');
+  const [loginError, setLoginError] = useState('');
 
   // Auto-login for DevRoom
   useEffect(() => {
@@ -1814,7 +1817,29 @@ function AppContent() {
       console.log('✅ Connected to server');
       setConnected(true);
       
-      if (roomRef.current && usernameRef.current) {
+      // If there is a pending join, perform it now
+      if (pendingJoinRef.current && pendingJoinRef.current.username && pendingJoinRef.current.room) {
+        const { username, room } = pendingJoinRef.current;
+        sessionStorage.setItem('chatUsername', username);
+        sessionStorage.setItem('chatRoom', room);
+        setChat([]);
+        setOnlineUsers([]);
+        setRoomUserMap({});
+        setActiveRoomRegistry([]);
+        setGlobalPresenceUsers([]);
+        setTypingUsers(new Set());
+        setSearchQuery("");
+        setDebouncedSearchQuery("");
+        setGroupRoomId(room);
+        setRooms([{ id: room, name: room, type: 'group' }]);
+        setActiveRoom(room);
+        setMessage(roomDrafts[room] || '');
+        subscribedRoomsRef.current = new Set([room]);
+        socket.emit('join_room', { room, username, active: true, fetchHistory: true });
+        socket.emit('update_status', { username, status: 'online' });
+        setShowChat(true);
+        pendingJoinRef.current = null;
+      } else if (roomRef.current && usernameRef.current) {
         socket.emit('join_room', { 
           room: roomRef.current, 
           username: usernameRef.current, 
@@ -3124,28 +3149,32 @@ function AppContent() {
 
   // ==================== JOIN ROOM ====================
   const joinRoom = useCallback(() => {
-    if (username && room && socketRef.current) {
-      console.log(`🚪 Joining room: ${room}`);
-      
-      sessionStorage.setItem('chatUsername', username);
-      sessionStorage.setItem('chatRoom', room);
-      
-      setChat([]);
-      setOnlineUsers([]);
-      setRoomUserMap({});
-      setActiveRoomRegistry([]);
-      setGlobalPresenceUsers([]);
-      setTypingUsers(new Set());
-      setSearchQuery("");
-      setDebouncedSearchQuery("");
-      setGroupRoomId(room);
-      setRooms([{ id: room, name: room, type: 'group' }]);
-      setActiveRoom(room);
-      setMessage(roomDrafts[room] || '');
-      subscribedRoomsRef.current = new Set([room]);
-      socketRef.current.emit("join_room", { room, username, active: true, fetchHistory: true }); 
-      socketRef.current.emit("update_status", { username, status: 'online' });
-      setShowChat(true); 
+    if (username && room) {
+      if (socketRef.current && socketRef.current.connected) {
+        console.log(`🚪 Joining room: ${room}`);
+        sessionStorage.setItem('chatUsername', username);
+        sessionStorage.setItem('chatRoom', room);
+        setChat([]);
+        setOnlineUsers([]);
+        setRoomUserMap({});
+        setActiveRoomRegistry([]);
+        setGlobalPresenceUsers([]);
+        setTypingUsers(new Set());
+        setSearchQuery("");
+        setDebouncedSearchQuery("");
+        setGroupRoomId(room);
+        setRooms([{ id: room, name: room, type: 'group' }]);
+        setActiveRoom(room);
+        setMessage(roomDrafts[room] || '');
+        subscribedRoomsRef.current = new Set([room]);
+        socketRef.current.emit("join_room", { room, username, active: true, fetchHistory: true });
+        socketRef.current.emit("update_status", { username, status: 'online' });
+        setShowChat(true);
+        pendingJoinRef.current = null;
+      } else {
+        // Defer join until socket connects
+        pendingJoinRef.current = { username, room };
+      }
     }
   }, [username, room, roomDrafts]);
 

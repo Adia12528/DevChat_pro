@@ -79,7 +79,7 @@ export const useWebRTC = (username, socketRef) => {
 
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServersConfig);
-    
+
     const stats = new CallStatistics();
     callStatsRef.current = stats;
 
@@ -96,13 +96,19 @@ export const useWebRTC = (username, socketRef) => {
       }
     };
 
+    // Improved ontrack handler for robust remote stream handling (mobile/desktop)
     pc.ontrack = (event) => {
-      const stream = remoteStreamRef.current || new MediaStream();
-      if (event.track) {
-        stream.addTrack(event.track);
+      let stream = remoteStreamRef.current;
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamRef.current = stream;
+        setRemoteStream(stream);
       }
-      setRemoteStream(stream);
-      remoteStreamRef.current = stream;
+      if (event.track && !stream.getTracks().includes(event.track)) {
+        stream.addTrack(event.track);
+        // Force update to trigger React re-render
+        setRemoteStream(new MediaStream(stream.getTracks()));
+      }
     };
 
     pc.onconnectionstatechange = () => {
@@ -138,17 +144,28 @@ export const useWebRTC = (username, socketRef) => {
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch {
-        stream = await navigator.mediaDevices.getUserMedia(
-          getFallbackMediaConstraints(type)
-        );
+      } catch (err1) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(
+            getFallbackMediaConstraints(type)
+          );
+        } catch (err2) {
+          setCallError('Could not access camera/microphone. Please check permissions and device availability.');
+          setCallState('idle');
+          return;
+        }
+      }
+
+      if (!stream || (!stream.getAudioTracks().length && !stream.getVideoTracks().length)) {
+        setCallError('No audio/video devices found. Please connect a microphone or camera.');
+        setCallState('idle');
+        return;
       }
 
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(targetUser);
-      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -171,7 +188,7 @@ export const useWebRTC = (username, socketRef) => {
       });
 
     } catch (err) {
-      setCallError(err.message);
+      setCallError('Call setup failed: ' + (err?.message || err));
       setCallState('idle');
     }
   }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
@@ -190,14 +207,32 @@ export const useWebRTC = (username, socketRef) => {
         connectionInfo: runtimeConnectionInfo
       });
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err1) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(
+            getFallbackMediaConstraints(incomingCall.callType)
+          );
+        } catch (err2) {
+          setCallError('Could not access camera/microphone. Please check permissions and device availability.');
+          endCall();
+          return;
+        }
+      }
+
+      if (!stream || (!stream.getAudioTracks().length && !stream.getVideoTracks().length)) {
+        setCallError('No audio/video devices found. Please connect a microphone or camera.');
+        endCall();
+        return;
+      }
+
       setLocalStream(stream);
       localStreamRef.current = stream;
 
       const pc = createPeerConnection(incomingCall.from);
-      
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-      
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
@@ -220,7 +255,7 @@ export const useWebRTC = (username, socketRef) => {
       startCallTimer();
 
     } catch (err) {
-      setCallError(err.message);
+      setCallError('Call answer failed: ' + (err?.message || err));
       endCall();
     }
   }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
