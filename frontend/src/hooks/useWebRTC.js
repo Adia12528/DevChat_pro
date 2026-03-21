@@ -52,7 +52,6 @@ export const useWebRTC = (username, socketRef) => {
     };
   }, []);
 
-          console.log('[WebRTC][startCall] getUserMedia fallback tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
   const iceServersConfig = useMemo(() => ({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 10,
