@@ -88,6 +88,7 @@ export const useWebRTC = (username, socketRef) => {
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current && targetUsername) {
+        console.log('[WebRTC][ICE] Sending candidate:', event.candidate);
         socketRef.current.emit('call:ice-candidate', {
           to: targetUsername,
           candidate: event.candidate
@@ -109,11 +110,17 @@ export const useWebRTC = (username, socketRef) => {
         setRemoteStream(new MediaStream(stream.getTracks()));
         console.log('[WebRTC][ontrack] Added track:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
         console.log('[WebRTC][ontrack] Remote stream tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
-          if (!stream.getAudioTracks().length && !stream.getVideoTracks().length) {
-            console.error('[WebRTC][ontrack] No remote audio/video tracks present after ontrack!');
-          }
+        if (!stream.getAudioTracks().length && !stream.getVideoTracks().length) {
+          console.error('[WebRTC][ontrack] No remote audio/video tracks present after ontrack!');
+          setCallError('No remote audio/video tracks received. Please check the sender device and permissions.');
+        }
       } else {
         console.log('[WebRTC][ontrack] Track already present or missing:', event.track?.kind, event.track?.id);
+      }
+      // Force unmute and play remote video/audio elements if present
+      if (remoteVideoRef && remoteVideoRef.current) {
+        remoteVideoRef.current.muted = false;
+        remoteVideoRef.current.play().catch(() => {});
       }
     };
 
@@ -148,15 +155,18 @@ export const useWebRTC = (username, socketRef) => {
         userAgent: navigator.userAgent,
         connectionInfo: runtimeConnectionInfo
       });
+      console.log('[WebRTC][startCall] getUserMedia constraints:', constraints);
 
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('[WebRTC][startCall] getUserMedia tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
       } catch (err1) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia(
-            getFallbackMediaConstraints(type)
-          );
+          const fallback = getFallbackMediaConstraints(type);
+          console.log('[WebRTC][startCall] getUserMedia fallback constraints:', fallback);
+          stream = await navigator.mediaDevices.getUserMedia(fallback);
+          console.log('[WebRTC][startCall] getUserMedia fallback tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
         } catch (err2) {
           setCallError('Could not access camera/microphone. Please check permissions and device availability.');
           setCallState('idle');
@@ -185,6 +195,7 @@ export const useWebRTC = (username, socketRef) => {
       });
 
       const offer = await pc.createOffer();
+      console.log('[WebRTC][startCall] Created SDP offer:', offer.sdp);
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
