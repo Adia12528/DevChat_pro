@@ -379,27 +379,34 @@ export class AdaptiveQualityController {
 
   async applyQualityLevel() {
     const senders = this.pc.getSenders();
-    
+
     for (const sender of senders) {
       if (sender.track?.kind === 'video') {
         const params = sender.getParameters();
         if (!params.encodings) params.encodings = [{}];
-        
+        if (!params.encodings[0]) params.encodings[0] = {};
+
         switch (this.currentLevel) {
           case 'low':
-            params.encodings[0].maxBitrate = 200000;
-            params.encodings[0].scaleResolutionDownBy = 4.0;
+            if (params.encodings[0]) {
+              params.encodings[0].maxBitrate = 200000;
+              params.encodings[0].scaleResolutionDownBy = 4.0;
+            }
             break;
           case 'medium':
-            params.encodings[0].maxBitrate = 500000;
-            params.encodings[0].scaleResolutionDownBy = 2.0;
+            if (params.encodings[0]) {
+              params.encodings[0].maxBitrate = 500000;
+              params.encodings[0].scaleResolutionDownBy = 2.0;
+            }
             break;
           case 'high':
-            params.encodings[0].maxBitrate = 1500000;
-            delete params.encodings[0].scaleResolutionDownBy;
+            if (params.encodings[0]) {
+              params.encodings[0].maxBitrate = 1500000;
+              delete params.encodings[0].scaleResolutionDownBy;
+            }
             break;
         }
-        
+
         try {
           await sender.setParameters(params);
         } catch (e) {

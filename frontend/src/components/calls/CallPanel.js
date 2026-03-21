@@ -62,17 +62,19 @@ const CallPanel = ({
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         // Pause before changing srcObject to avoid AbortError
         remoteVideoRef.current.pause();
+        // Remove any previous event listeners to avoid duplicates
+        remoteVideoRef.current.onloadedmetadata = null;
         remoteVideoRef.current.srcObject = remoteStream;
         console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
         // Only call play after loadedmetadata
-        const playAfterMetadata = () => {
+        remoteVideoRef.current.onloadedmetadata = () => {
           remoteVideoRef.current.play().catch(e => {
             console.log('Remote video play blocked:', e);
             setShowPlayOverlay(true);
           });
-          remoteVideoRef.current.removeEventListener('loadedmetadata', playAfterMetadata);
+          // Clean up after play
+          remoteVideoRef.current.onloadedmetadata = null;
         };
-        remoteVideoRef.current.addEventListener('loadedmetadata', playAfterMetadata);
       }
     }
   }, [remoteStream, remoteVideoRef]);
