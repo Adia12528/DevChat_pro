@@ -3,7 +3,6 @@ import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
   getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
   optimizeRtpSenders,
   waitForIceGatheringComplete,
   CallStatistics,
@@ -56,10 +55,10 @@ export const useWebRTC = (username, socketRef) => {
   const iceServersConfig = useMemo(() => ({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: getAdaptiveIceTransportPolicy({
-      userAgent: navigator.userAgent,
-      connectionInfo: runtimeConnectionInfo
-    })
+    // iceTransportPolicy: getAdaptiveIceTransportPolicy({
+    //   userAgent: navigator.userAgent,
+    //   connectionInfo: runtimeConnectionInfo
+    // })
   }), [runtimeConnectionInfo]);
 
   const startCallTimer = useCallback(() => {
@@ -200,7 +199,11 @@ export const useWebRTC = (username, socketRef) => {
   }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
 
   const answerCall = useCallback(async () => {
-    if (!incomingCall) return;
+    // Prevent answering if already in a call
+    if (!incomingCall || callState === 'active') {
+      console.warn('[WebRTC] Ignoring incoming call: already in a call or no incoming call.');
+      return;
+    }
 
     try {
       setCallType(incomingCall.callType);
@@ -268,6 +271,9 @@ export const useWebRTC = (username, socketRef) => {
 
   const endCall = useCallback(() => {
     if (peerConnectionRef.current) {
+      peerConnectionRef.current.ontrack = null;
+      peerConnectionRef.current.onicecandidate = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
@@ -288,7 +294,6 @@ export const useWebRTC = (username, socketRef) => {
     }
 
     stopCallTimer();
-    
     setCallState('idle');
     setCallType(null);
     setCallPeer(null);

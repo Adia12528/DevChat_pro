@@ -40,7 +40,6 @@ import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
   getFallbackMediaConstraints,
-  getAdaptiveIceTransportPolicy,
   optimizeRtpSenders,
   waitForIceGatheringComplete,
   CallStatistics,
@@ -1122,7 +1121,7 @@ function AppContent() {
   const iceServersConfig = useMemo(() => ({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 10,
-    iceTransportPolicy: getAdaptiveIceTransportPolicy({ userAgent: navigator.userAgent, connectionInfo: runtimeConnectionInfo })
+    // iceTransportPolicy: getAdaptiveIceTransportPolicy({ userAgent: navigator.userAgent, connectionInfo: runtimeConnectionInfo })
   }), [runtimeConnectionInfo]);
 
   // ==================== WITH PREFERRED VIDEO DEVICE ====================

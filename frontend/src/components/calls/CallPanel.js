@@ -60,6 +60,10 @@ const CallPanel = ({
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         remoteVideoRef.current.srcObject = remoteStream;
         console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
+        // Only call play if not already playing
+        if (remoteVideoRef.current.paused) {
+          remoteVideoRef.current.play().catch(e => console.log('Remote video play blocked:', e));
+        }
       }
     }
   }, [remoteStream, remoteVideoRef]);

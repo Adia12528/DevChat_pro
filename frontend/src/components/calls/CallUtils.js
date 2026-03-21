@@ -65,47 +65,37 @@ export const getFallbackMediaConstraints = (callType) => {
   };
 };
 
-export const getAdaptiveIceTransportPolicy = ({ userAgent, connectionInfo }) => {
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(userAgent);
-  const isSlowNetwork = connectionInfo?.downlink < 1;
-  
-  if (isMobile && isSlowNetwork) {
-    return 'relay';
-  }
-  return 'all';
-};
 
-export const optimizeRtpSenders = async (pc, { callType, userAgent, connectionInfo }) => {
+// Fix: Remove broken/duplicate getAdaptiveIceTransportPolicy and add a proper async optimizeRtpSenders function
+export async function optimizeRtpSenders(pc, { userAgent, connectionInfo }) {
+  if (!pc) return;
   const isMobile = /Android|iPhone|iPad|iPod/i.test(userAgent);
-  const isSlowConnection = connectionInfo?.downlink < 2;
-  
+  const connectionSpeed = connectionInfo?.downlink || 5;
+  const isSlowConnection = connectionSpeed < 1.5;
   const senders = pc.getSenders();
-  
   for (const sender of senders) {
-    if (sender.track?.kind === 'video') {
-      const params = sender.getParameters();
-      if (!params.encodings) {
-        params.encodings = [{}];
-      }
-      
-      if (isSlowConnection) {
-        params.encodings[0].maxBitrate = 300000;
-        params.encodings[0].scaleResolutionDownBy = 2.0;
-      } else if (isMobile) {
-        params.encodings[0].maxBitrate = 800000;
-        params.encodings[0].scaleResolutionDownBy = 1.5;
-      } else {
-        params.encodings[0].maxBitrate = 2000000;
-      }
-      
-      try {
-        await sender.setParameters(params);
-      } catch (e) {
-        console.warn('Failed to set sender parameters:', e);
+    if (sender && sender.track && sender.track.kind === 'video') {
+      const params = sender.getParameters ? sender.getParameters() : null;
+      if (params && params.encodings) {
+        if (!params.encodings.length) params.encodings = [{}];
+        if (isSlowConnection) {
+          params.encodings[0].maxBitrate = 300000;
+          params.encodings[0].scaleResolutionDownBy = 2.0;
+        } else if (isMobile) {
+          params.encodings[0].maxBitrate = 800000;
+          params.encodings[0].scaleResolutionDownBy = 1.5;
+        } else {
+          params.encodings[0].maxBitrate = 2000000;
+        }
+        try {
+          await sender.setParameters(params);
+        } catch (e) {
+          console.warn('Failed to set sender parameters:', e);
+        }
       }
     }
   }
-};
+}
 
 export const waitForIceGatheringComplete = (pc, timeoutMs = 3000) => {
   return new Promise((resolve) => {
