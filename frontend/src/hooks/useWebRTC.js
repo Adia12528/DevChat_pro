@@ -281,6 +281,10 @@ export const useWebRTC = (username, socketRef) => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
+      // Also clear the video element if possible
+      if (localVideoRef && localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
     }
 
     if (screenStreamRef.current) {

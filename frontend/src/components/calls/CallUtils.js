@@ -77,18 +77,22 @@ export async function optimizeRtpSenders(pc, { userAgent, connectionInfo }) {
     if (sender && sender.track && sender.track.kind === 'video') {
       const params = sender.getParameters ? sender.getParameters() : null;
       if (params && params.encodings) {
-        if (!params.encodings.length) params.encodings = [{}];
+        // Clone encodings to avoid modifying read-only fields
+        const newEncodings = params.encodings.map(enc => ({ ...enc }));
+        if (!newEncodings.length) newEncodings.push({});
         if (isSlowConnection) {
-          params.encodings[0].maxBitrate = 300000;
-          params.encodings[0].scaleResolutionDownBy = 2.0;
+          newEncodings[0].maxBitrate = 300000;
+          newEncodings[0].scaleResolutionDownBy = 2.0;
         } else if (isMobile) {
-          params.encodings[0].maxBitrate = 800000;
-          params.encodings[0].scaleResolutionDownBy = 1.5;
+          newEncodings[0].maxBitrate = 800000;
+          newEncodings[0].scaleResolutionDownBy = 1.5;
         } else {
-          params.encodings[0].maxBitrate = 2000000;
+          newEncodings[0].maxBitrate = 2000000;
         }
+        // Only set allowed fields
+        const safeParams = { ...params, encodings: newEncodings };
         try {
-          await sender.setParameters(params);
+          await sender.setParameters(safeParams);
         } catch (e) {
           console.warn('Failed to set sender parameters:', e);
         }
