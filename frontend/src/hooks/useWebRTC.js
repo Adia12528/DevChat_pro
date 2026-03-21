@@ -47,11 +47,13 @@ export const useWebRTC = (username, socketRef) => {
     return {
       effectiveType: connection?.effectiveType,
       downlink: connection?.downlink,
+        console.log('[WebRTC][startCall] getUserMedia tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
       rtt: connection?.rtt,
       saveData: connection?.saveData
     };
   }, []);
 
+          console.log('[WebRTC][startCall] getUserMedia fallback tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
   const iceServersConfig = useMemo(() => ({
     iceServers: ICE_SERVERS,
     iceCandidatePoolSize: 10,
@@ -109,6 +111,9 @@ export const useWebRTC = (username, socketRef) => {
         setRemoteStream(new MediaStream(stream.getTracks()));
         console.log('[WebRTC][ontrack] Added track:', event.track.kind, event.track.id, 'readyState:', event.track.readyState);
         console.log('[WebRTC][ontrack] Remote stream tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
+          if (!stream.getAudioTracks().length && !stream.getVideoTracks().length) {
+            console.error('[WebRTC][ontrack] No remote audio/video tracks present after ontrack!');
+          }
       } else {
         console.log('[WebRTC][ontrack] Track already present or missing:', event.track?.kind, event.track?.id);
       }
