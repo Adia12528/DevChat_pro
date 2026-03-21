@@ -15,7 +15,8 @@ import {
 } from '../components/calls/CallUtils';
 
 export const useWebRTC = (username, socketRef) => {
-  const [callState, setCallState] = useState(null);
+  // callState: null | 'idle' | 'calling' | 'ringing' | 'active' | 'busy'
+  const [callState, setCallState] = useState('idle');
   const [callType, setCallType] = useState(null);
   const [callPeer, setCallPeer] = useState(null);
   const [localStream, setLocalStream] = useState(null);
@@ -144,6 +145,10 @@ export const useWebRTC = (username, socketRef) => {
   }, [iceServersConfig, socketRef]);
 
   const startCall = useCallback(async (type, targetUser) => {
+    if (callState !== 'idle') {
+      setCallError('You are already in a call or call setup. Please end the current call first.');
+      return;
+    }
     try {
       setCallType(type);
       setCallPeer({ username: targetUser });
@@ -210,12 +215,12 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call setup failed: ' + (err?.message || err));
       setCallState('idle');
     }
-  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
+  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection, callState]);
 
   const answerCall = useCallback(async () => {
-    // Prevent answering if already in a call
-    if (!incomingCall || callState === 'active') {
-      console.warn('[WebRTC] Ignoring incoming call: already in a call or no incoming call.');
+    // Prevent answering if already in a call or busy
+    if (!incomingCall || callState !== 'idle') {
+      console.warn('[WebRTC] Ignoring incoming call: already in a call, busy, or no incoming call.');
       return;
     }
 
@@ -284,6 +289,7 @@ export const useWebRTC = (username, socketRef) => {
   }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
 
   const endCall = useCallback(() => {
+    setCallState('idle');
     if (peerConnectionRef.current) {
       peerConnectionRef.current.ontrack = null;
       peerConnectionRef.current.onicecandidate = null;

@@ -47,6 +47,8 @@ const CallPanel = ({
 }) => {
   // Overlay state for user gesture fallback
   const [showPlayOverlay, setShowPlayOverlay] = useState(false);
+  const [playError, setPlayError] = useState(null);
+  const playAttemptedRef = useRef(false);
 
   // Ensure local and remote video elements always update srcObject
   useEffect(() => {
@@ -59,36 +61,61 @@ const CallPanel = ({
   }, [localStream, localVideoRef]);
 
   useEffect(() => {
-    if (remoteVideoRef && remoteVideoRef.current && remoteStream) {
-      if (remoteVideoRef.current.srcObject !== remoteStream) {
-        // Pause before changing srcObject to avoid AbortError
-        remoteVideoRef.current.pause();
-        // Remove any previous event listeners to avoid duplicates
-        remoteVideoRef.current.onloadedmetadata = null;
-        remoteVideoRef.current.srcObject = remoteStream;
-        console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
-        // Only call play after loadedmetadata
-        remoteVideoRef.current.onloadedmetadata = () => {
-          remoteVideoRef.current.play().catch(e => {
-            console.log('Remote video play blocked:', e);
-            setShowPlayOverlay(true);
-          });
-          // Clean up after play
-          remoteVideoRef.current.onloadedmetadata = null;
-        };
-      }
+    const video = remoteVideoRef && remoteVideoRef.current;
+    if (!video || !remoteStream) return;
+
+    // Always pause before changing srcObject
+    video.pause();
+    if (video.srcObject !== remoteStream) {
+      video.srcObject = remoteStream;
+      console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
     }
+    playAttemptedRef.current = false;
+
+    const tryPlay = async (fromUserGesture = false) => {
+      if (!video.srcObject) return;
+      try {
+        await video.play();
+        setShowPlayOverlay(false);
+        setPlayError(null);
+        playAttemptedRef.current = true;
+      } catch (err) {
+        setShowPlayOverlay(true);
+        setPlayError(err.message || 'Playback failed');
+        if (!fromUserGesture) {
+          // Wait for user gesture
+        }
+      }
+    };
+
+    // Play after loadedmetadata
+    const onLoadedMetadata = () => {
+      if (!playAttemptedRef.current) tryPlay();
+    };
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+
+    // Try to play immediately if metadata is already loaded
+    if (video.readyState >= 1 && !playAttemptedRef.current) {
+      tryPlay();
+    }
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+    };
   }, [remoteStream, remoteVideoRef]);
 
   // Handler for user gesture overlay
   const handlePlayOverlay = useCallback(() => {
-    if (remoteVideoRef && remoteVideoRef.current) {
-      remoteVideoRef.current.play().then(() => {
-        setShowPlayOverlay(false);
-      }).catch(e => {
-        setShowPlayOverlay(true);
-      });
-    }
+    const video = remoteVideoRef && remoteVideoRef.current;
+    if (!video) return;
+    video.play().then(() => {
+      setShowPlayOverlay(false);
+      setPlayError(null);
+      playAttemptedRef.current = true;
+    }).catch(e => {
+      setShowPlayOverlay(true);
+      setPlayError(e.message || 'Playback failed');
+    });
   }, [remoteVideoRef]);
   // Ref for remote audio element
   const remoteAudioRef = useRef(null);
@@ -273,6 +300,7 @@ const CallPanel = ({
             ▶ Tap to play video
           </button>
           <div className="video-play-overlay-desc">Tap to resume remote video (required by your browser)</div>
+          {playError && <div className="video-play-error">{playError}</div>}
         </div>
       )}
       {/* Hidden audio element for remote audio playback (mobile fix) */}
