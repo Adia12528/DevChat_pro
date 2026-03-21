@@ -47,7 +47,6 @@ export const useWebRTC = (username, socketRef) => {
     return {
       effectiveType: connection?.effectiveType,
       downlink: connection?.downlink,
-        console.log('[WebRTC][startCall] getUserMedia tracks:', stream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
       rtt: connection?.rtt,
       saveData: connection?.saveData
     };
