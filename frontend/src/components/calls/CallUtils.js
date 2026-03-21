@@ -76,20 +76,22 @@ export async function optimizeRtpSenders(pc, { userAgent, connectionInfo }) {
   for (const sender of senders) {
     if (sender && sender.track && sender.track.kind === 'video') {
       const params = sender.getParameters ? sender.getParameters() : null;
-      if (params && params.encodings) {
-        // Clone encodings to avoid modifying read-only fields
-        const newEncodings = params.encodings.map(enc => ({ ...enc }));
-        if (!newEncodings.length) newEncodings.push({});
-        if (isSlowConnection) {
-          newEncodings[0].maxBitrate = 300000;
-          newEncodings[0].scaleResolutionDownBy = 2.0;
-        } else if (isMobile) {
-          newEncodings[0].maxBitrate = 800000;
-          newEncodings[0].scaleResolutionDownBy = 1.5;
-        } else {
-          newEncodings[0].maxBitrate = 2000000;
-        }
-        // Only set allowed fields
+      if (params && params.encodings && params.encodings.length > 0) {
+        // Only set fields if they already exist in the encoding
+        const newEncodings = params.encodings.map(enc => {
+          const newEnc = { ...enc };
+          if ('maxBitrate' in newEnc) {
+            if (isSlowConnection) newEnc.maxBitrate = 300000;
+            else if (isMobile) newEnc.maxBitrate = 800000;
+            else newEnc.maxBitrate = 2000000;
+          }
+          if ('scaleResolutionDownBy' in newEnc) {
+            if (isSlowConnection) newEnc.scaleResolutionDownBy = 2.0;
+            else if (isMobile) newEnc.scaleResolutionDownBy = 1.5;
+            // else leave as is
+          }
+          return newEnc;
+        });
         const safeParams = { ...params, encodings: newEncodings };
         try {
           await sender.setParameters(safeParams);
