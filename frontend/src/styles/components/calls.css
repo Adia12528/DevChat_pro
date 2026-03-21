@@ -934,21 +934,21 @@
 }
 
 .call-camera-toast.success {
-  background: color-mix(in srgb, var(--success) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--success) 55%, transparent);
-  color: color-mix(in srgb, var(--success) 88%, white);
+  background: #e6f4ea; /* fallback for var(--success) 20% mixed with transparent */
+  border: 1px solid #7ed6a2; /* fallback for var(--success) 55% mixed with transparent */
+  color: #388e3c; /* fallback for var(--success) 88% mixed with white */
 }
 
 .call-camera-toast.info {
-  background: color-mix(in srgb, var(--primary) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent);
-  color: color-mix(in srgb, var(--primary) 90%, white);
+  background: #e3f0fa; /* fallback for var(--primary) 20% mixed with transparent */
+  border: 1px solid #7eb6e6; /* fallback for var(--primary) 55% mixed with transparent */
+  color: #1565c0; /* fallback for var(--primary) 90% mixed with white */
 }
 
 .call-camera-toast.error {
-  background: color-mix(in srgb, var(--error) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--error) 55%, transparent);
-  color: color-mix(in srgb, var(--error) 90%, white);
+  background: #fbeaea; /* fallback for var(--error) 20% mixed with transparent */
+  border: 1px solid #f5a6a6; /* fallback for var(--error) 55% mixed with transparent */
+  color: #c62828; /* fallback for var(--error) 90% mixed with white */
 }
 
 .call-camera-selector select {

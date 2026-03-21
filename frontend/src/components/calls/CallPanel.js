@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, 
@@ -44,8 +44,6 @@ const CallPanel = ({
   audioSettings,
   onAudioSettingChange,
 }) => {
-  // Overlay state for user gesture fallback
-  const [showPlayOverlay, setShowPlayOverlay] = useState(false);
 
   // Ensure local and remote video elements always update srcObject
   useEffect(() => {
@@ -62,33 +60,17 @@ const CallPanel = ({
       if (remoteVideoRef.current.srcObject !== remoteStream) {
         // Pause before changing srcObject to avoid AbortError
         remoteVideoRef.current.pause();
-        // Remove any previous event listeners to avoid duplicates
-        remoteVideoRef.current.onloadedmetadata = null;
         remoteVideoRef.current.srcObject = remoteStream;
         console.log('[CallPanel] Set remoteVideoRef srcObject:', remoteStream, remoteStream.getTracks().map(t => `${t.kind}:${t.id}:${t.readyState}`));
         // Only call play after loadedmetadata
-        remoteVideoRef.current.onloadedmetadata = () => {
-          remoteVideoRef.current.play().catch(e => {
-            console.log('Remote video play blocked:', e);
-            setShowPlayOverlay(true);
-          });
-          // Clean up after play
-          remoteVideoRef.current.onloadedmetadata = null;
+        const playAfterMetadata = () => {
+          remoteVideoRef.current.play().catch(e => console.log('Remote video play blocked:', e));
+          remoteVideoRef.current.removeEventListener('loadedmetadata', playAfterMetadata);
         };
+        remoteVideoRef.current.addEventListener('loadedmetadata', playAfterMetadata);
       }
     }
   }, [remoteStream, remoteVideoRef]);
-
-  // Handler for user gesture overlay
-  const handlePlayOverlay = useCallback(() => {
-    if (remoteVideoRef && remoteVideoRef.current) {
-      remoteVideoRef.current.play().then(() => {
-        setShowPlayOverlay(false);
-      }).catch(e => {
-        setShowPlayOverlay(true);
-      });
-    }
-  }, [remoteVideoRef]);
   // Ref for remote audio element
   const remoteAudioRef = useRef(null);
   const [showControls, setShowControls] = useState(true);
@@ -265,37 +247,6 @@ const CallPanel = ({
 
   return (
     <>
-      {/* User gesture fallback overlay for remote video */}
-      {showPlayOverlay && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.7)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          flexDirection: 'column'
-        }}>
-          <button style={{
-            fontSize: 24,
-            padding: '16px 32px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#007bff',
-            color: '#fff',
-            cursor: 'pointer',
-            marginBottom: 16
-          }} onClick={handlePlayOverlay}>
-            Tap to play video
-          </button>
-          <div style={{fontSize: 16}}>Tap to resume remote video (required by your browser)</div>
-        </div>
-      )}
       {/* Hidden audio element for remote audio playback (mobile fix) */}
       {remoteStream && (
         <audio
