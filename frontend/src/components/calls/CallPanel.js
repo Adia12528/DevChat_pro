@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-  // Overlay state for user gesture fallback
-  const [showPlayOverlay, setShowPlayOverlay] = useState(false);
 
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, 
@@ -46,6 +44,8 @@ const CallPanel = ({
   audioSettings,
   onAudioSettingChange,
 }) => {
+  // Overlay state for user gesture fallback
+  const [showPlayOverlay, setShowPlayOverlay] = useState(false);
 
   // Ensure local and remote video elements always update srcObject
   useEffect(() => {
