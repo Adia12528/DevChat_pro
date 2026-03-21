@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import '../../styles/components/videoPlayOverlay.css';
 
 import { 
   Mic, MicOff, Video, VideoOff, MonitorUp, PhoneOff, 
@@ -267,33 +268,11 @@ const CallPanel = ({
     <>
       {/* User gesture fallback overlay for remote video */}
       {showPlayOverlay && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.7)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          flexDirection: 'column'
-        }}>
-          <button style={{
-            fontSize: 24,
-            padding: '16px 32px',
-            borderRadius: 8,
-            border: 'none',
-            background: '#007bff',
-            color: '#fff',
-            cursor: 'pointer',
-            marginBottom: 16
-          }} onClick={handlePlayOverlay}>
-            Tap to play video
+        <div className="video-play-overlay" onClick={handlePlayOverlay}>
+          <button className="video-play-overlay-btn">
+            ▶ Tap to play video
           </button>
-          <div style={{fontSize: 16}}>Tap to resume remote video (required by your browser)</div>
+          <div className="video-play-overlay-desc">Tap to resume remote video (required by your browser)</div>
         </div>
       )}
       {/* Hidden audio element for remote audio playback (mobile fix) */}

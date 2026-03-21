@@ -386,28 +386,35 @@ export class AdaptiveQualityController {
         if (!params.encodings) params.encodings = [{}];
         if (!params.encodings[0]) params.encodings[0] = {};
 
-        switch (this.currentLevel) {
-          case 'low':
-            if (params.encodings[0]) {
-              params.encodings[0].maxBitrate = 200000;
-              params.encodings[0].scaleResolutionDownBy = 4.0;
-            }
-            break;
-          case 'medium':
-            if (params.encodings[0]) {
-              params.encodings[0].maxBitrate = 500000;
-              params.encodings[0].scaleResolutionDownBy = 2.0;
-            }
-            break;
-          case 'high':
-            if (params.encodings[0]) {
-              params.encodings[0].maxBitrate = 1500000;
-              delete params.encodings[0].scaleResolutionDownBy;
-            }
-            break;
-        }
-
+        // Only set writable fields to avoid InvalidModificationError
+        const enc = params.encodings[0];
         try {
+          switch (this.currentLevel) {
+            case 'low':
+              if (enc && ('maxBitrate' in enc || typeof enc.maxBitrate === 'undefined')) {
+                enc.maxBitrate = 200000;
+              }
+              if (enc && ('scaleResolutionDownBy' in enc || typeof enc.scaleResolutionDownBy === 'undefined')) {
+                enc.scaleResolutionDownBy = 4.0;
+              }
+              break;
+            case 'medium':
+              if (enc && ('maxBitrate' in enc || typeof enc.maxBitrate === 'undefined')) {
+                enc.maxBitrate = 500000;
+              }
+              if (enc && ('scaleResolutionDownBy' in enc || typeof enc.scaleResolutionDownBy === 'undefined')) {
+                enc.scaleResolutionDownBy = 2.0;
+              }
+              break;
+            case 'high':
+              if (enc && ('maxBitrate' in enc || typeof enc.maxBitrate === 'undefined')) {
+                enc.maxBitrate = 1500000;
+              }
+              if (enc && ('scaleResolutionDownBy' in enc)) {
+                delete enc.scaleResolutionDownBy;
+              }
+              break;
+          }
           await sender.setParameters(params);
         } catch (e) {
           console.warn('Failed to apply quality level:', e);
