@@ -520,6 +520,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
   } = useWebRTC(webrtcUsername, socketRef);
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
+  const activeCallPeerName = typeof callPeer === 'string' ? callPeer : (callPeer?.username || '');
 
   useEffect(() => {
     if (callState === 'idle') setIsCallMinimized(false);
@@ -2427,11 +2428,11 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
           </div>
         ) : null}
 
-        {callState === 'calling' && callPeer ? (
+        {callState === 'calling' && activeCallPeerName ? (
           <div className="friends-call-overlay">
             <div className="friends-call-card">
               <div className="friends-call-title">Calling...</div>
-              <div className="friends-call-peer">{callPeer?.username || callPeer}</div>
+              <div className="friends-call-peer">{activeCallPeerName}</div>
               <div className="friends-call-row">
                 <button type="button" className="friends-call-end-btn" onClick={endCall}>
                   Cancel
@@ -2443,10 +2444,10 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
 
         {callError ? <p className="friends-note friends-call-error">{callError}</p> : null}
 
-        {callState === 'active' && callPeer ? (
+        {callState === 'active' && activeCallPeerName ? (
           <CallPanel
             callType={callType}
-            callPeer={callPeer?.username || callPeer}
+            callPeer={activeCallPeerName}
             callDuration={callDuration}
             isMuted={isMuted}
             isVideoOff={isVideoOff}

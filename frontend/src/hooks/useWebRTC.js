@@ -113,7 +113,7 @@ export const useWebRTC = (username, socketRef) => {
     setIsVideoOff(false);
     setIsScreenSharing(false);
     setCallError(null);
-  }, [stopCallTimer]);
+  }, [stopCallTimer, localVideoRef]);
 
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServersConfig);
