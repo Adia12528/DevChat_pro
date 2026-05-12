@@ -134,7 +134,7 @@ const CallManager = ({ socket, username, room, onlineUsers, selectedUser }) => {
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await waitForIceGatheringCzomplete(pc);
+      await waitForIceGatheringComplete(pc);
 
       socket.emit('call:offer', {
         to: targetUser,

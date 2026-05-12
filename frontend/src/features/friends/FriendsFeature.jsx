@@ -289,7 +289,7 @@ const LoginPanel = ({ onGoogleLogin, onPhoneStart, onPhoneConfirm, phoneState, e
 };
 
 // --- FriendsWorkspace Component ---
-const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh }) => {
+const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefresh, onSwitchToClassic }) => {
   // Dev Room modal state
   const [isDevRoomModalOpen, setIsDevRoomModalOpen] = useState(false);
   const [devRoomId, setDevRoomId] = useState(() => window.localStorage.getItem('devRoom_lastRoomId') || '');
@@ -1694,16 +1694,17 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                                   if (window.localStorage.getItem('devRoom_rememberRoomId')) {
                                     window.localStorage.setItem('devRoom_lastRoomId', devRoomId);
                                   }
-                                  // 1. Logout from friends (Firebase)
-                                  if (window.friendsAuth && typeof window.friendsAuth.signOut === 'function') {
-                                    await window.friendsAuth.signOut();
-                                  } else if (typeof signOut === 'function' && friendsAuth) {
-                                    await signOut(friendsAuth);
-                                  }
-                                  // 2. Set credentials for Dev Room
+                                  // 1. Set credentials for Dev Room
                                   window.localStorage.setItem('devRoom_autoLogin', JSON.stringify({ username, roomId: devRoomId }));
-                                  // 3. Redirect to login page for Dev Room
-                                  window.location.href = '/login';
+                                  // 2. Logout from friends and switch to Dev Room login mode without hard page reload
+                                  if (typeof onLogout === 'function') {
+                                    await onLogout();
+                                  }
+                                  if (typeof onSwitchToClassic === 'function') {
+                                    onSwitchToClassic();
+                                  } else {
+                                    window.location.href = '/';
+                                  }
                                 } catch (err) {
                                   setDevRoomError('Login failed. Please try again.');
                                 } finally {
@@ -2903,6 +2904,7 @@ function FriendsFeature({ onSwitchToClassic }) {
       onLogout={handleLogout}
       socket={socket}
       onProfileRefresh={() => refreshProfile()}
+      onSwitchToClassic={onSwitchToClassic}
     />
   );
 }

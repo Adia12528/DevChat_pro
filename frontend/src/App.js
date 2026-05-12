@@ -146,15 +146,10 @@ function AppContent() {
           setRoom(autoRoomId);
           // Remove credentials for security
           window.localStorage.removeItem('devRoom_autoLogin');
-          // Wait for state to update, then trigger joinRoom
+          // Wait for state to update, then trigger join using latest handlers/state
           setTimeout(() => {
-            if (typeof joinRoom === 'function') {
-              joinRoom();
-            } else {
-              // fallback: try to click the join button if present
-              const btn = document.querySelector('.join-btn');
-              if (btn) btn.click();
-            }
+            const btn = document.querySelector('.join-btn');
+            if (btn) btn.click();
           }, 200);
         }
       }
