@@ -411,7 +411,8 @@ export const useWebRTC = (username, socketRef) => {
     if (!socketRef.current) return undefined;
     const socket = socketRef.current;
 
-    const onCallOffer = (data = {}) => {
+    const onCallOffer = (data) => {
+      if (!data?.from || !data?.offer || !data?.callType) return;
       if (callState !== 'idle') {
         socket.emit('call:busy', { to: data.from, from: username });
         return;
@@ -496,8 +497,6 @@ export const useWebRTC = (username, socketRef) => {
     startCall,
     answerCall,
     rejectIncomingCall,
-    handleCallAnswer,
-    handleIceCandidate,
     endCall,
     toggleMute,
     toggleVideo,

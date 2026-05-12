@@ -1112,11 +1112,6 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
             to,
             payload: { from: me.uniqueId }
           });
-          await forwardCallEventToContact({
-            eventName: 'call:rejected',
-            to,
-            payload: { from: me.uniqueId }
-          });
         } catch (error) {
           console.error('friends call:reject failed', error);
         }
@@ -1127,11 +1122,6 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
           if (!to) return;
           await forwardCallEventToContact({
             eventName: 'call:end',
-            to,
-            payload: { from: me.uniqueId }
-          });
-          await forwardCallEventToContact({
-            eventName: 'call:ended',
             to,
             payload: { from: me.uniqueId }
           });
