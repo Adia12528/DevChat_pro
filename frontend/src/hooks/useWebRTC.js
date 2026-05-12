@@ -126,8 +126,9 @@ export const useWebRTC = (username, socketRef) => {
     qualityController.start();
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current && targetUsername) {
-        socketRef.current.emit('call:ice-candidate', {
+      const socket = socketRef?.current;
+      if (event.candidate && socket && targetUsername) {
+        socket.emit('call:ice-candidate', {
           to: targetUsername,
           candidate: event.candidate
         });
@@ -224,7 +225,13 @@ export const useWebRTC = (username, socketRef) => {
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      socketRef.current.emit('call:offer', {
+      const socket = socketRef?.current;
+      if (!socket) {
+        setCallError('Connection unavailable. Please try again.');
+        resetCallState();
+        return;
+      }
+      socket.emit('call:offer', {
         to: targetUser,
         from: username,
         callType: type,
@@ -235,7 +242,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call setup failed: ' + (err?.message || err));
       setCallState('idle');
     }
-  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
+  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection, resetCallState]);
 
   const answerCall = useCallback(async () => {
     // Prevent answering if already in a call
@@ -293,7 +300,13 @@ export const useWebRTC = (username, socketRef) => {
       });
       pendingIceCandidatesRef.current = [];
 
-      socketRef.current.emit('call:answer', {
+      const socket = socketRef?.current;
+      if (!socket) {
+        setCallError('Connection unavailable. Please try again.');
+        resetCallState();
+        return;
+      }
+      socket.emit('call:answer', {
         to: incomingCall.from,
         from: username,
         answer: pc.localDescription
@@ -306,7 +319,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call answer failed: ' + (err?.message || err));
       endCall();
     }
-  }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
+  }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer, resetCallState]);
 
   const handleCallAnswer = useCallback(async (payload) => {
     try {
@@ -340,7 +353,7 @@ export const useWebRTC = (username, socketRef) => {
   }, []);
 
   const rejectIncomingCall = useCallback(() => {
-    if (!incomingCall || !socketRef.current) {
+    if (!incomingCall || !socketRef?.current) {
       setIncomingCall(null);
       return;
     }
@@ -356,7 +369,7 @@ export const useWebRTC = (username, socketRef) => {
     const targetPeer = callPeer?.username;
     if (
       notifyPeer &&
-      socketRef.current &&
+      socketRef?.current &&
       targetPeer &&
       (callState === 'active' || callState === 'calling' || callState === 'ringing')
     ) {
@@ -408,8 +421,8 @@ export const useWebRTC = (username, socketRef) => {
   }, [isScreenSharing]);
 
   useEffect(() => {
-    if (!socketRef.current) return undefined;
-    const socket = socketRef.current;
+    const socket = socketRef?.current;
+    if (!socket) return undefined;
 
     const onCallOffer = (data) => {
       if (!data?.from || !data?.offer || !data?.callType) return;
