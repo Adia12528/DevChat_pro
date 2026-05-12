@@ -126,8 +126,9 @@ export const useWebRTC = (username, socketRef) => {
     qualityController.start();
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef?.current && targetUsername) {
-        socketRef.current.emit('call:ice-candidate', {
+      const socket = socketRef?.current;
+      if (event.candidate && socket && targetUsername) {
+        socket.emit('call:ice-candidate', {
           to: targetUsername,
           candidate: event.candidate
         });
@@ -226,7 +227,7 @@ export const useWebRTC = (username, socketRef) => {
 
       const offerSocket = socketRef?.current;
       if (!offerSocket) {
-        setCallError('Call setup failed: connection unavailable.');
+        setCallError('Connection unavailable. Please try again.');
         resetCallState();
         return;
       }
@@ -301,7 +302,7 @@ export const useWebRTC = (username, socketRef) => {
 
       const answerSocket = socketRef?.current;
       if (!answerSocket) {
-        setCallError('Call answer failed: connection unavailable.');
+        setCallError('Connection unavailable. Please try again.');
         endCall();
         return;
       }
