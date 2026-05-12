@@ -224,7 +224,13 @@ export const useWebRTC = (username, socketRef) => {
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      socketRef?.current?.emit('call:offer', {
+      const offerSocket = socketRef?.current;
+      if (!offerSocket) {
+        setCallError('Call setup failed: connection unavailable.');
+        resetCallState();
+        return;
+      }
+      offerSocket.emit('call:offer', {
         to: targetUser,
         from: username,
         callType: type,
@@ -235,7 +241,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call setup failed: ' + (err?.message || err));
       setCallState('idle');
     }
-  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection]);
+  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection, resetCallState]);
 
   const answerCall = useCallback(async () => {
     // Prevent answering if already in a call
@@ -293,7 +299,13 @@ export const useWebRTC = (username, socketRef) => {
       });
       pendingIceCandidatesRef.current = [];
 
-      socketRef?.current?.emit('call:answer', {
+      const answerSocket = socketRef?.current;
+      if (!answerSocket) {
+        setCallError('Call answer failed: connection unavailable.');
+        endCall();
+        return;
+      }
+      answerSocket.emit('call:answer', {
         to: incomingCall.from,
         from: username,
         answer: pc.localDescription
