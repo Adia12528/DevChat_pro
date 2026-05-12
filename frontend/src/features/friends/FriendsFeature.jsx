@@ -486,11 +486,6 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     [contacts, selectedContactId]
   );
 
-  const socketRef = useRef(socket);
-  useEffect(() => {
-    socketRef.current = socket;
-  }, [socket]);
-
   const webrtcUsername = useMemo(
     () => profile.uniqueId || profile.displayName || profile.email || 'friend',
     [profile.uniqueId, profile.displayName, profile.email]
@@ -517,7 +512,7 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     toggleMute,
     toggleVideo,
     toggleScreenShare
-  } = useWebRTC(webrtcUsername, socketRef);
+  } = useWebRTC(webrtcUsername, socket);
 
   const [isCallMinimized, setIsCallMinimized] = useState(false);
   const activeCallPeerName = typeof callPeer === 'string' ? callPeer : (callPeer?.username || '');
