@@ -15,7 +15,7 @@ import {
 } from '../components/calls/CallUtils';
 
 export const useWebRTC = (username, socketRef) => {
-  const [callState, setCallState] = useState(null);
+  const [callState, setCallState] = useState('idle');
   const [callType, setCallType] = useState(null);
   const [callPeer, setCallPeer] = useState(null);
   const [localStream, setLocalStream] = useState(null);
@@ -41,6 +41,16 @@ export const useWebRTC = (username, socketRef) => {
   const qualityControllerRef = useRef(null);
   const callRecorderRef = useRef(null);
   const screenStreamRef = useRef(null);
+
+  const resolveSocket = useCallback(() => {
+    if (!socketRef) return null;
+    if (typeof socketRef === 'object' && Object.prototype.hasOwnProperty.call(socketRef, 'current')) {
+      return socketRef.current || null;
+    }
+    return socketRef;
+  }, [socketRef]);
+
+  const activeSocket = resolveSocket();
 
   const runtimeConnectionInfo = useMemo(() => {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -126,7 +136,7 @@ export const useWebRTC = (username, socketRef) => {
     qualityController.start();
 
     pc.onicecandidate = (event) => {
-      const socket = socketRef?.current;
+      const socket = resolveSocket();
       if (event.candidate && socket && targetUsername) {
         socket.emit('call:ice-candidate', {
           to: targetUsername,
@@ -171,7 +181,7 @@ export const useWebRTC = (username, socketRef) => {
     // Debug: log when peer connection is created
     console.log('[WebRTC] PeerConnection created:', pc);
     return pc;
-  }, [iceServersConfig, socketRef]);
+  }, [iceServersConfig, resolveSocket]);
 
   const startCall = useCallback(async (type, targetUser) => {
     try {
@@ -225,7 +235,7 @@ export const useWebRTC = (username, socketRef) => {
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      const socket = socketRef?.current;
+      const socket = resolveSocket();
       if (!socket) {
         setCallError('Connection unavailable. Please try again.');
         resetCallState();
@@ -242,7 +252,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call setup failed: ' + (err?.message || err));
       setCallState('idle');
     }
-  }, [username, socketRef, runtimeConnectionInfo, createPeerConnection, resetCallState]);
+  }, [username, resolveSocket, runtimeConnectionInfo, createPeerConnection, resetCallState]);
 
   const answerCall = useCallback(async () => {
     // Prevent answering if already in a call
@@ -300,7 +310,7 @@ export const useWebRTC = (username, socketRef) => {
       });
       pendingIceCandidatesRef.current = [];
 
-      const socket = socketRef?.current;
+      const socket = resolveSocket();
       if (!socket) {
         setCallError('Connection unavailable. Please try again.');
         resetCallState();
@@ -319,7 +329,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call answer failed: ' + (err?.message || err));
       endCall();
     }
-  }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer, resetCallState]);
+  }, [incomingCall, username, resolveSocket, runtimeConnectionInfo, createPeerConnection, startCallTimer, resetCallState]);
 
   const handleCallAnswer = useCallback(async (payload) => {
     try {
@@ -353,34 +363,35 @@ export const useWebRTC = (username, socketRef) => {
   }, []);
 
   const rejectIncomingCall = useCallback(() => {
-    if (!incomingCall || !socketRef?.current) {
+    const socket = resolveSocket();
+    if (!incomingCall || !socket) {
       setIncomingCall(null);
       return;
     }
-    socketRef.current.emit('call:reject', {
+    socket.emit('call:reject', {
       to: incomingCall.from,
       from: username
     });
     setIncomingCall(null);
     setCallState('idle');
-  }, [incomingCall, socketRef, username]);
+  }, [incomingCall, resolveSocket, username]);
 
   const endCall = useCallback((notifyPeer = true) => {
     const targetPeer = callPeer?.username;
     if (
       notifyPeer &&
-      socketRef?.current &&
+      resolveSocket() &&
       targetPeer &&
       (callState === 'active' || callState === 'calling' || callState === 'ringing')
     ) {
-      socketRef.current.emit('call:end', {
+      resolveSocket().emit('call:end', {
         to: targetPeer,
         from: username
       });
     }
 
     resetCallState();
-  }, [callPeer, callState, socketRef, username, resetCallState]);
+  }, [callPeer, callState, resolveSocket, username, resetCallState]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -421,7 +432,7 @@ export const useWebRTC = (username, socketRef) => {
   }, [isScreenSharing]);
 
   useEffect(() => {
-    const socket = socketRef?.current;
+    const socket = activeSocket;
     if (!socket) return undefined;
 
     const onCallOffer = (data) => {
@@ -487,7 +498,7 @@ export const useWebRTC = (username, socketRef) => {
       socket.off('call:busy', onCallBusy);
       socket.off('call:error', onCallError);
     };
-  }, [socketRef, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
+  }, [activeSocket, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
 
   return {
     callState,
