@@ -50,8 +50,6 @@ export const useWebRTC = (username, socketRef) => {
     return socketRef;
   }, [socketRef]);
 
-  const activeSocket = resolveSocket();
-
   const runtimeConnectionInfo = useMemo(() => {
     const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     return {
@@ -377,14 +375,15 @@ export const useWebRTC = (username, socketRef) => {
   }, [incomingCall, resolveSocket, username]);
 
   const endCall = useCallback((notifyPeer = true) => {
+    const socket = resolveSocket();
     const targetPeer = callPeer?.username;
     if (
       notifyPeer &&
-      resolveSocket() &&
+      socket &&
       targetPeer &&
       (callState === 'active' || callState === 'calling' || callState === 'ringing')
     ) {
-      resolveSocket().emit('call:end', {
+      socket.emit('call:end', {
         to: targetPeer,
         from: username
       });
@@ -432,7 +431,7 @@ export const useWebRTC = (username, socketRef) => {
   }, [isScreenSharing]);
 
   useEffect(() => {
-    const socket = activeSocket;
+    const socket = resolveSocket();
     if (!socket) return undefined;
 
     const onCallOffer = (data) => {
@@ -498,7 +497,7 @@ export const useWebRTC = (username, socketRef) => {
       socket.off('call:busy', onCallBusy);
       socket.off('call:error', onCallError);
     };
-  }, [activeSocket, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
+  }, [resolveSocket, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
 
   return {
     callState,
