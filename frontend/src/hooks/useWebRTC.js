@@ -126,7 +126,7 @@ export const useWebRTC = (username, socketRef) => {
     qualityController.start();
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current && targetUsername) {
+      if (event.candidate && socketRef?.current && targetUsername) {
         socketRef.current.emit('call:ice-candidate', {
           to: targetUsername,
           candidate: event.candidate
@@ -224,7 +224,7 @@ export const useWebRTC = (username, socketRef) => {
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      socketRef.current.emit('call:offer', {
+      socketRef?.current?.emit('call:offer', {
         to: targetUser,
         from: username,
         callType: type,
@@ -293,7 +293,7 @@ export const useWebRTC = (username, socketRef) => {
       });
       pendingIceCandidatesRef.current = [];
 
-      socketRef.current.emit('call:answer', {
+      socketRef?.current?.emit('call:answer', {
         to: incomingCall.from,
         from: username,
         answer: pc.localDescription
@@ -340,7 +340,7 @@ export const useWebRTC = (username, socketRef) => {
   }, []);
 
   const rejectIncomingCall = useCallback(() => {
-    if (!incomingCall || !socketRef.current) {
+    if (!incomingCall || !socketRef?.current) {
       setIncomingCall(null);
       return;
     }
@@ -356,7 +356,7 @@ export const useWebRTC = (username, socketRef) => {
     const targetPeer = callPeer?.username;
     if (
       notifyPeer &&
-      socketRef.current &&
+      socketRef?.current &&
       targetPeer &&
       (callState === 'active' || callState === 'calling' || callState === 'ringing')
     ) {
@@ -408,7 +408,7 @@ export const useWebRTC = (username, socketRef) => {
   }, [isScreenSharing]);
 
   useEffect(() => {
-    if (!socketRef.current) return undefined;
+    if (!socketRef?.current) return undefined;
     const socket = socketRef.current;
 
     const onCallOffer = (data) => {
