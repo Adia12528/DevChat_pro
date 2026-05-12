@@ -976,6 +976,27 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       setUserOnline(me.uid);
       const allowTypingEvent = createSimpleRateLimiter({ limit: 20, windowMs: 10 * 1000 });
       const allowSendEvent = createSimpleRateLimiter({ limit: 12, windowMs: 10 * 1000 });
+      const knownContactUidByUniqueId = new Map();
+
+      const resolveContactUid = async (targetUniqueId) => {
+        const normalized = String(targetUniqueId || '').trim();
+        if (!normalized || normalized === me.uniqueId) return null;
+        if (!(me.contacts || []).includes(normalized)) return null;
+        if (knownContactUidByUniqueId.has(normalized)) {
+          return knownContactUidByUniqueId.get(normalized);
+        }
+        const contact = await FriendProfile.findOne({ uniqueId: normalized }).select('uid uniqueId').lean();
+        if (!contact?.uid) return null;
+        knownContactUidByUniqueId.set(normalized, contact.uid);
+        return contact.uid;
+      };
+
+      const forwardCallEventToContact = async ({ eventName, to, payload }) => {
+        const targetUid = await resolveContactUid(to);
+        if (!targetUid) return false;
+        friendsNsp.to(`user:${targetUid}`).emit(eventName, payload);
+        return true;
+      };
 
       // Emit all available users (excluding current friends and self) to this client
       const allUsers = await FriendProfile.find({
@@ -993,6 +1014,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       for (const contactUniqueId of me.contacts || []) {
         const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId }).lean();
         if (!contact) continue;
+        knownContactUidByUniqueId.set(contactUniqueId, contact.uid);
         const presencePayload = {
           uniqueId: me.uniqueId,
           online: true,
@@ -1023,6 +1045,101 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
         } catch (error) {
           console.error('friends:join_conversation failed', error);
           socket.emit('friends:error', { message: 'Failed to open conversation.' });
+        }
+      });
+
+      socket.on('call:offer', async ({ to, callType, offer }) => {
+        try {
+          if (!to || !offer || !callType) {
+            socket.emit('call:error', { target: String(to || ''), reason: 'invalid_offer' });
+            return;
+          }
+          const forwarded = await forwardCallEventToContact({
+            eventName: 'call:offer',
+            to,
+            payload: {
+              from: me.uniqueId,
+              callType,
+              offer
+            }
+          });
+          if (!forwarded) {
+            socket.emit('call:busy', { from: to, reason: 'user_unavailable' });
+          }
+        } catch (error) {
+          console.error('friends call:offer failed', error);
+          socket.emit('call:error', { target: String(to || ''), reason: 'offer_failed' });
+        }
+      });
+
+      socket.on('call:answer', async ({ to, answer }) => {
+        try {
+          if (!to || !answer) return;
+          await forwardCallEventToContact({
+            eventName: 'call:answer',
+            to,
+            payload: {
+              from: me.uniqueId,
+              answer
+            }
+          });
+        } catch (error) {
+          console.error('friends call:answer failed', error);
+        }
+      });
+
+      socket.on('call:ice-candidate', async ({ to, candidate }) => {
+        try {
+          if (!to || !candidate) return;
+          await forwardCallEventToContact({
+            eventName: 'call:ice-candidate',
+            to,
+            payload: {
+              from: me.uniqueId,
+              candidate
+            }
+          });
+        } catch (error) {
+          console.error('friends call:ice-candidate failed', error);
+        }
+      });
+
+      socket.on('call:reject', async ({ to }) => {
+        try {
+          if (!to) return;
+          await forwardCallEventToContact({
+            eventName: 'call:reject',
+            to,
+            payload: { from: me.uniqueId }
+          });
+        } catch (error) {
+          console.error('friends call:reject failed', error);
+        }
+      });
+
+      socket.on('call:end', async ({ to }) => {
+        try {
+          if (!to) return;
+          await forwardCallEventToContact({
+            eventName: 'call:end',
+            to,
+            payload: { from: me.uniqueId }
+          });
+        } catch (error) {
+          console.error('friends call:end failed', error);
+        }
+      });
+
+      socket.on('call:busy', async ({ to }) => {
+        try {
+          if (!to) return;
+          await forwardCallEventToContact({
+            eventName: 'call:busy',
+            to,
+            payload: { from: me.uniqueId }
+          });
+        } catch (error) {
+          console.error('friends call:busy failed', error);
         }
       });
 

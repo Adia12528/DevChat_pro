@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
@@ -75,6 +75,45 @@ export const useWebRTC = (username, socketRef) => {
       callTimerRef.current = null;
     }
   }, []);
+
+  const resetCallState = useCallback(() => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.ontrack = null;
+      peerConnectionRef.current.onicecandidate = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+      if (localVideoRef && localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+    }
+
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    if (qualityControllerRef.current) {
+      qualityControllerRef.current.stop();
+      qualityControllerRef.current = null;
+    }
+
+    stopCallTimer();
+    setCallState('idle');
+    setCallType(null);
+    setCallPeer(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+    setIsScreenSharing(false);
+    setCallError(null);
+  }, [stopCallTimer, localVideoRef]);
 
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServersConfig);
@@ -269,45 +308,66 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
 
-  const endCall = useCallback(() => {
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.ontrack = null;
-      peerConnectionRef.current.onicecandidate = null;
-      peerConnectionRef.current.onconnectionstatechange = null;
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
+  const handleCallAnswer = useCallback(async (payload) => {
+    try {
+      if (!payload?.answer || !peerConnectionRef.current) return;
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-      // Also clear the video element if possible
-      if (localVideoRef && localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
+      pendingIceCandidatesRef.current.forEach(candidate => {
+        peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+      pendingIceCandidatesRef.current = [];
+
+      setCallState('active');
+      startCallTimer();
+    } catch (err) {
+      resetCallState();
+      setCallError('Failed to establish call connection.');
+    }
+  }, [startCallTimer, resetCallState]);
+
+  const handleIceCandidate = useCallback(async (payload) => {
+    try {
+      if (!payload?.candidate) return;
+      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } else {
+        pendingIceCandidatesRef.current.push(payload.candidate);
       }
+    } catch {
+      // Ignore malformed/late ICE candidates.
     }
+  }, []);
 
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
+  const rejectIncomingCall = useCallback(() => {
+    if (!incomingCall || !socketRef.current) {
+      setIncomingCall(null);
+      return;
     }
-
-    if (qualityControllerRef.current) {
-      qualityControllerRef.current.stop();
-      qualityControllerRef.current = null;
-    }
-
-    stopCallTimer();
+    socketRef.current.emit('call:reject', {
+      to: incomingCall.from,
+      from: username
+    });
+    setIncomingCall(null);
     setCallState('idle');
-    setCallType(null);
-    setCallPeer(null);
-    setLocalStream(null);
-    setRemoteStream(null);
-    setIsMuted(false);
-    setIsVideoOff(false);
-    setIsScreenSharing(false);
-    setCallError(null);
-  }, [stopCallTimer]);
+  }, [incomingCall, socketRef, username]);
+
+  const endCall = useCallback((notifyPeer = true) => {
+    const targetPeer = callPeer?.username;
+    if (
+      notifyPeer &&
+      socketRef.current &&
+      targetPeer &&
+      (callState === 'active' || callState === 'calling' || callState === 'ringing')
+    ) {
+      socketRef.current.emit('call:end', {
+        to: targetPeer,
+        from: username
+      });
+    }
+
+    resetCallState();
+  }, [callPeer, callState, socketRef, username, resetCallState]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -347,6 +407,75 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [isScreenSharing]);
 
+  useEffect(() => {
+    if (!socketRef.current) return undefined;
+    const socket = socketRef.current;
+
+    const onCallOffer = (data) => {
+      if (!data?.from || !data?.offer || !data?.callType) return;
+      if (callState !== 'idle') {
+        socket.emit('call:busy', { to: data.from, from: username });
+        return;
+      }
+      setCallError(null);
+      setCallState('ringing');
+      setIncomingCall({
+        from: data.from,
+        callType: data.callType,
+        offer: data.offer
+      });
+    };
+
+    const onCallAnswer = (data) => {
+      handleCallAnswer(data);
+    };
+
+    const onCallIce = (data) => {
+      handleIceCandidate(data);
+    };
+
+    const onCallRejected = () => {
+      setCallError('Call rejected.');
+      endCall(false);
+    };
+
+    const onCallEnded = () => {
+      endCall(false);
+    };
+
+    const onCallBusy = () => {
+      setCallError('User is busy.');
+      endCall(false);
+    };
+
+    const onCallError = () => {
+      setCallError('Unable to start call right now.');
+      endCall(false);
+    };
+
+    socket.on('call:offer', onCallOffer);
+    socket.on('call:answer', onCallAnswer);
+    socket.on('call:ice-candidate', onCallIce);
+    socket.on('call:reject', onCallRejected);
+    socket.on('call:rejected', onCallRejected);
+    socket.on('call:end', onCallEnded);
+    socket.on('call:ended', onCallEnded);
+    socket.on('call:busy', onCallBusy);
+    socket.on('call:error', onCallError);
+
+    return () => {
+      socket.off('call:offer', onCallOffer);
+      socket.off('call:answer', onCallAnswer);
+      socket.off('call:ice-candidate', onCallIce);
+      socket.off('call:reject', onCallRejected);
+      socket.off('call:rejected', onCallRejected);
+      socket.off('call:end', onCallEnded);
+      socket.off('call:ended', onCallEnded);
+      socket.off('call:busy', onCallBusy);
+      socket.off('call:error', onCallError);
+    };
+  }, [socketRef, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
+
   return {
     callState,
     callType,
@@ -367,6 +496,7 @@ export const useWebRTC = (username, socketRef) => {
     setIncomingCall,
     startCall,
     answerCall,
+    rejectIncomingCall,
     endCall,
     toggleMute,
     toggleVideo,
