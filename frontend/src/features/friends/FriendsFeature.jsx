@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import {
   getRedirectResult,
@@ -11,6 +11,8 @@ import {
   signOut
 } from 'firebase/auth';
 import './friends.css';
+import { useWebRTC } from '../../hooks/useWebRTC';
+import CallPanel from '../../components/calls/CallPanel';
 import { friendsAuth, isFirebaseConfigured } from './firebaseClient';
 import {
   addContact,
@@ -483,6 +485,63 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     () => contacts.find((c) => c.uniqueId === selectedContactId) || null,
     [contacts, selectedContactId]
   );
+
+  const socketRef = useRef(socket);
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
+  const webrtcUsername = useMemo(
+    () => profile.uniqueId || profile.displayName || profile.email || 'friend',
+    [profile.uniqueId, profile.displayName, profile.email]
+  );
+
+  const {
+    callState,
+    callType,
+    callPeer,
+    localStream,
+    remoteStream,
+    isMuted,
+    isVideoOff,
+    isScreenSharing,
+    callDuration,
+    incomingCall,
+    callError,
+    localVideoRef,
+    remoteVideoRef,
+    startCall,
+    answerCall,
+    rejectIncomingCall,
+    endCall,
+    toggleMute,
+    toggleVideo,
+    toggleScreenShare
+  } = useWebRTC(webrtcUsername, socketRef);
+
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+
+  useEffect(() => {
+    if (callState === 'idle') setIsCallMinimized(false);
+  }, [callState]);
+
+  const formatCallDuration = useCallback((seconds = 0) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }, []);
+
+  const canStartCall = !!selectedContact && callState === 'idle' && !incomingCall;
+
+  const handleStartVoiceCall = useCallback(() => {
+    if (!selectedContact?.uniqueId || !canStartCall) return;
+    startCall('voice', selectedContact.uniqueId);
+  }, [selectedContact, canStartCall, startCall]);
+
+  const handleStartVideoCall = useCallback(() => {
+    if (!selectedContact?.uniqueId || !canStartCall) return;
+    startCall('video', selectedContact.uniqueId);
+  }, [selectedContact, canStartCall, startCall]);
 
   // Fix: Define activeMessages for timelineItems and chat rendering
   const activeMessages = useMemo(() => {
@@ -2001,6 +2060,28 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
                         : (selectedContact.lastSeen ? `last seen ${formatChatTime(selectedContact.lastSeen)}` : selectedContact.uniqueId)}
                   </small>
                 </div>
+                <div className="friends-call-actions" aria-label="Call actions">
+                  <button
+                    type="button"
+                    className="friends-call-btn"
+                    onClick={handleStartVoiceCall}
+                    disabled={!canStartCall}
+                    title="Start voice call"
+                    aria-label="Start voice call"
+                  >
+                    📞
+                  </button>
+                  <button
+                    type="button"
+                    className="friends-call-btn"
+                    onClick={handleStartVideoCall}
+                    disabled={!canStartCall}
+                    title="Start video call"
+                    aria-label="Start video call"
+                  >
+                    🎥
+                  </button>
+                </div>
                 {/* Header menu (three dots) */}
                 <div style={{ marginLeft: 'auto', position: 'relative' }} ref={headerMenuRef}>
                   <button
@@ -2328,6 +2409,61 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
             ) : null}
           </div>
         )}
+
+        {incomingCall ? (
+          <div className="friends-call-overlay">
+            <div className="friends-call-card">
+              <div className="friends-call-title">Incoming {incomingCall.callType === 'video' ? 'video' : 'voice'} call</div>
+              <div className="friends-call-peer">{incomingCall.from}</div>
+              <div className="friends-call-row">
+                <button type="button" className="friends-call-end-btn" onClick={rejectIncomingCall}>
+                  Decline
+                </button>
+                <button type="button" className="friends-call-accept-btn" onClick={answerCall}>
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {callState === 'calling' && callPeer ? (
+          <div className="friends-call-overlay">
+            <div className="friends-call-card">
+              <div className="friends-call-title">Calling...</div>
+              <div className="friends-call-peer">{callPeer?.username || callPeer}</div>
+              <div className="friends-call-row">
+                <button type="button" className="friends-call-end-btn" onClick={endCall}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {callError ? <p className="friends-note friends-call-error">{callError}</p> : null}
+
+        {callState === 'active' && callPeer ? (
+          <CallPanel
+            callType={callType}
+            callPeer={callPeer?.username || callPeer}
+            callDuration={callDuration}
+            isMuted={isMuted}
+            isVideoOff={isVideoOff}
+            isScreenSharing={isScreenSharing}
+            isCallMinimized={isCallMinimized}
+            onToggleMute={toggleMute}
+            onToggleVideo={toggleVideo}
+            onToggleScreenShare={toggleScreenShare}
+            onEndCall={endCall}
+            onToggleMinimize={() => setIsCallMinimized((prev) => !prev)}
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            formatDuration={formatCallDuration}
+            localStream={localStream}
+            remoteStream={remoteStream}
+          />
+        ) : null}
 
         {/* Media/Links/Docs Modal */}
         {showMediaModal && (

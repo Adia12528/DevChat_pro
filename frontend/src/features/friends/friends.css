@@ -1941,6 +1941,96 @@
   font-size: 0.78rem;
 }
 
+.friends-call-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.friends-call-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #c5d4dc;
+  background: #ffffff;
+  color: #0f5d93;
+  cursor: pointer;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.friends-call-btn:hover:not(:disabled) {
+  background: #eaf4fb;
+}
+
+.friends-call-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.friends-call-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 15, 20, 0.32);
+  z-index: 30;
+}
+
+.friends-call-card {
+  width: min(340px, calc(100% - 30px));
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #d6e0e6;
+  padding: 16px;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.friends-call-title {
+  font-size: 0.92rem;
+  color: #46606d;
+}
+
+.friends-call-peer {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #1c3745;
+  margin-top: 4px;
+}
+
+.friends-call-row {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.friends-call-end-btn,
+.friends-call-accept-btn {
+  border: none;
+  border-radius: 999px;
+  color: #fff;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.friends-call-end-btn {
+  background: #df3848;
+}
+
+.friends-call-accept-btn {
+  background: #1e9c62;
+}
+
+.friends-call-error {
+  margin-top: 8px;
+  color: #b42334;
+}
+
 .friends-mobile-back {
   margin-right: 2px;
 }

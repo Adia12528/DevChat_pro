@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   ICE_SERVERS,
   getAdaptiveMediaConstraints,
@@ -269,7 +269,64 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
 
-  const endCall = useCallback(() => {
+  const handleCallAnswer = useCallback(async (payload) => {
+    try {
+      if (!payload?.answer || !peerConnectionRef.current) return;
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
+
+      pendingIceCandidatesRef.current.forEach(candidate => {
+        peerConnectionRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+      });
+      pendingIceCandidatesRef.current = [];
+
+      setCallState('active');
+      startCallTimer();
+    } catch (err) {
+      setCallError('Failed to establish call connection.');
+      endCall();
+    }
+  }, [startCallTimer, endCall]);
+
+  const handleIceCandidate = useCallback(async (payload) => {
+    try {
+      if (!payload?.candidate) return;
+      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } else {
+        pendingIceCandidatesRef.current.push(payload.candidate);
+      }
+    } catch {
+      // Ignore malformed/late ICE candidates.
+    }
+  }, []);
+
+  const rejectIncomingCall = useCallback(() => {
+    if (!incomingCall || !socketRef.current) {
+      setIncomingCall(null);
+      return;
+    }
+    socketRef.current.emit('call:reject', {
+      to: incomingCall.from,
+      from: username
+    });
+    setIncomingCall(null);
+    setCallState('idle');
+  }, [incomingCall, socketRef, username]);
+
+  const endCall = useCallback((notifyPeer = true) => {
+    const targetPeer = callPeer?.username;
+    if (
+      notifyPeer &&
+      socketRef.current &&
+      targetPeer &&
+      (callState === 'active' || callState === 'calling' || callState === 'ringing')
+    ) {
+      socketRef.current.emit('call:end', {
+        to: targetPeer,
+        from: username
+      });
+    }
+
     if (peerConnectionRef.current) {
       peerConnectionRef.current.ontrack = null;
       peerConnectionRef.current.onicecandidate = null;
@@ -307,7 +364,7 @@ export const useWebRTC = (username, socketRef) => {
     setIsVideoOff(false);
     setIsScreenSharing(false);
     setCallError(null);
-  }, [stopCallTimer]);
+  }, [stopCallTimer, callPeer, callState, socketRef, username]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -347,6 +404,67 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, [isScreenSharing]);
 
+  useEffect(() => {
+    if (!socketRef.current) return undefined;
+    const socket = socketRef.current;
+
+    const onCallOffer = (data = {}) => {
+      if (callState !== 'idle') {
+        socket.emit('call:busy', { to: data.from, from: username });
+        return;
+      }
+      setCallError(null);
+      setCallState('ringing');
+      setIncomingCall({
+        from: data.from,
+        callType: data.callType,
+        offer: data.offer
+      });
+    };
+
+    const onCallAnswer = (data) => {
+      handleCallAnswer(data);
+    };
+
+    const onCallIce = (data) => {
+      handleIceCandidate(data);
+    };
+
+    const onCallRejected = () => {
+      setCallError('Call rejected.');
+      endCall(false);
+    };
+
+    const onCallEnded = () => {
+      endCall(false);
+    };
+
+    const onCallBusy = () => {
+      setCallError('User is busy.');
+      endCall(false);
+    };
+
+    socket.on('call:offer', onCallOffer);
+    socket.on('call:answer', onCallAnswer);
+    socket.on('call:ice-candidate', onCallIce);
+    socket.on('call:reject', onCallRejected);
+    socket.on('call:rejected', onCallRejected);
+    socket.on('call:end', onCallEnded);
+    socket.on('call:ended', onCallEnded);
+    socket.on('call:busy', onCallBusy);
+
+    return () => {
+      socket.off('call:offer', onCallOffer);
+      socket.off('call:answer', onCallAnswer);
+      socket.off('call:ice-candidate', onCallIce);
+      socket.off('call:reject', onCallRejected);
+      socket.off('call:rejected', onCallRejected);
+      socket.off('call:end', onCallEnded);
+      socket.off('call:ended', onCallEnded);
+      socket.off('call:busy', onCallBusy);
+    };
+  }, [socketRef, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
+
   return {
     callState,
     callType,
@@ -367,6 +485,9 @@ export const useWebRTC = (username, socketRef) => {
     setIncomingCall,
     startCall,
     answerCall,
+    rejectIncomingCall,
+    handleCallAnswer,
+    handleIceCandidate,
     endCall,
     toggleMute,
     toggleVideo,
