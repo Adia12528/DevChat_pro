@@ -76,6 +76,45 @@ export const useWebRTC = (username, socketRef) => {
     }
   }, []);
 
+  const resetCallState = useCallback(() => {
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.ontrack = null;
+      peerConnectionRef.current.onicecandidate = null;
+      peerConnectionRef.current.onconnectionstatechange = null;
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+      if (localVideoRef && localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+    }
+
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+    }
+
+    if (qualityControllerRef.current) {
+      qualityControllerRef.current.stop();
+      qualityControllerRef.current = null;
+    }
+
+    stopCallTimer();
+    setCallState('idle');
+    setCallType(null);
+    setCallPeer(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+    setIsScreenSharing(false);
+    setCallError(null);
+  }, [stopCallTimer]);
+
   const createPeerConnection = useCallback((targetUsername) => {
     const pc = new RTCPeerConnection(iceServersConfig);
 
@@ -282,10 +321,10 @@ export const useWebRTC = (username, socketRef) => {
       setCallState('active');
       startCallTimer();
     } catch (err) {
+      resetCallState();
       setCallError('Failed to establish call connection.');
-      endCall();
     }
-  }, [startCallTimer, endCall]);
+  }, [startCallTimer, resetCallState]);
 
   const handleIceCandidate = useCallback(async (payload) => {
     try {
@@ -327,44 +366,8 @@ export const useWebRTC = (username, socketRef) => {
       });
     }
 
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.ontrack = null;
-      peerConnectionRef.current.onicecandidate = null;
-      peerConnectionRef.current.onconnectionstatechange = null;
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-      // Also clear the video element if possible
-      if (localVideoRef && localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-    }
-
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-
-    if (qualityControllerRef.current) {
-      qualityControllerRef.current.stop();
-      qualityControllerRef.current = null;
-    }
-
-    stopCallTimer();
-    setCallState('idle');
-    setCallType(null);
-    setCallPeer(null);
-    setLocalStream(null);
-    setRemoteStream(null);
-    setIsMuted(false);
-    setIsVideoOff(false);
-    setIsScreenSharing(false);
-    setCallError(null);
-  }, [stopCallTimer, callPeer, callState, socketRef, username]);
+    resetCallState();
+  }, [callPeer, callState, socketRef, username, resetCallState]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
@@ -444,6 +447,11 @@ export const useWebRTC = (username, socketRef) => {
       endCall(false);
     };
 
+    const onCallError = () => {
+      setCallError('Unable to start call right now.');
+      endCall(false);
+    };
+
     socket.on('call:offer', onCallOffer);
     socket.on('call:answer', onCallAnswer);
     socket.on('call:ice-candidate', onCallIce);
@@ -452,6 +460,7 @@ export const useWebRTC = (username, socketRef) => {
     socket.on('call:end', onCallEnded);
     socket.on('call:ended', onCallEnded);
     socket.on('call:busy', onCallBusy);
+    socket.on('call:error', onCallError);
 
     return () => {
       socket.off('call:offer', onCallOffer);
@@ -462,6 +471,7 @@ export const useWebRTC = (username, socketRef) => {
       socket.off('call:end', onCallEnded);
       socket.off('call:ended', onCallEnded);
       socket.off('call:busy', onCallBusy);
+      socket.off('call:error', onCallError);
     };
   }, [socketRef, callState, username, handleCallAnswer, handleIceCandidate, endCall]);
 

@@ -1051,7 +1051,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
       socket.on('call:offer', async ({ to, callType, offer }) => {
         try {
           if (!to || !offer || !callType) {
-            socket.emit('call:busy', { from: String(to || ''), reason: 'invalid_offer' });
+            socket.emit('call:error', { from: String(to || ''), reason: 'invalid_offer' });
             return;
           }
           const forwarded = await forwardCallEventToContact({
@@ -1068,7 +1068,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
           }
         } catch (error) {
           console.error('friends call:offer failed', error);
-          socket.emit('call:busy', { from: String(to || ''), reason: 'offer_failed' });
+          socket.emit('call:error', { from: String(to || ''), reason: 'offer_failed' });
         }
       });
 
