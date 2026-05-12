@@ -225,13 +225,13 @@ export const useWebRTC = (username, socketRef) => {
       await pc.setLocalDescription(offer);
       await waitForIceGatheringComplete(pc);
 
-      const offerSocket = socketRef?.current;
-      if (!offerSocket) {
+      const socket = socketRef?.current;
+      if (!socket) {
         setCallError('Connection unavailable. Please try again.');
         resetCallState();
         return;
       }
-      offerSocket.emit('call:offer', {
+      socket.emit('call:offer', {
         to: targetUser,
         from: username,
         callType: type,
@@ -300,13 +300,13 @@ export const useWebRTC = (username, socketRef) => {
       });
       pendingIceCandidatesRef.current = [];
 
-      const answerSocket = socketRef?.current;
-      if (!answerSocket) {
+      const socket = socketRef?.current;
+      if (!socket) {
         setCallError('Connection unavailable. Please try again.');
-        endCall();
+        resetCallState();
         return;
       }
-      answerSocket.emit('call:answer', {
+      socket.emit('call:answer', {
         to: incomingCall.from,
         from: username,
         answer: pc.localDescription
@@ -319,7 +319,7 @@ export const useWebRTC = (username, socketRef) => {
       setCallError('Call answer failed: ' + (err?.message || err));
       endCall();
     }
-  }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer]);
+  }, [incomingCall, username, socketRef, runtimeConnectionInfo, createPeerConnection, startCallTimer, resetCallState]);
 
   const handleCallAnswer = useCallback(async (payload) => {
     try {
@@ -421,8 +421,8 @@ export const useWebRTC = (username, socketRef) => {
   }, [isScreenSharing]);
 
   useEffect(() => {
-    if (!socketRef?.current) return undefined;
-    const socket = socketRef.current;
+    const socket = socketRef?.current;
+    if (!socket) return undefined;
 
     const onCallOffer = (data) => {
       if (!data?.from || !data?.offer || !data?.callType) return;
