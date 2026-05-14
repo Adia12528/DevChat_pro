@@ -1701,6 +1701,9 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
     }
   });
 
+  console.log(`✅ Friends module mounted (firebase ${enabled ? 'enabled' : 'disabled'})`);
+};
+
 module.exports = {
   setupFriendsFeature,
   __testables: {
