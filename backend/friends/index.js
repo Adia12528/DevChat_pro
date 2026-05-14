@@ -6,6 +6,22 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_TTL_MS = 7 * DAY_MS;
 const FRIENDS_MESSAGE_MAX_CHARS = 2000;
 
+// Call Management Constants
+const CALL_STATES = Object.freeze({
+  RINGING: 'ringing',
+  CONNECTED: 'connected',
+  ENDED: 'ended',
+  MISSED: 'missed',
+  REJECTED: 'rejected'
+});
+
+const CALL_TYPES = Object.freeze({
+  VOICE: 'voice',
+  VIDEO: 'video'
+});
+
+const CALL_TIMEOUT_MS = 60 * 1000; // 60 seconds for ringing timeout
+
 const makeUniqueId = () => `friend_${Math.random().toString(36).slice(2, 8)}${Math.random().toString(36).slice(2, 6)}`;
 
 const conversationIdFor = (uidA, uidB) => [uidA, uidB].sort().join('__');
@@ -170,8 +186,13 @@ const getModels = (mongoose) => {
       },
       settings: {
         theme: { type: String, default: 'light' },
-        notifications: { type: Boolean, default: true }
-      }
+        notifications: { type: Boolean, default: true },
+        callNotifications: { type: Boolean, default: true }
+      },
+      // Call-related fields
+      callStatus: { type: String, enum: ['available', 'busy', 'do_not_disturb'], default: 'available', index: true },
+      lastCallAt: { type: Date, default: null },
+      blockedUsers: { type: [String], default: [] } // Blocked user UIDs
     },
     { timestamps: true }
   );
@@ -208,23 +229,51 @@ const getModels = (mongoose) => {
     { unique: true, sparse: true, name: 'friends_unique_temp_send' }
   );
 
+  // Call Session Schema - tracks voice and video calls
+  const CallSessionSchema = new mongoose.Schema(
+    {
+      callId: { type: String, unique: true, index: true },
+      initiatorUid: { type: String, required: true, index: true },
+      recipientUid: { type: String, required: true, index: true },
+      callType: { type: String, enum: [CALL_TYPES.VOICE, CALL_TYPES.VIDEO], default: CALL_TYPES.VOICE },
+      state: { type: String, enum: [CALL_STATES.RINGING, CALL_STATES.CONNECTED, CALL_STATES.ENDED, CALL_STATES.MISSED, CALL_STATES.REJECTED], default: CALL_STATES.RINGING, index: true },
+      startedAt: { type: Date, default: null },
+      endedAt: { type: Date, default: null },
+      duration: { type: Number, default: 0 }, // in seconds
+      rejectionReason: { type: String, default: null },
+      isAnswered: { type: Boolean, default: false },
+      recordingUrl: { type: String, default: null },
+      notes: { type: String, default: '' },
+      metadata: {
+        initiatorDeviceId: { type: String, default: null },
+        recipientDeviceId: { type: String, default: null },
+        quality: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' }
+      }
+    },
+    { timestamps: true }
+  );
+
+  CallSessionSchema.index({ initiatorUid: 1, createdAt: -1 });
+  CallSessionSchema.index({ recipientUid: 1, createdAt: -1 });
+  CallSessionSchema.index({ state: 1, createdAt: -1 });
+
+  const FriendRequestSchema = new mongoose.Schema(
+    {
+      fromUid: { type: String, required: true, index: true },
+      toUid: { type: String, required: true, index: true },
+      status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending', index: true },
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date, default: Date.now }
+    },
+    { timestamps: true }
+  );
+
   const FriendProfile = mongoose.models.FriendProfile || mongoose.model('FriendProfile', FriendProfileSchema);
   const FriendMessage = mongoose.models.FriendMessage || mongoose.model('FriendMessage', FriendMessageSchema);
-    const FriendRequestSchema = new mongoose.Schema(
-      {
-        fromUid: { type: String, required: true, index: true },
-        toUid: { type: String, required: true, index: true },
-        status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending', index: true },
-        createdAt: { type: Date, default: Date.now },
-        updatedAt: { type: Date, default: Date.now }
-      },
-      { timestamps: true }
-    );
-    const FriendRequest = mongoose.models.FriendRequest || mongoose.model('FriendRequest', FriendRequestSchema);
-    // Add FriendRequest to returned models
-    return { FriendProfile, FriendMessage, FriendRequest };
-
-  return { FriendProfile, FriendMessage };
+  const CallSession = mongoose.models.CallSession || mongoose.model('CallSession', CallSessionSchema);
+  const FriendRequest = mongoose.models.FriendRequest || mongoose.model('FriendRequest', FriendRequestSchema);
+  
+  return { FriendProfile, FriendMessage, CallSession, FriendRequest };
 };
 
 const toPublicProfile = (profile) => ({
@@ -386,8 +435,7 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   } else {
     console.log('[FRIENDS] Firebase Admin enabled. Mounting /api/friends routes.');
   }
-  const { FriendProfile, FriendMessage } = getModels(mongoose);
-  const { FriendRequest } = getModels(mongoose);
+  const { FriendProfile, FriendMessage, CallSession, FriendRequest } = getModels(mongoose);
   const authRequired = friendsAuthMiddleware(enabled);
 
   // Router must be initialized after dependencies
@@ -1283,6 +1331,73 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
         }
       });
 
+      // ========== CALLING SOCKET EVENTS ==========
+
+      socket.on('friends:call_offer', async ({ callId, toUniqueId, sdpOffer, iceCandidate }) => {
+        try {
+          const recipient = await FriendProfile.findOne({ uniqueId: toUniqueId });
+          if (!recipient) return;
+
+          if (iceCandidate) {
+            friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_ice_candidate', {
+              callId,
+              fromUniqueId: me.uniqueId,
+              iceCandidate
+            });
+          }
+
+          if (sdpOffer) {
+            friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_offer', {
+              callId,
+              fromUniqueId: me.uniqueId,
+              sdpOffer
+            });
+          }
+        } catch (error) {
+          console.error('friends:call_offer failed', error);
+        }
+      });
+
+      socket.on('friends:call_answer', async ({ callId, toUniqueId, sdpAnswer, iceCandidate }) => {
+        try {
+          const recipient = await FriendProfile.findOne({ uniqueId: toUniqueId });
+          if (!recipient) return;
+
+          if (iceCandidate) {
+            friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_ice_candidate', {
+              callId,
+              fromUniqueId: me.uniqueId,
+              iceCandidate
+            });
+          }
+
+          if (sdpAnswer) {
+            friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_answer', {
+              callId,
+              fromUniqueId: me.uniqueId,
+              sdpAnswer
+            });
+          }
+        } catch (error) {
+          console.error('friends:call_answer failed', error);
+        }
+      });
+
+      socket.on('friends:call_ice_candidate', async ({ callId, toUniqueId, iceCandidate }) => {
+        try {
+          const recipient = await FriendProfile.findOne({ uniqueId: toUniqueId });
+          if (!recipient) return;
+
+          friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_ice_candidate', {
+            callId,
+            fromUniqueId: me.uniqueId,
+            iceCandidate
+          });
+        } catch (error) {
+          console.error('friends:call_ice_candidate failed', error);
+        }
+      });
+
       socket.on('disconnect', async () => {
         try {
           setUserOffline(me.uid);
@@ -1311,7 +1426,280 @@ const setupFriendsFeature = ({ app, io, mongoose }) => {
   });
 
   console.log(`✅ Friends module mounted (firebase ${enabled ? 'enabled' : 'disabled'})`);
-};
+
+  // ========== CALLING API ENDPOINTS ==========
+  
+  // Initiate a call
+  router.post('/calls/initiate', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const recipientUniqueId = String(req.body?.recipientUniqueId || '').trim();
+      const callType = req.body?.callType || CALL_TYPES.VOICE;
+
+      if (!recipientUniqueId) return res.status(400).json({ error: 'recipientUniqueId required.' });
+      if (![CALL_TYPES.VOICE, CALL_TYPES.VIDEO].includes(callType)) {
+        return res.status(400).json({ error: 'Invalid callType.' });
+      }
+
+      const recipient = await FriendProfile.findOne({ uniqueId: recipientUniqueId });
+      if (!recipient) return res.status(404).json({ error: 'Recipient not found.' });
+      if (me.blockedUsers?.includes(recipient.uid) || recipient.blockedUsers?.includes(me.uid)) {
+        return res.status(403).json({ error: 'You cannot call this user.' });
+      }
+
+      const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const callSession = await CallSession.create({
+        callId,
+        initiatorUid: me.uid,
+        recipientUid: recipient.uid,
+        callType,
+        state: CALL_STATES.RINGING,
+        metadata: {
+          initiatorDeviceId: req.body?.deviceId || null,
+          quality: req.body?.quality || 'medium'
+        }
+      });
+
+      // Emit real-time call notification
+      friendsNsp.to(`user:${recipient.uid}`).emit('friends:call_incoming', {
+        callId,
+        initiatorUniqueId: me.uniqueId,
+        initiatorName: me.displayName,
+        initiatorPhoto: me.photoURL,
+        callType,
+        createdAt: callSession.createdAt
+      });
+
+      return res.json({ ok: true, callId, callSession });
+    } catch (error) {
+      console.error('friends call initiate error', error);
+      return res.status(500).json({ error: 'Failed to initiate call.' });
+    }
+  });
+
+  // Answer a call
+  router.post('/calls/:callId/answer', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const callId = req.params.callId;
+      const callSession = await CallSession.findOne({ callId });
+
+      if (!callSession) return res.status(404).json({ error: 'Call not found.' });
+      if (callSession.recipientUid !== me.uid) return res.status(403).json({ error: 'Not authorized.' });
+      if (callSession.state !== CALL_STATES.RINGING) {
+        return res.status(409).json({ error: 'Call is no longer available.' });
+      }
+
+      callSession.state = CALL_STATES.CONNECTED;
+      callSession.isAnswered = true;
+      callSession.startedAt = new Date();
+      callSession.metadata.recipientDeviceId = req.body?.deviceId || null;
+      await callSession.save();
+
+      const initiator = await FriendProfile.findOne({ uid: callSession.initiatorUid });
+
+      // Emit to both parties
+      friendsNsp.to(`user:${callSession.initiatorUid}`).emit('friends:call_answered', {
+        callId,
+        recipientUniqueId: me.uniqueId,
+        recipientName: me.displayName,
+        recipientPhoto: me.photoURL,
+        sdpOffer: req.body?.sdpOffer || null
+      });
+
+      return res.json({ ok: true, callSession });
+    } catch (error) {
+      console.error('friends call answer error', error);
+      return res.status(500).json({ error: 'Failed to answer call.' });
+    }
+  });
+
+  // Reject a call
+  router.post('/calls/:callId/reject', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const callId = req.params.callId;
+      const callSession = await CallSession.findOne({ callId });
+
+      if (!callSession) return res.status(404).json({ error: 'Call not found.' });
+      if (callSession.recipientUid !== me.uid && callSession.initiatorUid !== me.uid) {
+        return res.status(403).json({ error: 'Not authorized.' });
+      }
+
+      const rejectionReason = req.body?.reason || 'user_rejected';
+      callSession.state = CALL_STATES.REJECTED;
+      callSession.rejectionReason = rejectionReason;
+      callSession.endedAt = new Date();
+      callSession.duration = 0;
+      await callSession.save();
+
+      // Emit to the other party
+      const otherUid = callSession.recipientUid === me.uid ? callSession.initiatorUid : callSession.recipientUid;
+      friendsNsp.to(`user:${otherUid}`).emit('friends:call_rejected', {
+        callId,
+        reason: rejectionReason
+      });
+
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error('friends call reject error', error);
+      return res.status(500).json({ error: 'Failed to reject call.' });
+    }
+  });
+
+  // End a call
+  router.post('/calls/:callId/end', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const callId = req.params.callId;
+      const callSession = await CallSession.findOne({ callId });
+
+      if (!callSession) return res.status(404).json({ error: 'Call not found.' });
+      if (callSession.recipientUid !== me.uid && callSession.initiatorUid !== me.uid) {
+        return res.status(403).json({ error: 'Not authorized.' });
+      }
+
+      if (callSession.state === CALL_STATES.ENDED) {
+        return res.json({ ok: true, callSession });
+      }
+
+      const endedAt = new Date();
+      const duration = callSession.startedAt
+        ? Math.floor((endedAt - new Date(callSession.startedAt)) / 1000)
+        : 0;
+
+      callSession.state = CALL_STATES.ENDED;
+      callSession.endedAt = endedAt;
+      callSession.duration = duration;
+      if (!callSession.isAnswered) {
+        callSession.state = CALL_STATES.MISSED;
+      }
+
+      me.lastCallAt = endedAt;
+      await me.save();
+      await callSession.save();
+
+      const otherUid = callSession.recipientUid === me.uid ? callSession.initiatorUid : callSession.recipientUid;
+      friendsNsp.to(`user:${otherUid}`).emit('friends:call_ended', {
+        callId,
+        duration,
+        endedAt: endedAt.toISOString()
+      });
+
+      return res.json({ ok: true, callSession });
+    } catch (error) {
+      console.error('friends call end error', error);
+      return res.status(500).json({ error: 'Failed to end call.' });
+    }
+  });
+
+  // Get call history
+  router.get('/calls/history/:limit?', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const limit = Math.min(parseInt(req.params.limit || '50', 10), 100);
+
+      const calls = await CallSession.find({
+        $or: [
+          { initiatorUid: me.uid },
+          { recipientUid: me.uid }
+        ]
+      })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+      const enriched = await Promise.all(
+        calls.map(async (call) => {
+          const otherUid = call.initiatorUid === me.uid ? call.recipientUid : call.initiatorUid;
+          const otherProfile = await FriendProfile.findOne({ uid: otherUid }).lean();
+          return {
+            ...call,
+            otherProfile: otherProfile ? toPublicProfile(otherProfile) : null,
+            isMissedCall: call.state === CALL_STATES.MISSED && call.recipientUid === me.uid
+          };
+        })
+      );
+
+      return res.json({ calls: enriched });
+    } catch (error) {
+      console.error('friends call history error', error);
+      return res.status(500).json({ error: 'Failed to load call history.' });
+    }
+  });
+
+  // Block a user
+  router.post('/block', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const targetUniqueId = String(req.body?.targetUniqueId || '').trim();
+
+      if (!targetUniqueId) return res.status(400).json({ error: 'targetUniqueId required.' });
+
+      const target = await FriendProfile.findOne({ uniqueId: targetUniqueId });
+      if (!target) return res.status(404).json({ error: 'User not found.' });
+
+      me.blockedUsers = Array.from(new Set([...(me.blockedUsers || []), target.uid]));
+      await me.save();
+
+      return res.json({ ok: true, blocked: true });
+    } catch (error) {
+      console.error('friends block error', error);
+      return res.status(500).json({ error: 'Failed to block user.' });
+    }
+  });
+
+  // Unblock a user
+  router.post('/unblock', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const targetUniqueId = String(req.body?.targetUniqueId || '').trim();
+
+      if (!targetUniqueId) return res.status(400).json({ error: 'targetUniqueId required.' });
+
+      const target = await FriendProfile.findOne({ uniqueId: targetUniqueId });
+      if (!target) return res.status(404).json({ error: 'User not found.' });
+
+      me.blockedUsers = (me.blockedUsers || []).filter((uid) => uid !== target.uid);
+      await me.save();
+
+      return res.json({ ok: true, blocked: false });
+    } catch (error) {
+      console.error('friends unblock error', error);
+      return res.status(500).json({ error: 'Failed to unblock user.' });
+    }
+  });
+
+  // Set call availability status
+  router.put('/status', authRequired, async (req, res) => {
+    try {
+      const me = await ensureProfile(FriendProfile, req.firebaseUser);
+      const status = String(req.body?.status || 'available').toLowerCase();
+
+      if (!['available', 'busy', 'do_not_disturb'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status.' });
+      }
+
+      me.callStatus = status;
+      await me.save();
+
+      // Broadcast presence update to all contacts
+      for (const contactUniqueId of me.contacts || []) {
+        const contact = await FriendProfile.findOne({ uniqueId: contactUniqueId }).lean();
+        if (contact) {
+          friendsNsp.to(`user:${contact.uid}`).emit('friends:status_updated', {
+            uniqueId: me.uniqueId,
+            status
+          });
+        }
+      }
+
+      return res.json({ ok: true, status });
+    } catch (error) {
+      console.error('friends status update error', error);
+      return res.status(500).json({ error: 'Failed to update status.' });
+    }
+  });
 
 module.exports = {
   setupFriendsFeature,

@@ -121,3 +121,50 @@ export const saveUserSettings = (token, payload) =>
     method: 'POST',
     body: JSON.stringify(payload)
   });
+
+// ========== CALLING APIs ==========
+
+export const initiateCall = (token, recipientUniqueId, callType = 'voice', deviceId = null) =>
+  request('/api/friends/calls/initiate', token, {
+    method: 'POST',
+    body: JSON.stringify({ recipientUniqueId, callType, deviceId })
+  });
+
+export const answerCall = (token, callId, deviceId = null, sdpOffer = null) =>
+  request(`/api/friends/calls/${encodeURIComponent(callId)}/answer`, token, {
+    method: 'POST',
+    body: JSON.stringify({ deviceId, sdpOffer })
+  });
+
+export const rejectCall = (token, callId, reason = 'user_rejected') =>
+  request(`/api/friends/calls/${encodeURIComponent(callId)}/reject`, token, {
+    method: 'POST',
+    body: JSON.stringify({ reason })
+  });
+
+export const endCall = (token, callId) =>
+  request(`/api/friends/calls/${encodeURIComponent(callId)}/end`, token, {
+    method: 'POST'
+  });
+
+export const getCallHistory = (token, limit = 50) =>
+  request(`/api/friends/calls/history/${Math.min(limit, 100)}`, token);
+
+export const blockUser = (token, targetUniqueId) =>
+  request('/api/friends/block', token, {
+    method: 'POST',
+    body: JSON.stringify({ targetUniqueId })
+  });
+
+export const unblockUser = (token, targetUniqueId) =>
+  request('/api/friends/unblock', token, {
+    method: 'POST',
+    body: JSON.stringify({ targetUniqueId })
+  });
+
+export const setCallStatus = (token, status) =>
+  request('/api/friends/status', token, {
+    method: 'PUT',
+    body: JSON.stringify({ status })
+  });
+

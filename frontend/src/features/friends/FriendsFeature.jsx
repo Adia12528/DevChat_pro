@@ -31,7 +31,15 @@ import {
   deleteConversationMessages,
   editMessage,
   reactToMessage,
-  deleteMessage
+  deleteMessage,
+  initiateCall,
+  answerCall,
+  rejectCall,
+  endCall,
+  getCallHistory,
+  blockUser,
+  unblockUser,
+  setCallStatus
 } from './friendsApi';
 
 
@@ -314,6 +322,17 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
              (c.phoneNumber || "").toLowerCase().includes(search)
       );
     }, [friendsSearch, contacts]);
+
+    // ========== CALLING STATE ==========
+    const [incomingCall, setIncomingCall] = useState(null); // { callId, initiatorUniqueId, initiatorName, callType }
+    const [activeCall, setActiveCall] = useState(null); // { callId, contactUniqueId, callType, startedAt }
+    const [callHistory, setCallHistory] = useState([]);
+    const [callStatus, setCallStatus] = useState('available'); // 'available', 'busy', 'do_not_disturb'
+    const [blockedUsers, setBlockedUsers] = useState([]);
+    const [isCallHistoryModalOpen, setIsCallHistoryModalOpen] = useState(false);
+    const [callError, setCallError] = useState('');
+    const [callDuration, setCallDuration] = useState(0);
+    const callDurationIntervalRef = useRef(null);
   // Notify user of incoming message (sound + desktop notification)
   const notifyIncomingMessage = (contact, message) => {
     // Play notification sound
@@ -679,6 +698,131 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     setIsClearChatConfirmOpen(false);
   };
 
+  // ========== CALLING HANDLERS ==========
+
+  const startCallDurationTimer = () => {
+    if (callDurationIntervalRef.current) clearInterval(callDurationIntervalRef.current);
+    let elapsed = 0;
+    callDurationIntervalRef.current = setInterval(() => {
+      elapsed += 1;
+      setCallDuration(elapsed);
+    }, 1000);
+  };
+
+  const stopCallDurationTimer = () => {
+    if (callDurationIntervalRef.current) {
+      clearInterval(callDurationIntervalRef.current);
+      callDurationIntervalRef.current = null;
+    }
+    setCallDuration(0);
+  };
+
+  const handleInitiateCall = async (contactUniqueId, callType = 'voice') => {
+    try {
+      setCallError('');
+      if (callStatus === 'do_not_disturb') {
+        setCallError('You have Do Not Disturb enabled. Disable it to make calls.');
+        return;
+      }
+
+      const response = await initiateCall(authToken, contactUniqueId, callType);
+      if (response?.callId) {
+        setActiveCall({
+          callId: response.callId,
+          contactUniqueId,
+          callType,
+          startedAt: new Date()
+        });
+        startCallDurationTimer();
+        playNotificationTone('chime');
+      }
+    } catch (error) {
+      setCallError(error.message || 'Failed to initiate call.');
+      console.error('Call initiation error:', error);
+    }
+  };
+
+  const handleAnswerCall = async () => {
+    if (!incomingCall) return;
+    try {
+      setCallError('');
+      await answerCall(authToken, incomingCall.callId);
+      setActiveCall({
+        callId: incomingCall.callId,
+        contactUniqueId: incomingCall.initiatorUniqueId,
+        callType: incomingCall.callType,
+        startedAt: new Date()
+      });
+      setIncomingCall(null);
+      startCallDurationTimer();
+    } catch (error) {
+      setCallError(error.message || 'Failed to answer call.');
+      console.error('Call answer error:', error);
+    }
+  };
+
+  const handleRejectCall = async () => {
+    if (!incomingCall) return;
+    try {
+      await rejectCall(authToken, incomingCall.callId, 'user_rejected');
+      setIncomingCall(null);
+    } catch (error) {
+      console.error('Call rejection error:', error);
+    }
+  };
+
+  const handleEndCall = async () => {
+    if (!activeCall) return;
+    try {
+      setCallError('');
+      await endCall(authToken, activeCall.callId);
+      stopCallDurationTimer();
+      setActiveCall(null);
+      // Optionally reload call history
+      await loadCallHistory();
+    } catch (error) {
+      setCallError(error.message || 'Failed to end call.');
+      console.error('Call end error:', error);
+    }
+  };
+
+  const loadCallHistory = async () => {
+    try {
+      const response = await getCallHistory(authToken, 20);
+      setCallHistory(response.calls || []);
+    } catch (error) {
+      console.error('Failed to load call history:', error);
+    }
+  };
+
+  const handleBlockUser = async (targetUniqueId) => {
+    try {
+      await blockUser(authToken, targetUniqueId);
+      setBlockedUsers([...blockedUsers, targetUniqueId]);
+      setError('');
+    } catch (error) {
+      setError(error.message || 'Failed to block user.');
+    }
+  };
+
+  const handleUnblockUser = async (targetUniqueId) => {
+    try {
+      await unblockUser(authToken, targetUniqueId);
+      setBlockedUsers(blockedUsers.filter((id) => id !== targetUniqueId));
+    } catch (error) {
+      setError(error.message || 'Failed to unblock user.');
+    }
+  };
+
+  const handleSetCallStatus = async (status) => {
+    try {
+      await setCallStatus(authToken, status);
+      setCallStatus(status);
+    } catch (error) {
+      setCallError(error.message || 'Failed to update call status.');
+    }
+  };
+
   const handleCancelClearChat = () => {
     setIsClearChatConfirmOpen(false);
   };
@@ -979,6 +1123,68 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
     socket.on('friends:unread_update', onUnreadUpdate);
     socket.on('friends:error', onSocketError);
 
+    // ========== CALLING SOCKET EVENTS ==========
+    socket.on('friends:call_incoming', ({ callId, initiatorUniqueId, initiatorName, callType, createdAt }) => {
+      playNotificationTone('chime');
+      setIncomingCall({
+        callId,
+        initiatorUniqueId,
+        initiatorName,
+        callType,
+        createdAt
+      });
+      // Request notification permission
+      if (window.Notification && Notification.permission === 'granted') {
+        new Notification(`Incoming ${callType} call`, {
+          body: `${initiatorName} is calling...`,
+          icon: '/favicon.ico'
+        });
+      }
+    });
+
+    socket.on('friends:call_answered', ({ callId, recipientUniqueId, recipientName }) => {
+      if (activeCall?.callId === callId) {
+        startCallDurationTimer();
+      }
+    });
+
+    socket.on('friends:call_rejected', ({ callId, reason }) => {
+      if (activeCall?.callId === callId) {
+        stopCallDurationTimer();
+        setActiveCall(null);
+        setCallError(`Call rejected: ${reason}`);
+      }
+    });
+
+    socket.on('friends:call_ended', ({ callId, duration, endedAt }) => {
+      if (activeCall?.callId === callId) {
+        stopCallDurationTimer();
+        setActiveCall(null);
+      }
+    });
+
+    socket.on('friends:call_ice_candidate', ({ callId, fromUniqueId, iceCandidate }) => {
+      // Handle ICE candidate for WebRTC
+      // This would be passed to the local peer connection
+    });
+
+    socket.on('friends:call_offer', ({ callId, fromUniqueId, sdpOffer }) => {
+      // Handle SDP offer for WebRTC
+      // This would be passed to the local peer connection
+    });
+
+    socket.on('friends:call_answer', ({ callId, fromUniqueId, sdpAnswer }) => {
+      // Handle SDP answer for WebRTC
+      // This would be passed to the local peer connection
+    });
+
+    socket.on('friends:status_updated', ({ uniqueId, status }) => {
+      // Update contact's call status
+      setContacts((prev) =>
+        prev.map((c) => (c.uniqueId === uniqueId ? { ...c, callStatus: status } : c))
+      );
+    });
+
     socket.on('new_message', onNewMessage);
     socket.on('read_receipt', onReadUpdate);
     socket.on('typing', onTyping);
@@ -995,6 +1201,16 @@ const FriendsWorkspace = ({ authToken, profile, onLogout, socket, onProfileRefre
       socket.off('friends:presence', onPresence);
       socket.off('friends:unread_update', onUnreadUpdate);
       socket.off('friends:error', onSocketError);
+
+      // Remove calling event listeners
+      socket.off('friends:call_incoming');
+      socket.off('friends:call_answered');
+      socket.off('friends:call_rejected');
+      socket.off('friends:call_ended');
+      socket.off('friends:call_ice_candidate');
+      socket.off('friends:call_offer');
+      socket.off('friends:call_answer');
+      socket.off('friends:status_updated');
 
       socket.off('new_message', onNewMessage);
       socket.off('read_receipt', onReadUpdate);
